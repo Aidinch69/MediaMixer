@@ -1,0 +1,39 @@
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6;margin:0;padding:20px;display:flex;gap:20px;height:100vh;box-sizing:border-box}
+.theater{flex:2;background:#000;border-radius:12px;border:1px solid #1a0f26;padding:10px;box-sizing:border-box;transition:box-shadow .3s ease}
+.theater.flare{box-shadow:0 0 40px #b84dff;border-color:#b84dff}
+.theater.glitch{animation:glitch-anim .2s 3}
+@keyframes glitch-anim{0%{transform:translate(0)}20%{transform:translate(-2px,2px)}40%{transform:translate(-2px,-2px)}60%{transform:translate(2px,2px)}80%{transform:translate(2px,-2px)}100%{transform:translate(0)}}
+.screen-grid{display:grid;gap:8px;width:100%;height:100%}
+.tile{position:relative;background:#020105;border-radius:8px;border:1px solid #140a1a;overflow:hidden}
+.tile video{width:100%;height:100%;object-fit:contain;transition:filter .3s ease}
+.preload{display:none}
+.tile-overlay{position:absolute;top:0;left:0;right:0;display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:6px;opacity:0;transition:opacity .15s;pointer-events:none}
+.tile:hover .tile-overlay{opacity:1}
+.tile-overlay>*{pointer-events:auto}
+.src-label{font-size:11px;font-family:monospace;color:#fff;background:rgba(0,0,0,.6);padding:2px 6px;border-radius:4px;max-width:92%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile-actions{display:flex;gap:6px}
+.tile-actions .thumb{padding:4px 10px;font-size:12px}
+.hint{font-size:11px;color:#8e8e93;margin:0}
+.panel{flex:1.1;background:#0a0515;border-radius:12px;border:1px solid #1a0f26;padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
+h2,h3{margin:0;color:#c999ff;text-transform:uppercase;letter-spacing:1px;font-size:1.05rem}
+h2{font-size:1.25rem;border-bottom:1px solid #1a0f26;padding-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.metric{background:#0e081f;padding:10px;border-radius:8px;border:1px solid #221435;font-size:.82rem;display:flex;flex-direction:column;gap:4px}
+.slider{display:flex;flex-direction:column;gap:6px;background:#0e081f;padding:10px;border-radius:8px;border:1px solid #221435}
+label{font-size:.75rem;color:#8e8e93;text-transform:uppercase;font-weight:bold}
+input[type=range]{width:100%;accent-color:#b84dff;cursor:pointer}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{background:#150a28;color:#fff;border:1px solid #2d163f;padding:9px;border-radius:6px;cursor:pointer;font-weight:bold;text-transform:uppercase;font-size:.72rem;transition:.15s}
+button:hover{background:#251538;border-color:#b84dff;box-shadow:0 0 10px rgba(184,77,255,.3)}
+.up{background:#1a0a29;border-color:#3d1e4c}.up:hover{background:#2a1040;border-color:#c866ff}
+.down{background:#2d0a16;border-color:#4c1e22}.down:hover{background:#401020;border-color:#ff668c}
+.skip{background:#2a0f14;border-color:#4c1e28}.lock{background:#140a26;border-color:#2a144c}
+.badge{background:#1a0f2b;border:1px solid #361e52;color:#d6a3ff;padding:6px;border-radius:6px;text-align:center;cursor:pointer;font-size:.78rem;font-weight:bold;text-transform:uppercase}
+.badge.active{background:#2f1d4f;border-color:#d699ff;color:#fff}
+.jackpot-badge{background:#ffcc00;color:#000;border:1px solid #ffaa00;display:none;animation:pulse 1s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,204,0,.7)}70%{box-shadow:0 0 0 10px rgba(255,204,0,0)}100%{box-shadow:0 0 0 0 rgba(255,204,0,0)}}
+#toast{position:fixed;bottom:25px;left:25px;padding:12px 24px;border-radius:8px;font-weight:bold;font-size:.85rem;text-transform:uppercase;z-index:9;display:none;background:#2d1445;color:#c999ff;border:1px solid #b84dff}
+.audio-name{font-size:.75rem;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;background:#1a0a29;padding:4px;border-radius:4px;border:1px solid #3d1e4c}
+.status-dot{width:9px;height:9px;border-radius:50%;background:#3ddc84;display:inline-block;margin-right:6px;flex-shrink:0;transition:background .2s ease}
+.status-dot.down{background:#ff4d4d}
+.offline-badge{display:none;background:#3a0f14;border:1px solid #ff4d4d;color:#ff9a9a;padding:4px 8px;border-radius:6px;font-size:.68rem;font-weight:bold;text-transform:uppercase}
+.offline-badge.show{display:inline-block}

@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+
+# runtime database (regenerated on first run)
+system_memory.db
+system_memory.db-shm
+system_memory.db-wal
+
+# runtime logs
+engine_stdout.log
+engine_stderr.log
+
+# personal media library (large binaries, not source)
+media_assets/
+Audios/

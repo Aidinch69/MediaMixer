@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>MediaMixer</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body>
+<div class="theater" id="theater-box">
+  <div class="screen-grid layout-{{ layout }}" id="screen-grid"></div>
+</div>
+<div class="panel">
+  <h2>
+    <span>🧬 MediaMixer</span>
+    <span class="badge jackpot-badge" id="jackpot-tag">🎰 JACKPOT</span>
+    <span class="offline-badge" id="audio-offline">🔇 Overlay Offline</span>
+    <span class="offline-badge" id="synth-offline">🧠 Synth Offline</span>
+  </h2>
+  <div class="metric">
+    <div style="display:flex;align-items:center;font-size:.7rem;color:#8e8e93">
+      <span class="status-dot" id="conn-dot"></span><span id="conn-label">Connected</span>
+    </div>
+    <div style="font-weight:bold;color:#ff9999;font-size:.7rem;margin-top:6px">🎵 CURRENT AUDIO</div>
+    <div class="audio-name" id="t-audio" data-val="">…</div>
+    <div style="margin-top:4px;color:#aaa;font-size:11px" id="t-lock">…</div>
+    <div style="margin-top:4px;color:#ff668c;font-size:11px;font-weight:bold" id="t-barrage"></div>
+  </div>
+  <h3>🖥️ Layout</h3>
+  <div class="grid" id="layout-buttons">
+    {% for preset in layout_presets %}
+    <button class="badge{{ ' active' if preset.name == layout else '' }}" id="layout-{{ preset.name }}" onclick="setLayout('{{ preset.name }}')">{{ preset.label }}</button>
+    {% endfor %}
+  </div>
+  <div class="slider">
+    <label>Preload Next Clip</label>
+    <button class="badge{{ ' active' if preload_enabled else '' }}" id="preload-toggle" onclick="togglePreload()">{{ 'ON' if preload_enabled else 'OFF' }}</button>
+  </div>
+  <h3>📂 Categories</h3>
+  <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(110px,1fr))">
+    {% for f in folders %}<div class="badge" id="folder-{{ f }}" onclick="cat('{{ f }}')">{{ f }}</div>{% endfor %}
+  </div>
+  <p class="hint">Hover any tile for 👍/👎 rating controls.</p>
+  <h3>🎵 Audio Overlay</h3>
+  <div class="grid"><button class="up" onclick="rateAudio('up')">🔊 Audio Up</button><button class="down" onclick="rateAudio('down')">🔇 Audio Down</button></div>
+  <button onclick="nextAudio()">⏭️ Next Audio</button>
+  <h3>⏱️ Rotation Pace</h3>
+  <div class="slider"><label>Interval: <b><span id="l-pace">{{ pace_label }}</span></b></label><input type="range" min="0" max="3" step="1" value="{{ pace_idx }}" onchange="pace(this.value)"></div>
+  <h3>🧠 Synth Oscillators</h3>
+  <div class="slider"><label>Carrier: <b><span id="l-freq">{{ tone_hz }} Hz</span></b></label><button onclick="cycleTone()">Cycle Frequency</button></div>
+  <div class="slider"><label>Binaural Beat: <b><span id="l-beat">{{ beat_knob }}</span></b></label><input type="range" min="0" max="1" step="0.01" value="{{ beat_knob }}" oninput="vec('binaural',this.value);document.getElementById('l-beat').innerText=this.value"></div>
+  <h3>🔊 Overlay Volume</h3>
+  <div class="slider"><label>Volume: <b><span id="l-vol">{{ bg_vol }}%</span></b></label><input type="range" min="0" max="100" value="{{ bg_vol }}" oninput="vol(this.value);document.getElementById('l-vol').innerText=this.value+'%'"></div>
+  <h3>🕹️ Overrides</h3>
+  <div class="grid"><button class="lock" onclick="lock(); uiFlare();">⬆️ Lock 60s</button><button class="skip" onclick="skip()">⬇️ Skip All</button></div>
+</div>
+<div id="toast"></div>
+<script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>
