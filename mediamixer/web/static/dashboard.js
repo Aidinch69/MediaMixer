@@ -65,6 +65,7 @@ function ensureGrid(layout, count, columns) {
       '<button class="down thumb" onclick="rateScreen(' + i + ',\'down\')">👎</button>' +
       '</div></div>';
     grid.appendChild(tile);
+    tile.querySelector('#screen-' + i).addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
   }
 }
 

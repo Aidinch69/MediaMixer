@@ -28,11 +28,29 @@ class RotationEngine:
         self._db = db
         self._config = config
         self._stop_event = threading.Event()
+        self._rotate_lock = threading.Lock()
 
     def stop(self):
         self._stop_event.set()
 
-    def rotate(self, override_folder: Optional[str] = None, side: Side = "all"):
+    def rotate(self, override_folder: Optional[str] = None, side: Side = "all", force: bool = True):
+        """Pick fresh video(s) for one screen or all of them.
+
+        `force=False` is used by the automatic expiry check in `run()`: since a
+        layout switch or another rotation can resize/repopulate screens between
+        when that check reads timers and when it gets the rotation lock, this
+        re-verifies the screen is still actually due before touching it, so two
+        rotations can't race to pick different videos for the same screen (or
+        pick the same video for two different ones).
+        """
+        with self._rotate_lock:
+            if not force and isinstance(side, int):
+                lefts, _locked, _barrage = self._state.screen_timers(time.time())
+                if side >= len(lefts) or lefts[side] > 0.5:
+                    return
+            self._rotate_locked(override_folder, side)
+
+    def _rotate_locked(self, override_folder: Optional[str], side: Side):
         cfg = self._config
         pace_idx, folder, played, barrage, current_paths = self._state.rotation_context()
 
@@ -50,14 +68,20 @@ class RotationEngine:
         is_jackpot, event_expires_in, barrage = self._roll_event(barrage, pace_idx)
         indexes = range(len(current_paths)) if side == "all" else [side]
 
+        # Every video currently visible on any screen is off-limits for a new pick,
+        # so the same clip never ends up playing in two tiles at once. Paths picked
+        # earlier in this same batch are added in as we go, too.
+        in_use = {p for p in current_paths if p}
+
         for index in indexes:
             if barrage > 0 or is_jackpot:
                 expires_in = event_expires_in
             else:
                 lo, hi, _label = cfg.pace_presets[pace_idx]
                 expires_in = random.randint(lo, hi)
-            exclude = current_paths[index] if index < len(current_paths) else None
-            self._swap_screen(index, target, exclude, is_jackpot, offset=index, expires_in=expires_in)
+            picked = self._swap_screen(index, target, set(in_use), is_jackpot, offset=index, expires_in=expires_in)
+            if picked:
+                in_use.add(picked)
 
         self._state.finish_rotation(
             folder=target,
@@ -86,7 +110,9 @@ class RotationEngine:
         lo, hi, _label = cfg.pace_presets[pace_idx]
         return is_jackpot, random.randint(lo, hi), barrage
 
-    def _swap_screen(self, index: int, folder: str, exclude: Optional[str], is_jackpot: bool, offset: int, expires_in: float):
+    def _swap_screen(
+        self, index: int, folder: str, exclude: set, is_jackpot: bool, offset: int, expires_in: float
+    ) -> Optional[str]:
         cfg = self._config
         picked = (
             library.pick_video_jackpot(self._db, folder, offset=offset)
@@ -94,10 +120,11 @@ class RotationEngine:
             else library.pick_video(self._db, cfg, folder, exclude=exclude)
         )
         if not picked:
-            return
+            return None
         library.reward_video(self._db, cfg, picked, 0.0, played=True)
-        nxt = library.pick_video(self._db, cfg, folder, exclude=picked) or picked
+        nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | {picked}) or picked
         self._state.set_screen(index, picked, nxt, time.time() + expires_in)
+        return picked
 
     def run(self):
         """Blocking control loop: ticks tension/time-dilation and drives expiry-based rotation."""
@@ -120,7 +147,7 @@ class RotationEngine:
             lefts, _locked, _barrage = self._state.screen_timers(now)
             for index, time_left in enumerate(lefts):
                 if time_left <= 0.5:
-                    self.rotate(side=index)
+                    self.rotate(side=index, force=False)
 
             self._stop_event.wait(0.5)
 

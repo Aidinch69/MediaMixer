@@ -137,6 +137,20 @@ def create_app(ctx: AppContext) -> Flask:
         state.set_preload_enabled(enabled)
         return jsonify(ok=True)
 
+    @app.route("/api/rotate")
+    def api_rotate():
+        """Called by the browser when a tile's clip finishes naturally, so a clip
+        shorter than its rotation window advances immediately instead of freezing
+        on its last frame until the timer catches up."""
+        try:
+            index = int(request.args.get("screen", ""))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="invalid screen index"), 400
+        if not (0 <= index < len(state.current_paths())):
+            return jsonify(ok=False, error="screen index out of range"), 400
+        rotation.rotate(side=index)
+        return jsonify(ok=True)
+
     @app.route("/api/folder")
     def api_folder():
         folder = request.args.get("folder", "")

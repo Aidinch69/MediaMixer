@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import List, Optional
+from typing import Iterable, List, Optional, Union
 
 from .bandit import decayed_value, exploration_score, softmax_pick
 from .config import Config
@@ -63,14 +63,20 @@ def pick_folder(db: Database, config: Config, exclude: Optional[str] = None) -> 
     return softmax_pick(items, scores, config.softmax_temp)
 
 
-def pick_video(db: Database, config: Config, folder: str, exclude: Optional[str] = None) -> Optional[str]:
+def pick_video(
+    db: Database, config: Config, folder: str, exclude: Union[str, Iterable[str], None] = None
+) -> Optional[str]:
+    """Pick a video from `folder`, avoiding `exclude` (one path, or any collection of
+    paths - e.g. every video currently showing on another screen, so the same clip
+    doesn't end up playing simultaneously in two tiles)."""
     now = time.time()
     rows = db.video_rewards(folder)
     if not rows:
         return None
     if exclude:
-        norm = os.path.normpath(exclude).lower()
-        rows = [r for r in rows if os.path.normpath(r["video_path"]).lower() != norm] or rows
+        exclude_paths = {exclude} if isinstance(exclude, str) else set(exclude)
+        excluded_norm = {os.path.normpath(p).lower() for p in exclude_paths if p}
+        rows = [r for r in rows if os.path.normpath(r["video_path"]).lower() not in excluded_norm] or rows
     items = [r["video_path"] for r in rows]
     scores = [
         exploration_score(
