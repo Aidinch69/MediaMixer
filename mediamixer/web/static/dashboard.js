@@ -4,6 +4,20 @@ let currentLayout = null;
 let currentPaths = [];
 let preloadEnabled = true;
 
+function togglePanel() {
+  const panel = document.getElementById('panel');
+  const collapsed = panel.classList.toggle('collapsed');
+  document.getElementById('panel-toggle').innerText = collapsed ? '☰' : '✕';
+  try { localStorage.setItem('mm_panel_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+}
+
+function restorePanelState() {
+  let collapsed = false;
+  try { collapsed = localStorage.getItem('mm_panel_collapsed') === '1'; } catch (e) {}
+  document.getElementById('panel').classList.toggle('collapsed', collapsed);
+  document.getElementById('panel-toggle').innerText = collapsed ? '☰' : '✕';
+}
+
 function toast(msg, neg) {
   const box = document.getElementById('toast');
   box.innerText = msg;
@@ -156,6 +170,7 @@ function rateAudio(d) { fetch('/api/rate_audio?dir=' + d).then(() => toast(d ===
 function nextAudio() { fetch('/api/next_audio').then(() => toast('⏭️ Audio Skipped')); }
 
 window.onload = () => {
+  restorePanelState();
   fetch('/api/status').then(r => r.json()).then(render);
   connectStream();
 };

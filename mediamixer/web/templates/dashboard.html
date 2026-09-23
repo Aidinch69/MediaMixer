@@ -5,10 +5,11 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
 </head>
 <body>
+<button class="panel-toggle" id="panel-toggle" onclick="togglePanel()" title="Show/hide panel">✕</button>
 <div class="theater" id="theater-box">
-  <div class="screen-grid layout-{{ layout }}" id="screen-grid"></div>
+  <div class="screen-grid" id="screen-grid"></div>
 </div>
-<div class="panel">
+<div class="panel" id="panel">
   <h2>
     <span>🧬 MediaMixer</span>
     <span class="badge jackpot-badge" id="jackpot-tag">🎰 JACKPOT</span>

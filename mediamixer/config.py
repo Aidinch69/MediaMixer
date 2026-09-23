@@ -56,6 +56,7 @@ class Config:
     layout_presets: Tuple[LayoutPreset, ...] = (
         LayoutPreset("dual", 2, 1, "Dual Screen"),
         LayoutPreset("grid2x2", 4, 2, "2x2 Grid"),
+        LayoutPreset("grid2x3", 6, 3, "2x3 Grid"),
         LayoutPreset("grid3x3", 9, 3, "3x3 Grid"),
         LayoutPreset("grid4x4", 16, 4, "4x4 Grid"),
     )
