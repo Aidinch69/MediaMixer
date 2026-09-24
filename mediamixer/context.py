@@ -3,17 +3,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .audio.overlay import OverlayAudio
 from .config import Config
 from .db import Database
-from .rotation import RotationEngine
-from .state import RuntimeState
+from .session import SessionManager
 
 
 @dataclass
 class AppContext:
     config: Config
     db: Database
-    state: RuntimeState
-    overlay: OverlayAudio
-    rotation: RotationEngine
+    sessions: SessionManager

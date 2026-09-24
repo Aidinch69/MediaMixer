@@ -91,6 +91,10 @@ class Config:
     host: str = "0.0.0.0"
     port: int = 5000
 
+    # -- per-viewer sessions (each device gets its own independent playback state) --
+    session_cookie_name: str = "mm_session"
+    session_timeout_s: float = 1800.0  # drop a session's in-memory state after this long unseen
+
 
 def load_config() -> Config:
     return Config()

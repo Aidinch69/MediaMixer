@@ -15,42 +15,42 @@ let synthNodes = null;
 let overlayEl = null;
 let currentAudioPath = '';
 let audioUnlocked = false;
-let masterVolume = 80;
-let overlayBalance = 85;
+let binauralVolume = 80;
+let overlayVolume = 85;
 
 function loadVolumePrefs() {
   try {
-    const mv = localStorage.getItem('mm_master_vol');
+    const bv = localStorage.getItem('mm_binaural_vol');
     const ov = localStorage.getItem('mm_overlay_vol');
-    if (mv !== null) masterVolume = parseInt(mv, 10);
-    if (ov !== null) overlayBalance = parseInt(ov, 10);
+    if (bv !== null) binauralVolume = parseInt(bv, 10);
+    if (ov !== null) overlayVolume = parseInt(ov, 10);
   } catch (e) {}
-  document.getElementById('master-vol-input').value = masterVolume;
-  document.getElementById('l-master-vol').innerText = masterVolume + '%';
-  document.getElementById('overlay-vol-input').value = overlayBalance;
-  document.getElementById('l-overlay-vol').innerText = overlayBalance + '%';
+  document.getElementById('binaural-vol-input').value = binauralVolume;
+  document.getElementById('l-binaural-vol').innerText = binauralVolume + '%';
+  document.getElementById('overlay-vol-input').value = overlayVolume;
+  document.getElementById('l-overlay-vol').innerText = overlayVolume + '%';
 }
 
 function applyVolumes() {
   if (synthNodes && audioCtx) {
-    synthNodes.masterGain.gain.setTargetAtTime(BINAURAL_BASE_GAIN * (masterVolume / 100), audioCtx.currentTime, 0.05);
+    synthNodes.masterGain.gain.setTargetAtTime(BINAURAL_BASE_GAIN * (binauralVolume / 100), audioCtx.currentTime, 0.05);
   }
   if (overlayEl) {
-    overlayEl.volume = Math.max(0, Math.min(1, (masterVolume / 100) * (overlayBalance / 100)));
+    overlayEl.volume = Math.max(0, Math.min(1, overlayVolume / 100));
   }
 }
 
-function setMasterVolume(v) {
-  masterVolume = parseInt(v, 10);
-  document.getElementById('l-master-vol').innerText = masterVolume + '%';
-  try { localStorage.setItem('mm_master_vol', masterVolume); } catch (e) {}
+function setBinauralVolume(v) {
+  binauralVolume = parseInt(v, 10);
+  document.getElementById('l-binaural-vol').innerText = binauralVolume + '%';
+  try { localStorage.setItem('mm_binaural_vol', binauralVolume); } catch (e) {}
   applyVolumes();
 }
 
-function setOverlayBalance(v) {
-  overlayBalance = parseInt(v, 10);
-  document.getElementById('l-overlay-vol').innerText = overlayBalance + '%';
-  try { localStorage.setItem('mm_overlay_vol', overlayBalance); } catch (e) {}
+function setOverlayVolume(v) {
+  overlayVolume = parseInt(v, 10);
+  document.getElementById('l-overlay-vol').innerText = overlayVolume + '%';
+  try { localStorage.setItem('mm_overlay_vol', overlayVolume); } catch (e) {}
   applyVolumes();
 }
 
@@ -75,7 +75,7 @@ function buildSynthGraph() {
   const pannerLeft = ctx.createStereoPanner(); pannerLeft.pan.value = -1;
   const pannerRight = ctx.createStereoPanner(); pannerRight.pan.value = 1;
   const masterGain = ctx.createGain();
-  masterGain.gain.value = BINAURAL_BASE_GAIN * (masterVolume / 100);
+  masterGain.gain.value = BINAURAL_BASE_GAIN * (binauralVolume / 100);
 
   leftOsc.connect(gateLeft); gateLeft.connect(pannerLeft); pannerLeft.connect(masterGain);
   rightOsc.connect(gateRight); gateRight.connect(pannerRight); pannerRight.connect(masterGain);

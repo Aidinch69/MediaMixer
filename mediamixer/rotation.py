@@ -126,29 +126,37 @@ class RotationEngine:
         self._state.set_screen(index, picked, nxt, time.time() + expires_in)
         return picked
 
+    def tick(self):
+        """One control-loop iteration: tension/time-dilation plus expiry-based rotation.
+
+        Called on a shared cadence by whatever's driving this engine - either
+        this class's own `run()` loop for standalone use, or a SessionManager
+        ticking many sessions' engines in turn.
+        """
+        now = time.time()
+        want_skip, want_lock = self._state.consume_flags()
+        self._tick_tension(now)
+
+        if want_lock:
+            self._state.apply_lock(self._config.jackpot_hold_seconds)
+            for path in self._state.current_paths():
+                library.reward_video(self._db, self._config, path, self._config.lock_reward)
+
+        if want_skip:
+            for path in self._state.current_paths():
+                library.reward_video(self._db, self._config, path, self._config.skip_penalty)
+            self.rotate(side="all")
+            return
+
+        lefts, _locked, _barrage = self._state.screen_timers(now)
+        for index, time_left in enumerate(lefts):
+            if time_left <= 0.5:
+                self.rotate(side=index, force=False)
+
     def run(self):
-        """Blocking control loop: ticks tension/time-dilation and drives expiry-based rotation."""
+        """Blocking control loop for standalone use: ticks this engine every 0.5s."""
         while not self._stop_event.is_set():
-            now = time.time()
-            want_skip, want_lock = self._state.consume_flags()
-            self._tick_tension(now)
-
-            if want_lock:
-                self._state.apply_lock(self._config.jackpot_hold_seconds)
-                for path in self._state.current_paths():
-                    library.reward_video(self._db, self._config, path, self._config.lock_reward)
-
-            if want_skip:
-                for path in self._state.current_paths():
-                    library.reward_video(self._db, self._config, path, self._config.skip_penalty)
-                self.rotate(side="all")
-                continue
-
-            lefts, _locked, _barrage = self._state.screen_timers(now)
-            for index, time_left in enumerate(lefts):
-                if time_left <= 0.5:
-                    self.rotate(side=index, force=False)
-
+            self.tick()
             self._stop_event.wait(0.5)
 
     def _tick_tension(self, now: float):

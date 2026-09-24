@@ -1,4 +1,4 @@
-"""Orchestrator: wires up state/db/audio/rotation/web and runs the engine."""
+"""Orchestrator: wires up the db/session-manager/web layer and runs the engine."""
 from __future__ import annotations
 
 import argparse
@@ -7,13 +7,11 @@ import threading
 from dataclasses import replace
 
 from . import library
-from .audio.overlay import OverlayAudio
 from .config import Config, load_config
 from .context import AppContext
 from .db import Database
 from .network import get_lan_ip
-from .rotation import RotationEngine
-from .state import RuntimeState
+from .session import SessionManager
 from .web.app import create_app
 
 log = logging.getLogger(__name__)
@@ -23,21 +21,13 @@ class MediaMixerApp:
     def __init__(self, config: Config | None = None):
         self.config = config or load_config()
         self.db = Database(self.config)
-        self.state = RuntimeState(self.config)
-        self.overlay = OverlayAudio(self.config)
-        self.rotation = RotationEngine(self.state, self.db, self.config)
-        self.ctx = AppContext(self.config, self.db, self.state, self.overlay, self.rotation)
+        self.sessions = SessionManager(self.db, self.config)
+        self.ctx = AppContext(self.config, self.db, self.sessions)
         self.flask_app = create_app(self.ctx)
         self._stopped = threading.Event()
 
-    def _bootstrap_playback(self):
-        library.sync_library(self.db, self.config)
-        folder = library.pick_folder(self.db, self.config)
-        if folder:
-            self.rotation.rotate(override_folder=folder, side="all")
-
     def run(self):
-        self._bootstrap_playback()
+        library.sync_library(self.db, self.config)
 
         threading.Thread(
             target=lambda: self.flask_app.run(
@@ -50,10 +40,11 @@ class MediaMixerApp:
         log.info("=" * 60)
         log.info("MediaMixer engine online -> http://localhost:%s", self.config.port)
         log.info("Same-network devices (e.g. your phone) -> http://%s:%s", get_lan_ip(), self.config.port)
+        log.info("Each device gets its own independent playback session")
         log.info("=" * 60)
 
         try:
-            self.rotation.run()
+            self.sessions.run_scheduler()
         except KeyboardInterrupt:
             pass
         finally:
@@ -64,7 +55,7 @@ class MediaMixerApp:
             return
         self._stopped.set()
         log.info("shutting down...")
-        self.rotation.stop()
+        self.sessions.stop()
         self.db.close()
 
 
