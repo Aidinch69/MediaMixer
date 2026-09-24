@@ -10,7 +10,7 @@ from . import library
 from .config import Config, load_config
 from .context import AppContext
 from .db import Database
-from .network import get_lan_ip
+from .network import get_lan_ip, get_tailscale_https_url
 from .session import SessionManager
 from .web.app import create_app
 
@@ -37,9 +37,13 @@ class MediaMixerApp:
             daemon=True,
         ).start()
 
+        tailscale_url = get_tailscale_https_url(self.config.port)
+
         log.info("=" * 60)
         log.info("MediaMixer engine online -> http://localhost:%s", self.config.port)
         log.info("Same-network devices (e.g. your phone) -> http://%s:%s", get_lan_ip(), self.config.port)
+        if tailscale_url:
+            log.info("Tailscale (installable, HTTPS) -> %s", tailscale_url)
         log.info("Each device gets its own independent playback session")
         log.info("=" * 60)
 

@@ -19,7 +19,7 @@ from flask import Flask, Response, g, jsonify, render_template, request, send_fr
 
 from .. import library
 from ..context import AppContext
-from ..network import get_lan_ip
+from ..network import get_lan_ip, get_tailscale_https_url
 from ..session import Session
 
 log = logging.getLogger(__name__)
@@ -130,7 +130,7 @@ def create_app(ctx: AppContext) -> Flask:
         library.sync_library(db, config)
         snap = g.session.state.snapshot()
         pace_idx = snap["pace_idx"]
-        phone_url = f"http://{get_lan_ip()}:{config.port}"
+        phone_url = get_tailscale_https_url(config.port) or f"http://{get_lan_ip()}:{config.port}"
         return render_template(
             "dashboard.html",
             folders=library.list_folders(config),
