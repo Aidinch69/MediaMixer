@@ -8,7 +8,6 @@ from dataclasses import replace
 
 from . import library
 from .audio.overlay import OverlayAudio
-from .audio.synth import BinauralSynth
 from .config import Config, load_config
 from .context import AppContext
 from .db import Database
@@ -25,16 +24,14 @@ class MediaMixerApp:
         self.config = config or load_config()
         self.db = Database(self.config)
         self.state = RuntimeState(self.config)
-        self.overlay = OverlayAudio(self.state, self.config)
-        self.synth = BinauralSynth(self.state, self.config)
+        self.overlay = OverlayAudio(self.config)
         self.rotation = RotationEngine(self.state, self.db, self.config)
-        self.ctx = AppContext(self.config, self.db, self.state, self.overlay, self.synth, self.rotation)
+        self.ctx = AppContext(self.config, self.db, self.state, self.overlay, self.rotation)
         self.flask_app = create_app(self.ctx)
         self._stopped = threading.Event()
 
     def _bootstrap_playback(self):
         library.sync_library(self.db, self.config)
-        self.overlay.play()
         folder = library.pick_folder(self.db, self.config)
         if folder:
             self.rotation.rotate(override_folder=folder, side="all")
@@ -42,7 +39,6 @@ class MediaMixerApp:
     def run(self):
         self._bootstrap_playback()
 
-        threading.Thread(target=self.synth.run, name="synth", daemon=True).start()
         threading.Thread(
             target=lambda: self.flask_app.run(
                 host=self.config.host, port=self.config.port, threaded=True, use_reloader=False
@@ -69,8 +65,6 @@ class MediaMixerApp:
         self._stopped.set()
         log.info("shutting down...")
         self.rotation.stop()
-        self.synth.stop()
-        self.overlay.stop()
         self.db.close()
 
 

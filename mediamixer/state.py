@@ -59,10 +59,6 @@ class RuntimeState:
 
         self.want_skip = False
         self.want_lock = False
-        self.overlay_volume = 85
-
-        self.audio_available = True
-        self.synth_available = True
 
         self.preload_enabled = config.default_preload_enabled
 
@@ -85,17 +81,13 @@ class RuntimeState:
             self.barrage_count = 0
         return preset
 
-    # -- binaural synth --
+    # -- binaural synth parameters (the tone itself is generated client-side via Web Audio) --
     def synth_params(self):
         with self._lock:
             carrier = self._config.tone_modes[self.tone_index]
             max_tension = max((s.tension for s in self.screens), default=1.0)
             beat = (4.0 + self.binaural_knob * 6.0) * max_tension
             return carrier, beat, self.isochronic_pulse
-
-    def set_synth_available(self, available: bool):
-        with self._lock:
-            self.synth_available = available
 
     def cycle_tone(self):
         with self._lock:
@@ -104,20 +96,6 @@ class RuntimeState:
     def set_binaural(self, value: float):
         with self._lock:
             self.binaural_knob = max(0.0, min(1.0, value))
-
-    # -- overlay audio --
-    def set_audio_available(self, available: bool):
-        with self._lock:
-            self.audio_available = available
-
-    def get_overlay_volume(self) -> int:
-        with self._lock:
-            return self.overlay_volume
-
-    def set_overlay_volume(self, value: int) -> int:
-        with self._lock:
-            self.overlay_volume = max(0, min(100, value))
-            return self.overlay_volume
 
     # -- skip/lock flags (set from the web thread, consumed by the control loop) --
     def request_skip(self):
@@ -216,8 +194,5 @@ class RuntimeState:
                 "pace_idx": self.pace_idx,
                 "tone_index": self.tone_index,
                 "binaural_knob": self.binaural_knob,
-                "overlay_volume": self.overlay_volume,
-                "audio_available": self.audio_available,
-                "synth_available": self.synth_available,
                 "preload_enabled": self.preload_enabled,
             }

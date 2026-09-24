@@ -4,7 +4,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .audio.overlay import OverlayAudio
-from .audio.synth import BinauralSynth
 from .config import Config
 from .db import Database
 from .rotation import RotationEngine
@@ -17,5 +16,4 @@ class AppContext:
     db: Database
     state: RuntimeState
     overlay: OverlayAudio
-    synth: BinauralSynth
     rotation: RotationEngine

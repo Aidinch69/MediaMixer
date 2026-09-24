@@ -13,8 +13,8 @@
   <h2>
     <span>🧬 MediaMixer</span>
     <span class="badge jackpot-badge" id="jackpot-tag">🎰 JACKPOT</span>
-    <span class="offline-badge" id="audio-offline">🔇 Overlay Offline</span>
-    <span class="offline-badge" id="synth-offline">🧠 Synth Offline</span>
+    <span class="offline-badge" id="audio-offline">🔇 No Overlay Tracks</span>
+    <button class="offline-badge unlock-badge" id="audio-unlock" onclick="enableAudio()">🔈 Tap to Enable Audio</button>
   </h2>
   <div class="metric">
     <div style="display:flex;align-items:center;font-size:.7rem;color:#8e8e93">
@@ -54,11 +54,14 @@
   <h3>🧠 Synth Oscillators</h3>
   <div class="slider"><label>Carrier: <b><span id="l-freq">{{ tone_hz }} Hz</span></b></label><button onclick="cycleTone()">Cycle Frequency</button></div>
   <div class="slider"><label>Binaural Beat: <b><span id="l-beat">{{ beat_knob }}</span></b></label><input type="range" min="0" max="1" step="0.01" value="{{ beat_knob }}" oninput="vec('binaural',this.value);document.getElementById('l-beat').innerText=this.value"></div>
-  <h3>🔊 Overlay Volume</h3>
-  <div class="slider"><label>Volume: <b><span id="l-vol">{{ bg_vol }}%</span></b></label><input type="range" min="0" max="100" value="{{ bg_vol }}" oninput="vol(this.value);document.getElementById('l-vol').innerText=this.value+'%'"></div>
+  <p class="hint">Layout, pace and the beat/carrier are shared with every device watching. Volume below is just for this device.</p>
+  <h3>🔊 This Device's Volume</h3>
+  <div class="slider"><label>Master: <b><span id="l-master-vol">80%</span></b></label><input type="range" id="master-vol-input" min="0" max="100" value="80" oninput="setMasterVolume(this.value)"></div>
+  <div class="slider"><label>Overlay Balance: <b><span id="l-overlay-vol">85%</span></b></label><input type="range" id="overlay-vol-input" min="0" max="100" value="85" oninput="setOverlayBalance(this.value)"></div>
   <h3>🕹️ Overrides</h3>
   <div class="grid"><button class="lock" onclick="lock(); uiFlare();">⬆️ Lock 60s</button><button class="skip" onclick="skip()">⬇️ Skip All</button></div>
 </div>
+<audio id="overlay-audio" loop></audio>
 <div id="toast"></div>
 <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
 </body>

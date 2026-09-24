@@ -27,6 +27,12 @@ def _relative_media_path(config, path: str) -> str:
     return os.path.relpath(path, config.media_dir).replace("\\", "/")
 
 
+def _relative_audio_path(config, path) -> str:
+    if not path:
+        return ""
+    return os.path.relpath(path, config.audio_dir).replace("\\", "/")
+
+
 def _layout_columns(config, name: str) -> int:
     for preset in config.layout_presets:
         if preset.name == name:
@@ -68,12 +74,16 @@ def create_app(ctx: AppContext) -> Flask:
             }
             for s in snap["screens"]
         ]
+        carrier_hz, beat_hz, iso = state.synth_params()
         return {
             "layout": snap["layout"],
             "columns": _layout_columns(config, snap["layout"]),
             "folder": snap["folder"] or "none",
             "screens": screens,
             "audio_name": overlay.current_name(),
+            "audio_path": _relative_audio_path(config, overlay.current_path()),
+            "audio_available": bool(overlay.tracks),
+            "synth": {"carrier_hz": carrier_hz, "beat_hz": beat_hz, "iso": iso},
             "lock_label": (
                 "Continuous Mode"
                 if pace_idx == 3
@@ -81,8 +91,6 @@ def create_app(ctx: AppContext) -> Flask:
             ),
             "jackpot": snap["jackpot"],
             "barrage": snap["barrage"],
-            "audio_available": snap["audio_available"],
-            "synth_available": snap["synth_available"],
             "preload_enabled": snap["preload_enabled"],
         }
 
@@ -97,7 +105,6 @@ def create_app(ctx: AppContext) -> Flask:
             folders=library.list_folders(config),
             tone_hz=config.tone_modes[snap["tone_index"]],
             beat_knob=f"{snap['binaural_knob']:.2f}",
-            bg_vol=snap["overlay_volume"],
             pace_idx=pace_idx,
             pace_label=config.pace_presets[pace_idx].label,
             layout_presets=config.layout_presets,
@@ -110,6 +117,10 @@ def create_app(ctx: AppContext) -> Flask:
     @app.route("/media/<path:filename>")
     def media(filename):
         return send_from_directory(config.media_dir, filename)
+
+    @app.route("/audio/<path:filename>")
+    def audio_file(filename):
+        return send_from_directory(config.audio_dir, filename)
 
     @app.route("/api/status")
     def api_status():
@@ -217,15 +228,6 @@ def create_app(ctx: AppContext) -> Flask:
             return jsonify(ok=False, error="invalid value"), 400
         if key == "binaural":
             state.set_binaural(val)
-        return jsonify(ok=True)
-
-    @app.route("/api/volume")
-    def api_volume():
-        try:
-            val = int(request.args.get("val", ""))
-        except (TypeError, ValueError):
-            return jsonify(ok=False, error="invalid value"), 400
-        overlay.set_volume(val)
         return jsonify(ok=True)
 
     @app.route("/api/cycle_tone")
