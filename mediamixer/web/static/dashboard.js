@@ -300,4 +300,7 @@ window.onload = () => {
   armAutoUnlock();
   fetch('/api/status').then(r => r.json()).then(render);
   connectStream();
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
 };

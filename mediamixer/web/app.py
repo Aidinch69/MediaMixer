@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 _HERE = os.path.dirname(__file__)
 STREAM_INTERVAL_S = 0.3
-_NO_SESSION_PREFIXES = ("/media/", "/audio/", "/assets/")
+_NO_SESSION_PREFIXES = ("/media/", "/audio/", "/assets/", "/sw.js")
 
 
 def _relative_media_path(config, path: str) -> str:
@@ -152,6 +152,14 @@ def create_app(ctx: AppContext) -> Flask:
     @app.route("/audio/<path:filename>")
     def audio_file(filename):
         return send_from_directory(config.audio_dir, filename)
+
+    @app.route("/sw.js")
+    def service_worker():
+        # Served at the root path (not /assets/sw.js) so its default scope
+        # covers the whole site, which PWA installability requires.
+        resp = send_from_directory(os.path.join(_HERE, "static"), "sw.js")
+        resp.headers["Service-Worker-Allowed"] = "/"
+        return resp
 
     @app.route("/api/status")
     def api_status():
