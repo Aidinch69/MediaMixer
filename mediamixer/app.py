@@ -12,6 +12,7 @@ from .audio.synth import BinauralSynth
 from .config import Config, load_config
 from .context import AppContext
 from .db import Database
+from .network import get_lan_ip
 from .rotation import RotationEngine
 from .state import RuntimeState
 from .web.app import create_app
@@ -52,6 +53,7 @@ class MediaMixerApp:
 
         log.info("=" * 60)
         log.info("MediaMixer engine online -> http://localhost:%s", self.config.port)
+        log.info("Same-network devices (e.g. your phone) -> http://%s:%s", get_lan_ip(), self.config.port)
         log.info("=" * 60)
 
         try:

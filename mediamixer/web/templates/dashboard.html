@@ -25,6 +25,12 @@
     <div style="margin-top:4px;color:#aaa;font-size:11px" id="t-lock">…</div>
     <div style="margin-top:4px;color:#ff668c;font-size:11px;font-weight:bold" id="t-barrage"></div>
   </div>
+  <h3>📱 Phone Access</h3>
+  <div class="metric phone-access">
+    <div class="qr-box">{{ phone_qr_svg | safe }}</div>
+    <div class="phone-url" id="phone-url" onclick="copyPhoneUrl()" title="Click to copy">{{ phone_url }}</div>
+    <p class="hint">Same Wi-Fi network only. Scan with your phone's camera, or type the address above.</p>
+  </div>
   <h3>🖥️ Layout</h3>
   <div class="grid" id="layout-buttons">
     {% for preset in layout_presets %}

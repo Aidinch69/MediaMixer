@@ -1,15 +1,19 @@
 """Flask app: dashboard UI, media streaming, and the control/telemetry API."""
 from __future__ import annotations
 
+import io
 import json
 import logging
 import os
 import time
 
+import qrcode
+import qrcode.image.svg
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
 from .. import library
 from ..context import AppContext
+from ..network import get_lan_ip
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +32,15 @@ def _layout_columns(config, name: str) -> int:
         if preset.name == name:
             return preset.columns
     return 1
+
+
+def _qr_svg(data: str) -> str:
+    """Inline-embeddable SVG markup for a QR code (no XML prolog, no Pillow needed)."""
+    img = qrcode.make(data, image_factory=qrcode.image.svg.SvgPathImage, box_size=8, border=2)
+    buf = io.BytesIO()
+    img.save(buf)
+    svg = buf.getvalue().decode("utf-8")
+    return svg.split("?>", 1)[-1].strip()
 
 
 def create_app(ctx: AppContext) -> Flask:
@@ -78,6 +91,7 @@ def create_app(ctx: AppContext) -> Flask:
         library.sync_library(db, config)
         snap = state.snapshot()
         pace_idx = snap["pace_idx"]
+        phone_url = f"http://{get_lan_ip()}:{config.port}"
         return render_template(
             "dashboard.html",
             folders=library.list_folders(config),
@@ -89,6 +103,8 @@ def create_app(ctx: AppContext) -> Flask:
             layout_presets=config.layout_presets,
             layout=snap["layout"],
             preload_enabled=snap["preload_enabled"],
+            phone_url=phone_url,
+            phone_qr_svg=_qr_svg(phone_url),
         )
 
     @app.route("/media/<path:filename>")

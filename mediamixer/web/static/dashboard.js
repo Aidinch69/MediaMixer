@@ -4,6 +4,16 @@ let currentLayout = null;
 let currentPaths = [];
 let preloadEnabled = true;
 
+function copyPhoneUrl() {
+  const el = document.getElementById('phone-url');
+  const text = el.innerText;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => toast('Copied: ' + text)).catch(() => toast('Copy failed', true));
+  } else {
+    toast('Copy failed', true);
+  }
+}
+
 function togglePanel() {
   const panel = document.getElementById('panel');
   const collapsed = panel.classList.toggle('collapsed');
