@@ -33,10 +33,12 @@ class Config:
     # -- storage locations --
     media_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_MEDIA_DIR", "./media_assets"))
     audio_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_AUDIO_DIR", "./Audios"))
+    overlay_fx_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_OVERLAY_FX_DIR", "./overlay_fx"))
     db_path: str = field(default_factory=lambda: os.environ.get("MEDIAMIXER_DB_PATH", "system_memory.db"))
 
     video_exts: Tuple[str, ...] = (".mp4", ".mkv", ".avi", ".mov", ".webm")
     audio_exts: Tuple[str, ...] = (".mp3", ".wav", ".ogg")
+    overlay_fx_image_exts: Tuple[str, ...] = (".jpg", ".jpeg", ".png", ".gif", ".webp")
 
     # -- binaural / isochronic synth --
     sample_rate: int = 44100

@@ -13,3 +13,4 @@ engine_stderr.log
 # personal media library (large binaries, not source)
 media_assets/
 Audios/
+overlay_fx/

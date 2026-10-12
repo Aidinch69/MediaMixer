@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 _HERE = os.path.dirname(__file__)
 STREAM_INTERVAL_S = 0.3
-_NO_SESSION_PREFIXES = ("/media/", "/audio/", "/assets/", "/sw.js")
+_NO_SESSION_PREFIXES = ("/media/", "/audio/", "/overlay_fx/", "/assets/", "/sw.js")
 
 
 def _relative_media_path(config, path: str) -> str:
@@ -55,6 +55,23 @@ def _qr_svg(data: str) -> str:
     img.save(buf)
     svg = buf.getvalue().decode("utf-8")
     return svg.split("?>", 1)[-1].strip()
+
+
+def _scan_overlay_fx_dir(config) -> list:
+    """Flat listing of the dedicated overlay-fx folder: video and image files,
+    each tagged with its kind so the client knows how to render it."""
+    os.makedirs(config.overlay_fx_dir, exist_ok=True)
+    items = []
+    for name in sorted(os.listdir(config.overlay_fx_dir)):
+        full = os.path.join(config.overlay_fx_dir, name)
+        if not os.path.isfile(full):
+            continue
+        lower = name.lower()
+        if lower.endswith(config.video_exts):
+            items.append({"path": name, "kind": "video"})
+        elif lower.endswith(config.overlay_fx_image_exts):
+            items.append({"path": name, "kind": "image"})
+    return items
 
 
 def create_app(ctx: AppContext) -> Flask:
@@ -156,6 +173,22 @@ def create_app(ctx: AppContext) -> Flask:
     @app.route("/audio/<path:filename>")
     def audio_file(filename):
         return send_from_directory(config.audio_dir, filename, max_age=86400)
+
+    @app.route("/overlay_fx/<path:filename>")
+    def overlay_fx_file(filename):
+        return send_from_directory(config.overlay_fx_dir, filename, max_age=86400)
+
+    @app.route("/api/overlay_fx/list")
+    def api_overlay_fx_list():
+        source = request.args.get("source", "dedicated")
+        if source == "library":
+            items = [{"path": p, "kind": "video", "base": "/media/"} for p in library.list_all_videos(config)]
+        else:
+            items = [
+                {"path": it["path"], "kind": it["kind"], "base": "/overlay_fx/"}
+                for it in _scan_overlay_fx_dir(config)
+            ]
+        return jsonify(items=items)
 
     @app.route("/sw.js")
     def service_worker():

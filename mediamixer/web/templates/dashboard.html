@@ -19,6 +19,7 @@
 <div class="theater" id="theater-box">
   <div class="screen-grid" id="screen-grid"></div>
 </div>
+<div id="fx-layer"></div>
 <div class="panel" id="panel">
   <h2>
     <span>🧬 MediaMixer</span>
@@ -56,6 +57,22 @@
     <button class="badge" id="mosaic-toggle" onclick="toggleMosaic()">OFF</button>
   </div>
   <p class="hint">Sizes tiles by each clip's own aspect ratio to cut down on black bars, instead of a uniform grid. Reflows every few seconds, not on every clip change, to stay calm.</p>
+  <h3>✨ Floating Overlay (Experimental)</h3>
+  <div class="slider">
+    <label>Enabled</label>
+    <button class="badge" id="fx-toggle" onclick="toggleFx()">OFF</button>
+  </div>
+  <div class="slider">
+    <label>Source</label>
+    <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+      <button class="badge" id="fx-source-dedicated" onclick="setFxSource('dedicated')">Overlay Folder</button>
+      <button class="badge" id="fx-source-library" onclick="setFxSource('library')">Main Library</button>
+      <button class="badge" id="fx-source-both" onclick="setFxSource('both')">Both</button>
+    </div>
+  </div>
+  <div class="slider"><label>Floating Count: <b><span id="l-fx-count">3</span></b></label><input type="range" id="fx-count-input" min="0" max="6" step="1" value="3" oninput="setFxCount(this.value)"></div>
+  <div class="slider"><label>Opacity: <b><span id="l-fx-opacity">60%</span></b></label><input type="range" id="fx-opacity-input" min="10" max="100" value="60" oninput="setFxOpacity(this.value)"></div>
+  <p class="hint">Floating clips drift and fade across the screen, like a DVD logo. "Overlay Folder" pulls from the overlay_fx/ folder; drop video files in there to use it.</p>
   <h3>📂 Categories</h3>
   <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(110px,1fr))">
     {% for f in folders %}<div class="badge" id="folder-{{ f }}" onclick="cat('{{ f }}')">{{ f }}</div>{% endfor %}

@@ -165,6 +165,192 @@ function applyLayoutMode() {
   else applyUniformGrid();
 }
 
+// ---- Floating Overlay FX (experimental) ----
+// A handful of video clips drift across the screen above the main grid,
+// fading in, moving in a straight line at a random angle, then fading out
+// and respawning elsewhere with a new clip - like a DVD logo, minus the
+// bounce. Pure CSS-transition driven (one transition covers the whole
+// drift, the browser interpolates it with no per-frame JS), so it's cheap
+// regardless of how many sprites are running.
+const FX_MIN_LIFETIME_S = 10;
+const FX_MAX_LIFETIME_S = 25;
+const FX_FADE_S = 1.5;
+const FX_MIN_SIZE_VW = 15;
+const FX_MAX_SIZE_VW = 32;
+const FX_SHARD_OFFSET = 100; // keep fx sprites on their own loopback shards, separate from the main grid
+
+let fxEnabled = false;
+let fxCount = 3;
+let fxOpacity = 60;
+let fxSource = 'library';
+let fxSourceLists = { dedicated: null, library: null };
+let fxSprites = [];
+
+function loadFxPrefs() {
+  try {
+    const en = localStorage.getItem('mm_fx_enabled');
+    const ct = localStorage.getItem('mm_fx_count');
+    const op = localStorage.getItem('mm_fx_opacity');
+    const src = localStorage.getItem('mm_fx_source');
+    if (en !== null) fxEnabled = en === '1';
+    if (ct !== null) fxCount = parseInt(ct, 10);
+    if (op !== null) fxOpacity = parseInt(op, 10);
+    if (src !== null) fxSource = src;
+  } catch (e) {}
+  document.getElementById('fx-toggle').innerText = fxEnabled ? 'ON' : 'OFF';
+  document.getElementById('fx-toggle').classList.toggle('active', fxEnabled);
+  document.getElementById('fx-count-input').value = fxCount;
+  document.getElementById('l-fx-count').innerText = fxCount;
+  document.getElementById('fx-opacity-input').value = fxOpacity;
+  document.getElementById('l-fx-opacity').innerText = fxOpacity + '%';
+  updateFxSourceButtons();
+  if (fxEnabled) startFx();
+}
+
+function updateFxSourceButtons() {
+  ['dedicated', 'library', 'both'].forEach(s => {
+    document.getElementById('fx-source-' + s).classList.toggle('active', s === fxSource);
+  });
+}
+
+function toggleFx() {
+  fxEnabled = !fxEnabled;
+  try { localStorage.setItem('mm_fx_enabled', fxEnabled ? '1' : '0'); } catch (e) {}
+  document.getElementById('fx-toggle').innerText = fxEnabled ? 'ON' : 'OFF';
+  document.getElementById('fx-toggle').classList.toggle('active', fxEnabled);
+  if (fxEnabled) startFx(); else stopFx();
+}
+
+function setFxSource(src) {
+  fxSource = src;
+  try { localStorage.setItem('mm_fx_source', src); } catch (e) {}
+  updateFxSourceButtons();
+  fxSourceLists = { dedicated: null, library: null };
+}
+
+function setFxCount(v) {
+  fxCount = parseInt(v, 10);
+  document.getElementById('l-fx-count').innerText = fxCount;
+  try { localStorage.setItem('mm_fx_count', fxCount); } catch (e) {}
+  if (fxEnabled) reconcileFxSpriteCount();
+}
+
+function setFxOpacity(v) {
+  fxOpacity = parseInt(v, 10);
+  document.getElementById('l-fx-opacity').innerText = fxOpacity + '%';
+  try { localStorage.setItem('mm_fx_opacity', fxOpacity); } catch (e) {}
+  fxSprites.forEach(s => { if (s && s.state === 'visible') s.el.style.opacity = String(fxOpacity / 100); });
+}
+
+function fetchFxList(source) {
+  if (fxSourceLists[source]) return Promise.resolve(fxSourceLists[source]);
+  return fetch('/api/overlay_fx/list?source=' + source)
+    .then(r => r.json())
+    .then(d => { fxSourceLists[source] = d.items || []; return fxSourceLists[source]; })
+    .catch(() => []);
+}
+
+function pickFxSourceList() {
+  if (fxSource === 'library') return fetchFxList('library');
+  if (fxSource === 'dedicated') return fetchFxList('dedicated');
+  return Promise.all([fetchFxList('dedicated'), fetchFxList('library')]).then(([a, b]) => a.concat(b));
+}
+
+function startFx() {
+  document.getElementById('fx-layer').innerHTML = '';
+  fxSprites = [];
+  for (let i = 0; i < fxCount; i++) spawnFxSprite(i, Math.random() * 4000);
+}
+
+function stopFx() {
+  fxSprites.forEach(s => s && clearTimeout(s.timer));
+  fxSprites = [];
+  document.getElementById('fx-layer').innerHTML = '';
+}
+
+function reconcileFxSpriteCount() {
+  if (fxSprites.length < fxCount) {
+    for (let i = fxSprites.length; i < fxCount; i++) spawnFxSprite(i, 0);
+  } else if (fxSprites.length > fxCount) {
+    fxSprites.splice(fxCount).forEach(s => {
+      if (!s) return;
+      clearTimeout(s.timer);
+      if (s.el && s.el.parentNode) s.el.parentNode.removeChild(s.el);
+    });
+  }
+}
+
+function spawnFxSprite(slot, delayMs) {
+  const sprite = { slot, el: null, timer: null, state: 'pending' };
+  fxSprites[slot] = sprite;
+  sprite.timer = setTimeout(() => activateFxSprite(sprite), delayMs);
+}
+
+function activateFxSprite(sprite) {
+  if (!fxEnabled) return;
+  pickFxSourceList().then(items => {
+    if (!fxEnabled) return;
+    if (!items || !items.length) {
+      sprite.timer = setTimeout(() => activateFxSprite(sprite), 4000);
+      return;
+    }
+
+    const item = items[Math.floor(Math.random() * items.length)];
+    const layer = document.getElementById('fx-layer');
+    let el = sprite.el;
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'fx-sprite';
+      el.innerHTML = '<video muted loop playsinline></video>';
+      layer.appendChild(el);
+      sprite.el = el;
+    }
+    const vid = el.querySelector('video');
+    vid.onloadedmetadata = () => {
+      if (vid.videoWidth && vid.videoHeight) {
+        el.style.height = (parseFloat(el.style.width) * vid.videoHeight / vid.videoWidth) + 'px';
+      }
+    };
+    vid.src = mediaOrigin(FX_SHARD_OFFSET + sprite.slot) + item.base + item.path;
+    vid.play().catch(() => {});
+
+    const sizePx = ((FX_MIN_SIZE_VW + Math.random() * (FX_MAX_SIZE_VW - FX_MIN_SIZE_VW)) / 100) * window.innerWidth;
+    el.style.width = sizePx + 'px';
+    el.style.height = (sizePx * 9 / 16) + 'px'; // corrected above once real metadata loads
+
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const startX = Math.random() * Math.max(0, vw - sizePx);
+    const startY = Math.random() * Math.max(0, vh - sizePx * 9 / 16);
+    const angle = Math.random() * Math.PI * 2;
+    const distance = Math.max(vw, vh) * (0.3 + Math.random() * 0.4);
+    const endX = startX + Math.cos(angle) * distance;
+    const endY = startY + Math.sin(angle) * distance;
+    const lifetime = FX_MIN_LIFETIME_S + Math.random() * (FX_MAX_LIFETIME_S - FX_MIN_LIFETIME_S);
+
+    el.style.transition = 'none';
+    el.style.transform = `translate(${startX}px, ${startY}px)`;
+    el.style.opacity = '0';
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.style.transition = `transform ${lifetime}s linear, opacity ${FX_FADE_S}s ease`;
+        el.style.transform = `translate(${endX}px, ${endY}px)`;
+        el.style.opacity = String(fxOpacity / 100);
+      });
+    });
+
+    sprite.state = 'visible';
+    sprite.timer = setTimeout(() => {
+      sprite.state = 'fading';
+      el.style.opacity = '0'; // reuses the opacity transition declared above
+      sprite.timer = setTimeout(() => {
+        vid.pause();
+        sprite.timer = setTimeout(() => activateFxSprite(sprite), 500 + Math.random() * 3000);
+      }, FX_FADE_S * 1000 + 100);
+    }, Math.max(0, lifetime - FX_FADE_S) * 1000);
+  });
+}
+
 // ---- Client-side audio engine ----
 // The binaural tone (Web Audio) and the overlay track (<audio>) both play
 // locally in whichever browser has this page open - including a phone on
@@ -403,7 +589,10 @@ function render(d) {
 
   if (d.barrage > 0) uiGlitch();
 
-  document.querySelectorAll('.badge').forEach(b => { if (b.id !== 'preload-toggle' && b.id !== 'mosaic-toggle') b.classList.remove('active'); });
+  const persistentBadges = new Set([
+    'preload-toggle', 'mosaic-toggle', 'fx-toggle', 'fx-source-dedicated', 'fx-source-library', 'fx-source-both',
+  ]);
+  document.querySelectorAll('.badge').forEach(b => { if (!persistentBadges.has(b.id)) b.classList.remove('active'); });
   const activeFolder = document.getElementById('folder-' + d.folder);
   if (activeFolder) activeFolder.classList.add('active');
   const activeLayout = document.getElementById('layout-' + d.layout);
@@ -468,6 +657,7 @@ setInterval(() => { if (mosaicEnabled) layoutMosaic(); }, MOSAIC_REFLOW_INTERVAL
 window.onload = () => {
   restorePanelState();
   loadMosaicPref();
+  loadFxPrefs();
   overlayEl = document.getElementById('overlay-audio');
   loadVolumePrefs();
   armAutoUnlock();

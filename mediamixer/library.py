@@ -52,6 +52,23 @@ def list_folders(config: Config) -> List[str]:
     return folders
 
 
+def list_all_videos(config: Config) -> List[str]:
+    """Flat list of every video in the library (all categories plus loose
+    top-level files), as paths relative to media_dir. Used by features that
+    just want "something from the library" - e.g. the floating overlay FX -
+    without the reward-weighted selection machinery."""
+    if not os.path.isdir(config.media_dir):
+        return []
+    results = []
+    for folder in list_folders(config):
+        fdir = config.media_dir if folder == GENERAL_FOLDER else os.path.join(config.media_dir, folder)
+        for entry in sorted(os.listdir(fdir)):
+            full = os.path.join(fdir, entry)
+            if os.path.isfile(full) and entry.lower().endswith(config.video_exts):
+                results.append(os.path.relpath(full, config.media_dir).replace("\\", "/"))
+    return results
+
+
 def pick_folder(db: Database, config: Config, exclude: Optional[str] = None) -> Optional[str]:
     now = time.time()
     rows = db.folder_rewards()
