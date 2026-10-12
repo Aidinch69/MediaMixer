@@ -240,8 +240,7 @@ def create_app(ctx: AppContext) -> Flask:
         name = request.args.get("mode", "")
         if name not in {preset.name for preset in config.layout_presets}:
             return jsonify(ok=False, error="unknown layout"), 400
-        preset = session.state.set_layout(name)
-        session.rotation.rotate(side="all")
+        preset = session.rotation.set_layout_and_rotate(name)
         return jsonify(ok=True, tile_count=preset.tile_count, columns=preset.columns)
 
     @app.route("/api/rate")

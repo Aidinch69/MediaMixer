@@ -50,6 +50,19 @@ class RotationEngine:
                     return
             self._rotate_locked(override_folder, side)
 
+    def set_layout_and_rotate(self, name: str):
+        """Resize to a new layout and repopulate every screen as one atomic
+        step. Doing the resize and the repopulating rotate() as two separate
+        calls left a window where the scheduler's own expiry-driven rotation
+        could see the freshly-added (and therefore already-"expired") blank
+        screens and rotate them itself in between - racing with this method's
+        own repopulation and occasionally handing two screens the same clip.
+        """
+        with self._rotate_lock:
+            preset = self._state.set_layout(name)
+            self._rotate_locked(None, "all")
+            return preset
+
     def _rotate_locked(self, override_folder: Optional[str], side: Side):
         cfg = self._config
         pace_idx, folder, played, barrage, current_paths, next_paths = self._state.rotation_context()
@@ -131,7 +144,7 @@ class RotationEngine:
     ) -> Optional[str]:
         cfg = self._config
         if is_jackpot:
-            picked = library.pick_video_jackpot(self._db, folder, offset=offset)
+            picked = library.pick_video_jackpot(self._db, folder, offset=offset, exclude=exclude)
         elif preferred and preferred not in exclude:
             # Already picked last rotation and preloaded by the browser since -
             # use it so the swap is instant instead of starting a cold fetch.

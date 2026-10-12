@@ -9,7 +9,6 @@ import logging
 import sqlite3
 import threading
 import time
-from typing import Optional
 
 from .bandit import decayed_value
 from .config import Config
@@ -83,12 +82,19 @@ class Database:
             (folder,),
         ).fetchall()
 
-    def top_video_by_reward(self, folder: str, offset: int = 0) -> Optional[str]:
-        row = self._connect().execute(
-            "SELECT video_path FROM video_weights WHERE folder_name=? ORDER BY ema_reward DESC LIMIT 1 OFFSET ?",
-            (folder, offset),
-        ).fetchone()
-        return row["video_path"] if row else None
+    def top_videos_by_reward(self, folder: str, limit: int) -> list:
+        """Top `limit` videos by reward, highest first. `video_path` is a tie
+        breaker so the ranking is fully deterministic even among the many
+        videos that sit at the same (often 0.0, never-rated) ema_reward -
+        without it, separate queries racing against concurrent reward
+        updates could rank the same tied video differently from one offset
+        to the next, handing two screens the same "top ranked" pick."""
+        rows = self._connect().execute(
+            "SELECT video_path FROM video_weights WHERE folder_name=? "
+            "ORDER BY ema_reward DESC, video_path ASC LIMIT ?",
+            (folder, limit),
+        ).fetchall()
+        return [r["video_path"] for r in rows]
 
     # -- reward updates --
     def apply_video_reward(self, path: str, reward: float, halflife: float, alpha: float, played: bool = False):

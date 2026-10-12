@@ -89,8 +89,25 @@ def pick_video(
     return softmax_pick(items, scores, config.softmax_temp)
 
 
-def pick_video_jackpot(db: Database, folder: str, offset: int = 0) -> Optional[str]:
-    return db.top_video_by_reward(folder, offset)
+def pick_video_jackpot(
+    db: Database, folder: str, offset: int = 0, exclude: Union[str, Iterable[str], None] = None
+) -> Optional[str]:
+    """Rank-based pick for jackpot mode: the `offset`-th best-reviewed video in
+    `folder`, skipping anything in `exclude` (so two screens can't both land on
+    the same "top ranked" video in the same jackpot batch)."""
+    if exclude is None:
+        exclude_norm = set()
+    else:
+        exclude_paths = {exclude} if isinstance(exclude, str) else set(exclude)
+        exclude_norm = {os.path.normpath(p).lower() for p in exclude_paths if p}
+
+    # Fetch extra headroom past `offset` so there's enough to skip past any
+    # excluded videos and still land on a real pick.
+    rows = db.top_videos_by_reward(folder, limit=offset + 1 + len(exclude_norm))
+    candidates = [r for r in rows if os.path.normpath(r).lower() not in exclude_norm]
+    if offset < len(candidates):
+        return candidates[offset]
+    return candidates[-1] if candidates else None
 
 
 def reward_video(db: Database, config: Config, path: Optional[str], reward: float, played: bool = False):
