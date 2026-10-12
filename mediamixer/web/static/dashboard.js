@@ -342,7 +342,9 @@ function activateFxSprite(sprite) {
     const distance = Math.max(vw, vh) * (0.3 + Math.random() * 0.4);
     const endX = startX + Math.cos(angle) * distance;
     const endY = startY + Math.sin(angle) * distance;
-    const lifetime = FX_MIN_LIFETIME_S + Math.random() * (FX_MAX_LIFETIME_S - FX_MIN_LIFETIME_S);
+    const lifetime = sprite.burst
+      ? 3 + Math.random() * 3
+      : FX_MIN_LIFETIME_S + Math.random() * (FX_MAX_LIFETIME_S - FX_MIN_LIFETIME_S);
 
     el.style.transition = 'none';
     el.style.transform = `translate(${startX}px, ${startY}px)`;
@@ -362,10 +364,26 @@ function activateFxSprite(sprite) {
       el.style.opacity = '0'; // reuses the opacity transition declared above
       sprite.timer = setTimeout(() => {
         vid.pause();
+        if (sprite.burst) {
+          if (sprite.el && sprite.el.parentNode) sprite.el.parentNode.removeChild(sprite.el);
+          const idx = fxSprites.indexOf(sprite);
+          if (idx >= 0) fxSprites.splice(idx, 1);
+          return;
+        }
         sprite.timer = setTimeout(() => activateFxSprite(sprite), 500 + Math.random() * 3000);
       }, FX_FADE_S * 1000 + 100);
     }, Math.max(0, lifetime - FX_FADE_S) * 1000);
   });
+}
+
+function burstExtraFloaters() {
+  if (!fxEnabled) return;
+  const n = Math.min(4, Math.max(1, 10 - fxCount));
+  for (let i = 0; i < n; i++) {
+    const sprite = { slot: 1000 + i, el: null, timer: null, state: 'pending', currentPath: null, burst: true };
+    fxSprites.push(sprite);
+    activateFxSprite(sprite);
+  }
 }
 
 // ---- Client-side audio engine ----
@@ -473,6 +491,208 @@ function enableAudio() {
 
 function armAutoUnlock() {
   ['click', 'touchstart'].forEach(evt => document.addEventListener(evt, enableAudio, { once: true, passive: true }));
+}
+
+// ---- Anticipation / near-miss / payoff FX (experimental) ----
+// "Honest" build-up: the server already tells every viewer how many barrage
+// steps are left (d.barrage) before it resolves into a real jackpot - we
+// just watch that count tick down and ramp a tension cue timed to peak
+// around when it lands, then fire a real payoff when d.jackpot flips on.
+// "Fake" near-miss: the same build-up cue, triggered by a random client-side
+// timer with nothing real behind it, left to fizzle instead of pay off.
+// Both are purely visual/audio flourish layered on the existing barrage/
+// jackpot mechanic - nothing here changes what actually gets selected.
+const FAKE_NEAR_MISS_CHECK_MS = 15000;
+const FAKE_NEAR_MISS_PROBABILITY = 0.25;
+const FAKE_NEAR_MISS_BUILD_S = 3.5;
+const HONEST_BUILD_SAFETY_MS = 6000; // auto-fizzle if a real payoff never arrives (shouldn't normally fire)
+
+let anticipationFxEnabled = true;
+let nearMissEnabled = true;
+let sfxVolume = 70;
+let sfxGain = null;
+let anticipationActive = false;
+let anticipationRunId = 0;
+let lastKnownBarrage = 0;
+let lastKnownJackpot = false;
+
+function loadAnticipationPrefs() {
+  try {
+    const en = localStorage.getItem('mm_anticipation_enabled');
+    const nm = localStorage.getItem('mm_near_miss_enabled');
+    const vol = localStorage.getItem('mm_sfx_vol');
+    if (en !== null) anticipationFxEnabled = en === '1';
+    if (nm !== null) nearMissEnabled = nm === '1';
+    if (vol !== null) sfxVolume = parseInt(vol, 10);
+  } catch (e) {}
+  document.getElementById('anticipation-toggle').innerText = anticipationFxEnabled ? 'ON' : 'OFF';
+  document.getElementById('anticipation-toggle').classList.toggle('active', anticipationFxEnabled);
+  document.getElementById('near-miss-toggle').innerText = nearMissEnabled ? 'ON' : 'OFF';
+  document.getElementById('near-miss-toggle').classList.toggle('active', nearMissEnabled);
+  document.getElementById('sfx-vol-input').value = sfxVolume;
+  document.getElementById('l-sfx-vol').innerText = sfxVolume + '%';
+}
+
+function toggleAnticipationFx() {
+  anticipationFxEnabled = !anticipationFxEnabled;
+  try { localStorage.setItem('mm_anticipation_enabled', anticipationFxEnabled ? '1' : '0'); } catch (e) {}
+  document.getElementById('anticipation-toggle').innerText = anticipationFxEnabled ? 'ON' : 'OFF';
+  document.getElementById('anticipation-toggle').classList.toggle('active', anticipationFxEnabled);
+}
+
+function toggleNearMiss() {
+  nearMissEnabled = !nearMissEnabled;
+  try { localStorage.setItem('mm_near_miss_enabled', nearMissEnabled ? '1' : '0'); } catch (e) {}
+  document.getElementById('near-miss-toggle').innerText = nearMissEnabled ? 'ON' : 'OFF';
+  document.getElementById('near-miss-toggle').classList.toggle('active', nearMissEnabled);
+}
+
+function setSfxVolume(v) {
+  sfxVolume = parseInt(v, 10);
+  document.getElementById('l-sfx-vol').innerText = sfxVolume + '%';
+  try { localStorage.setItem('mm_sfx_vol', sfxVolume); } catch (e) {}
+  if (sfxGain) sfxGain.gain.setTargetAtTime(sfxVolume / 100, audioCtx.currentTime, 0.05);
+}
+
+function ensureSfxBus() {
+  if (!audioCtx) return null;
+  if (!sfxGain) {
+    sfxGain = audioCtx.createGain();
+    sfxGain.gain.value = sfxVolume / 100;
+    sfxGain.connect(audioCtx.destination);
+  }
+  return sfxGain;
+}
+
+function playRiserSound(durationS) {
+  const bus = ensureSfxBus();
+  if (!bus) return;
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sawtooth';
+  const g = audioCtx.createGain();
+  osc.connect(g); g.connect(bus);
+  osc.frequency.setValueAtTime(80, now);
+  osc.frequency.exponentialRampToValueAtTime(700, now + durationS);
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.28, now + durationS * 0.85);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + durationS + 0.3);
+  osc.start(now);
+  osc.stop(now + durationS + 0.35);
+}
+
+function playFizzleSound() {
+  const bus = ensureSfxBus();
+  if (!bus) return;
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  const g = audioCtx.createGain();
+  osc.connect(g); g.connect(bus);
+  osc.frequency.setValueAtTime(480, now);
+  osc.frequency.exponentialRampToValueAtTime(90, now + 0.5);
+  g.gain.setValueAtTime(0.22, now);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+  osc.start(now);
+  osc.stop(now + 0.6);
+}
+
+function playChimeSound() {
+  const bus = ensureSfxBus();
+  if (!bus) return;
+  const now = audioCtx.currentTime;
+  [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'triangle';
+    const g = audioCtx.createGain();
+    osc.connect(g); g.connect(bus);
+    const t0 = now + i * 0.09;
+    osc.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.3, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+    osc.start(t0);
+    osc.stop(t0 + 0.55);
+  });
+}
+
+function runAnticipationBuildUp(durationS, isReal) {
+  if (!anticipationFxEnabled) return;
+  anticipationActive = true;
+  const runId = ++anticipationRunId;
+  const theater = document.getElementById('theater-box');
+  theater.style.transition = 'none';
+  playRiserSound(durationS);
+  const start = performance.now();
+
+  function tick() {
+    if (runId !== anticipationRunId) return;
+    const elapsed = (performance.now() - start) / 1000;
+    const progress = Math.min(1, elapsed / durationS);
+    const intensity = progress * progress; // ease-in: stays subtle, then ramps hard near the end
+    const freq = 2 + intensity * 10;
+    const glow = 10 + intensity * 55;
+    const pulse = 0.5 + 0.5 * Math.sin(elapsed * freq);
+    theater.style.boxShadow = `0 0 ${(glow * pulse).toFixed(1)}px rgba(255,70,30,${(0.25 + intensity * 0.55).toFixed(2)})`;
+    if (progress < 1) {
+      requestAnimationFrame(tick);
+    } else if (!isReal) {
+      fizzleAnticipation(runId);
+    } else {
+      // Peak reached before the real jackpot landed yet - hold, then a safety
+      // net in case the expected payoff status update never arrives.
+      setTimeout(() => fizzleAnticipation(runId), HONEST_BUILD_SAFETY_MS);
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+function fizzleAnticipation(runId) {
+  if (runId !== anticipationRunId || !anticipationActive) return;
+  const theater = document.getElementById('theater-box');
+  theater.style.transition = 'box-shadow 0.6s ease';
+  theater.style.boxShadow = 'none';
+  theater.classList.add('glitch');
+  playFizzleSound();
+  setTimeout(() => {
+    theater.classList.remove('glitch');
+    theater.style.transition = '';
+    anticipationActive = false;
+  }, 650);
+}
+
+function runPayoff() {
+  anticipationRunId++; // invalidate any in-flight build-up loop (real or fake)
+  anticipationActive = false;
+  const theater = document.getElementById('theater-box');
+  theater.style.transition = 'box-shadow 0.5s ease';
+  theater.style.boxShadow = 'none';
+  theater.classList.add('payoff-flash');
+  setTimeout(() => { theater.classList.remove('payoff-flash'); theater.style.transition = ''; }, 650);
+  uiFlare();
+  playChimeSound();
+  burstExtraFloaters();
+}
+
+function handleAnticipationStatus(d) {
+  if (anticipationFxEnabled) {
+    if (d.barrage > 0 && !anticipationActive) {
+      runAnticipationBuildUp(Math.max(1.5, d.barrage * 1.8), true);
+    }
+    if (d.jackpot && !lastKnownJackpot) {
+      runPayoff();
+    }
+  }
+  lastKnownBarrage = d.barrage;
+  lastKnownJackpot = d.jackpot;
+}
+
+function maybeTriggerFakeNearMiss() {
+  if (!anticipationFxEnabled || !nearMissEnabled || anticipationActive) return;
+  if (lastKnownBarrage > 0 || lastKnownJackpot) return; // don't step on a real one
+  if (Math.random() < FAKE_NEAR_MISS_PROBABILITY) {
+    runAnticipationBuildUp(FAKE_NEAR_MISS_BUILD_S, false);
+  }
 }
 
 function copyPhoneUrl() {
@@ -605,9 +825,11 @@ function render(d) {
   preloadToggle.classList.toggle('active', preloadEnabled);
 
   if (d.barrage > 0) uiGlitch();
+  handleAnticipationStatus(d);
 
   const persistentBadges = new Set([
     'preload-toggle', 'mosaic-toggle', 'fx-toggle', 'fx-source-dedicated', 'fx-source-library', 'fx-source-both',
+    'anticipation-toggle', 'near-miss-toggle',
   ]);
   document.querySelectorAll('.badge').forEach(b => { if (!persistentBadges.has(b.id)) b.classList.remove('active'); });
   const activeFolder = document.getElementById('folder-' + d.folder);
@@ -670,11 +892,13 @@ function nextAudio() { fetch('/api/next_audio').then(() => toast('⏭️ Audio S
 
 window.addEventListener('resize', () => { if (mosaicEnabled) layoutMosaic(); });
 setInterval(() => { if (mosaicEnabled) layoutMosaic(); }, MOSAIC_REFLOW_INTERVAL_MS);
+setInterval(maybeTriggerFakeNearMiss, FAKE_NEAR_MISS_CHECK_MS);
 
 window.onload = () => {
   restorePanelState();
   loadMosaicPref();
   loadFxPrefs();
+  loadAnticipationPrefs();
   overlayEl = document.getElementById('overlay-audio');
   loadVolumePrefs();
   armAutoUnlock();

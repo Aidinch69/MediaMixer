@@ -73,6 +73,17 @@
   <div class="slider"><label>Floating Count: <b><span id="l-fx-count">3</span></b></label><input type="range" id="fx-count-input" min="0" max="10" step="1" value="3" oninput="setFxCount(this.value)"></div>
   <div class="slider"><label>Opacity: <b><span id="l-fx-opacity">60%</span></b></label><input type="range" id="fx-opacity-input" min="10" max="100" value="60" oninput="setFxOpacity(this.value)"></div>
   <p class="hint">Floating clips drift and fade across the screen, like a DVD logo. "Overlay Folder" pulls from the overlay_fx/ folder; drop video files in there to use it.</p>
+  <h3>⚡ Anticipation (Experimental)</h3>
+  <div class="slider">
+    <label>Build-up &amp; Payoff FX</label>
+    <button class="badge" id="anticipation-toggle" onclick="toggleAnticipationFx()">OFF</button>
+  </div>
+  <div class="slider">
+    <label>Fake Near-Misses</label>
+    <button class="badge" id="near-miss-toggle" onclick="toggleNearMiss()">OFF</button>
+  </div>
+  <div class="slider"><label>SFX Volume: <b><span id="l-sfx-vol">70%</span></b></label><input type="range" id="sfx-vol-input" min="0" max="100" value="70" oninput="setSfxVolume(this.value)"></div>
+  <p class="hint">Tension builds (visual pulse + audio riser) when a jackpot is really incoming, with a flash/chime/floater-burst payoff when it lands. Near-misses play the same build-up at random with nothing behind it.</p>
   <h3>📂 Categories</h3>
   <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(110px,1fr))">
     {% for f in folders %}<div class="badge" id="folder-{{ f }}" onclick="cat('{{ f }}')">{{ f }}</div>{% endfor %}
