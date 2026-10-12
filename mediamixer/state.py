@@ -138,6 +138,7 @@ class RuntimeState:
                 self.videos_in_folder,
                 self.barrage_count,
                 [s.current for s in self.screens],
+                [s.next for s in self.screens],
             )
 
     def set_screen(self, index: int, current: str, nxt: str, expires_at: float):

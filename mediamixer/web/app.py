@@ -147,11 +147,15 @@ def create_app(ctx: AppContext) -> Flask:
 
     @app.route("/media/<path:filename>")
     def media(filename):
-        return send_from_directory(config.media_dir, filename)
+        # These files don't change once added, so let the browser skip even the
+        # revalidation round-trip on repeat requests (e.g. a preloaded clip's
+        # <video> swapping to the same URL the hidden preload element already
+        # fetched in the background).
+        return send_from_directory(config.media_dir, filename, max_age=86400)
 
     @app.route("/audio/<path:filename>")
     def audio_file(filename):
-        return send_from_directory(config.audio_dir, filename)
+        return send_from_directory(config.audio_dir, filename, max_age=86400)
 
     @app.route("/sw.js")
     def service_worker():

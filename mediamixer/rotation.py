@@ -52,7 +52,7 @@ class RotationEngine:
 
     def _rotate_locked(self, override_folder: Optional[str], side: Side):
         cfg = self._config
-        pace_idx, folder, played, barrage, current_paths = self._state.rotation_context()
+        pace_idx, folder, played, barrage, current_paths, next_paths = self._state.rotation_context()
 
         target = override_folder or folder
         if override_folder:
@@ -73,13 +73,22 @@ class RotationEngine:
         # earlier in this same batch are added in as we go, too.
         in_use = {p for p in current_paths if p}
 
+        # A folder switch invalidates whatever was preloaded (it was picked from
+        # the old folder), so only honor each screen's preloaded "next" pick when
+        # we're staying in the same folder - that's what makes it actually show
+        # up without a fresh fetch.
+        use_preload = override_folder is None
+
         for index in indexes:
             if barrage > 0 or is_jackpot:
                 expires_in = event_expires_in
             else:
                 lo, hi, _label = cfg.pace_presets[pace_idx]
                 expires_in = random.randint(lo, hi)
-            picked = self._swap_screen(index, target, set(in_use), is_jackpot, offset=index, expires_in=expires_in)
+            preferred = next_paths[index] if use_preload and index < len(next_paths) else None
+            picked = self._swap_screen(
+                index, target, set(in_use), is_jackpot, offset=index, expires_in=expires_in, preferred=preferred
+            )
             if picked:
                 in_use.add(picked)
 
@@ -111,14 +120,24 @@ class RotationEngine:
         return is_jackpot, random.randint(lo, hi), barrage
 
     def _swap_screen(
-        self, index: int, folder: str, exclude: set, is_jackpot: bool, offset: int, expires_in: float
+        self,
+        index: int,
+        folder: str,
+        exclude: set,
+        is_jackpot: bool,
+        offset: int,
+        expires_in: float,
+        preferred: Optional[str] = None,
     ) -> Optional[str]:
         cfg = self._config
-        picked = (
-            library.pick_video_jackpot(self._db, folder, offset=offset)
-            if is_jackpot
-            else library.pick_video(self._db, cfg, folder, exclude=exclude)
-        )
+        if is_jackpot:
+            picked = library.pick_video_jackpot(self._db, folder, offset=offset)
+        elif preferred and preferred not in exclude:
+            # Already picked last rotation and preloaded by the browser since -
+            # use it so the swap is instant instead of starting a cold fetch.
+            picked = preferred
+        else:
+            picked = library.pick_video(self._db, cfg, folder, exclude=exclude)
         if not picked:
             return None
         library.reward_video(self._db, cfg, picked, 0.0, played=True)
