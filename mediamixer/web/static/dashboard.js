@@ -175,7 +175,7 @@ function applyLayoutMode() {
 const FX_MIN_LIFETIME_S = 10;
 const FX_MAX_LIFETIME_S = 25;
 const FX_FADE_S = 1.5;
-const FX_MIN_SIZE_VW = 15;
+const FX_MIN_SIZE_VW = 6;
 const FX_MAX_SIZE_VW = 32;
 const FX_SHARD_OFFSET = 100; // keep fx sprites on their own loopback shards, separate from the main grid
 
