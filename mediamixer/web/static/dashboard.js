@@ -568,17 +568,47 @@ function playRiserSound(durationS) {
   const bus = ensureSfxBus();
   if (!bus) return;
   const now = audioCtx.currentTime;
+  const tail = durationS + 0.35;
+
+  // Main body: filtered noise that starts muffled and quiet, then opens up
+  // in brightness and volume as it builds - the standard "cinematic riser"
+  // technique. A raw sawtooth/square tone sweep is harmonic-rich and reads
+  // as a buzzy drone (a "bee in your ear") when sustained for a few
+  // seconds; filtered noise builds the same sense of rising tension
+  // without that buzz.
+  const bufferSize = Math.ceil(audioCtx.sampleRate * tail);
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.Q.value = 0.7;
+  filter.frequency.setValueAtTime(200, now);
+  filter.frequency.exponentialRampToValueAtTime(3200, now + durationS);
+
+  const noiseGain = audioCtx.createGain();
+  noiseGain.gain.setValueAtTime(0.0001, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.18, now + durationS * 0.9);
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + tail);
+  noise.connect(filter); filter.connect(noiseGain); noiseGain.connect(bus);
+
+  // Soft sine undertone: adds a sense of pitch rising without the harmonics
+  // a sawtooth/square would add.
   const osc = audioCtx.createOscillator();
-  osc.type = 'sawtooth';
-  const g = audioCtx.createGain();
-  osc.connect(g); g.connect(bus);
-  osc.frequency.setValueAtTime(80, now);
-  osc.frequency.exponentialRampToValueAtTime(700, now + durationS);
-  g.gain.setValueAtTime(0.0001, now);
-  g.gain.exponentialRampToValueAtTime(0.28, now + durationS * 0.85);
-  g.gain.exponentialRampToValueAtTime(0.0001, now + durationS + 0.3);
-  osc.start(now);
-  osc.stop(now + durationS + 0.35);
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(90, now);
+  osc.frequency.exponentialRampToValueAtTime(260, now + durationS);
+  const oscGain = audioCtx.createGain();
+  oscGain.gain.setValueAtTime(0.0001, now);
+  oscGain.gain.exponentialRampToValueAtTime(0.09, now + durationS * 0.85);
+  oscGain.gain.exponentialRampToValueAtTime(0.0001, now + tail);
+  osc.connect(oscGain); oscGain.connect(bus);
+
+  noise.start(now); noise.stop(now + tail);
+  osc.start(now); osc.stop(now + tail);
 }
 
 function playFizzleSound() {
