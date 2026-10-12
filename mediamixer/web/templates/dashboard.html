@@ -84,6 +84,13 @@
   </div>
   <div class="slider"><label>SFX Volume: <b><span id="l-sfx-vol">70%</span></b></label><input type="range" id="sfx-vol-input" min="0" max="100" value="70" oninput="setSfxVolume(this.value)"></div>
   <p class="hint">Tension builds (visual pulse + audio riser) when a jackpot is really incoming, with a flash/chime/floater-burst payoff when it lands. Near-misses play the same build-up at random with nothing behind it.</p>
+  <h3>🎬 Auto-Pilot (Experimental)</h3>
+  <div class="slider">
+    <label>Enabled</label>
+    <button class="badge" id="autopilot-toggle" onclick="toggleAutopilot()">OFF</button>
+  </div>
+  <div class="slider"><label>Cycle Length: <b><span id="l-autopilot-minutes">6 min</span></b></label><input type="range" id="autopilot-minutes-input" min="2" max="15" step="1" value="6" oninput="setAutopilotMinutes(this.value)"></div>
+  <p class="hint">Scripts pace, barrage/jackpot odds, mosaic, and floater count through a calm -&gt; building -&gt; climax -&gt; cooldown arc on a repeating timer, instead of those staying wherever you last set them. Turns Floating Overlay on if it's off.</p>
   <h3>📂 Categories</h3>
   <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(110px,1fr))">
     {% for f in folders %}<div class="badge" id="folder-{{ f }}" onclick="cat('{{ f }}')">{{ f }}</div>{% endfor %}
@@ -93,7 +100,7 @@
   <div class="grid"><button class="up" onclick="rateAudio('up')">🔊 Audio Up</button><button class="down" onclick="rateAudio('down')">🔇 Audio Down</button></div>
   <button onclick="nextAudio()">⏭️ Next Audio</button>
   <h3>⏱️ Rotation Pace</h3>
-  <div class="slider"><label>Interval: <b><span id="l-pace">{{ pace_label }}</span></b></label><input type="range" min="0" max="3" step="1" value="{{ pace_idx }}" onchange="pace(this.value)"></div>
+  <div class="slider"><label>Interval: <b><span id="l-pace">{{ pace_label }}</span></b></label><input type="range" id="pace-input" min="0" max="3" step="1" value="{{ pace_idx }}" onchange="pace(this.value)"></div>
   <h3>🧠 Synth Oscillators</h3>
   <div class="slider"><label>Carrier: <b><span id="l-freq">{{ tone_hz }} Hz</span></b></label><button onclick="cycleTone()">Cycle Frequency</button></div>
   <div class="slider"><label>Binaural Beat: <b><span id="l-beat">{{ beat_knob }}</span></b></label><input type="range" min="0" max="1" step="0.01" value="{{ beat_knob }}" oninput="vec('binaural',this.value);document.getElementById('l-beat').innerText=this.value"></div>

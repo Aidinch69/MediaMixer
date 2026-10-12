@@ -276,6 +276,16 @@ def create_app(ctx: AppContext) -> Flask:
         preset = session.rotation.set_layout_and_rotate(name)
         return jsonify(ok=True, tile_count=preset.tile_count, columns=preset.columns)
 
+    @app.route("/api/intensity")
+    def api_intensity():
+        try:
+            barrage_p = float(request.args.get("barrage", ""))
+            jackpot_p = float(request.args.get("jackpot", ""))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="invalid value"), 400
+        g.session.state.set_intensity(barrage_p, jackpot_p)
+        return jsonify(ok=True)
+
     @app.route("/api/rate")
     def api_rate():
         session = g.session

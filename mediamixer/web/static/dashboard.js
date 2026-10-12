@@ -695,6 +695,104 @@ function maybeTriggerFakeNearMiss() {
   }
 }
 
+// ---- Auto-Pilot (experimental) ----
+// A scripted session arc - calm, then building, a climax, then cooldown,
+// repeating - that ramps pace, barrage/jackpot odds, mosaic, and the
+// floating-overlay count over time instead of those staying wherever you
+// last set them. Driven entirely from this tab by re-using the existing
+// per-session controls (pace(), /api/intensity, toggleMosaic/setFxCount),
+// so it has no server-side component of its own.
+const AUTOPILOT_TICK_MS = 4000;
+const AUTOPILOT_KEYFRAMES = [
+  { t: 0.00, pace: 3, barrage: 0.01, jackpot: 0.02, mosaic: false, fx: 1 },
+  { t: 0.35, pace: 2, barrage: 0.03, jackpot: 0.06, mosaic: false, fx: 2 },
+  { t: 0.60, pace: 1, barrage: 0.10, jackpot: 0.18, mosaic: true, fx: 4 },
+  { t: 0.75, pace: 0, barrage: 0.22, jackpot: 0.35, mosaic: true, fx: 6 },
+  { t: 0.85, pace: 1, barrage: 0.08, jackpot: 0.15, mosaic: true, fx: 3 },
+  { t: 1.00, pace: 3, barrage: 0.01, jackpot: 0.02, mosaic: false, fx: 1 },
+];
+
+let autopilotEnabled = false;
+let autopilotCycleMinutes = 6;
+let autopilotStartTime = 0;
+let autopilotTimer = null;
+let autopilotLastPace = null;
+let autopilotLastMosaic = null;
+
+function loadAutopilotPrefs() {
+  try {
+    const cyc = localStorage.getItem('mm_autopilot_minutes');
+    if (cyc !== null) autopilotCycleMinutes = parseFloat(cyc);
+  } catch (e) {}
+  // Deliberately doesn't auto-resume "enabled" across reloads - starting an
+  // open-ended ramping mode silently on page load would be surprising.
+  document.getElementById('autopilot-minutes-input').value = autopilotCycleMinutes;
+  document.getElementById('l-autopilot-minutes').innerText = autopilotCycleMinutes + ' min';
+  document.getElementById('autopilot-toggle').innerText = 'OFF';
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function autopilotPhaseAt(frac) {
+  const kfs = AUTOPILOT_KEYFRAMES;
+  for (let i = 0; i < kfs.length - 1; i++) {
+    if (frac >= kfs[i].t && frac <= kfs[i + 1].t) {
+      const span = kfs[i + 1].t - kfs[i].t || 1;
+      return { a: kfs[i], b: kfs[i + 1], lf: (frac - kfs[i].t) / span };
+    }
+  }
+  return { a: kfs[0], b: kfs[0], lf: 0 };
+}
+
+function autopilotTick() {
+  if (!autopilotEnabled) return;
+  const cycleS = Math.max(30, autopilotCycleMinutes * 60);
+  const elapsed = (Date.now() - autopilotStartTime) / 1000;
+  const frac = (elapsed % cycleS) / cycleS;
+  const { a, b, lf } = autopilotPhaseAt(frac);
+
+  const barrageP = lerp(a.barrage, b.barrage, lf);
+  const jackpotP = lerp(a.jackpot, b.jackpot, lf);
+  const fxTarget = Math.round(lerp(a.fx, b.fx, lf));
+  const targetPace = lf < 0.5 ? a.pace : b.pace;
+  const targetMosaic = lf < 0.5 ? a.mosaic : b.mosaic;
+
+  fetch('/api/intensity?barrage=' + barrageP.toFixed(3) + '&jackpot=' + jackpotP.toFixed(3));
+  if (targetPace !== autopilotLastPace) { autopilotLastPace = targetPace; pace(targetPace, true); }
+  if (targetMosaic !== autopilotLastMosaic) {
+    autopilotLastMosaic = targetMosaic;
+    if (mosaicEnabled !== targetMosaic) toggleMosaic();
+  }
+  if (fxCount !== fxTarget) setFxCount(fxTarget);
+}
+
+function startAutopilot() {
+  autopilotStartTime = Date.now();
+  autopilotLastPace = null;
+  autopilotLastMosaic = null;
+  if (!fxEnabled) toggleFx();
+  autopilotTick();
+  autopilotTimer = setInterval(autopilotTick, AUTOPILOT_TICK_MS);
+}
+
+function stopAutopilot() {
+  clearInterval(autopilotTimer);
+  autopilotTimer = null;
+}
+
+function toggleAutopilot() {
+  autopilotEnabled = !autopilotEnabled;
+  document.getElementById('autopilot-toggle').innerText = autopilotEnabled ? 'ON' : 'OFF';
+  document.getElementById('autopilot-toggle').classList.toggle('active', autopilotEnabled);
+  if (autopilotEnabled) startAutopilot(); else stopAutopilot();
+}
+
+function setAutopilotMinutes(v) {
+  autopilotCycleMinutes = parseFloat(v);
+  document.getElementById('l-autopilot-minutes').innerText = autopilotCycleMinutes + ' min';
+  try { localStorage.setItem('mm_autopilot_minutes', autopilotCycleMinutes); } catch (e) {}
+}
+
 function copyPhoneUrl() {
   const el = document.getElementById('phone-url');
   const text = el.innerText;
@@ -829,7 +927,7 @@ function render(d) {
 
   const persistentBadges = new Set([
     'preload-toggle', 'mosaic-toggle', 'fx-toggle', 'fx-source-dedicated', 'fx-source-library', 'fx-source-both',
-    'anticipation-toggle', 'near-miss-toggle',
+    'anticipation-toggle', 'near-miss-toggle', 'autopilot-toggle',
   ]);
   document.querySelectorAll('.badge').forEach(b => { if (!persistentBadges.has(b.id)) b.classList.remove('active'); });
   const activeFolder = document.getElementById('folder-' + d.folder);
@@ -880,10 +978,11 @@ function togglePreload() {
   const next = !preloadEnabled;
   fetch('/api/preload?enabled=' + next).then(() => toast('Preload: ' + (next ? 'ON' : 'OFF')));
 }
-function pace(v) {
+function pace(v, quiet) {
   const labels = ['10s Hard Switching', '5s - 30s (Rapid)', '30s - 120s (Balanced)', 'Full Video (Continuous)'];
   document.getElementById('l-pace').innerText = labels[v];
-  fetch('/api/pace?mode=' + v).then(() => toast('Pace updated'));
+  document.getElementById('pace-input').value = v;
+  fetch('/api/pace?mode=' + v).then(() => { if (!quiet) toast('Pace updated'); });
 }
 function vec(k, v) { fetch('/api/vector?key=' + k + '&val=' + v); }
 function rateScreen(i, dir) { fetch('/api/rate?screen=' + i + '&dir=' + dir).then(() => toast(dir === 'up' ? '👍 Reinforced' : '👎 Penalized', dir !== 'up')); }
@@ -899,6 +998,7 @@ window.onload = () => {
   loadMosaicPref();
   loadFxPrefs();
   loadAnticipationPrefs();
+  loadAutopilotPrefs();
   overlayEl = document.getElementById('overlay-audio');
   loadVolumePrefs();
   armAutoUnlock();

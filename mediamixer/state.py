@@ -53,6 +53,11 @@ class RuntimeState:
         self.current_folder = ""
         self.videos_in_folder = 0
 
+        # Adjustable per-session (default from config), so e.g. an auto-pilot
+        # mode can ramp how often barrage/jackpot events happen over time.
+        self.barrage_probability = config.barrage_probability
+        self.jackpot_probability = config.jackpot_probability
+
         self.locked = False
         self.is_jackpot = False
         self.barrage_count = 0
@@ -96,6 +101,15 @@ class RuntimeState:
     def set_binaural(self, value: float):
         with self._lock:
             self.binaural_knob = max(0.0, min(1.0, value))
+
+    def set_intensity(self, barrage_probability: float, jackpot_probability: float):
+        with self._lock:
+            self.barrage_probability = max(0.0, min(1.0, barrage_probability))
+            self.jackpot_probability = max(0.0, min(1.0, jackpot_probability))
+
+    def event_probabilities(self):
+        with self._lock:
+            return self.barrage_probability, self.jackpot_probability
 
     # -- skip/lock flags (set from the web thread, consumed by the control loop) --
     def request_skip(self):

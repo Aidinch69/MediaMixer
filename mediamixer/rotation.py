@@ -114,6 +114,7 @@ class RotationEngine:
 
     def _roll_event(self, barrage: int, pace_idx: int):
         cfg = self._config
+        barrage_probability, jackpot_probability = self._state.event_probabilities()
         is_jackpot = False
 
         if barrage > 0:
@@ -124,11 +125,11 @@ class RotationEngine:
                 expires_in = cfg.jackpot_hold_seconds
             return is_jackpot, expires_in, barrage
 
-        if random.random() < cfg.barrage_probability:
+        if random.random() < barrage_probability:
             barrage = random.randint(cfg.barrage_min, cfg.barrage_max)
             return False, cfg.barrage_clip_seconds[0], barrage
 
-        is_jackpot = random.random() < cfg.jackpot_probability
+        is_jackpot = random.random() < jackpot_probability
         lo, hi, _label = cfg.pace_presets[pace_idx]
         return is_jackpot, random.randint(lo, hi), barrage
 
