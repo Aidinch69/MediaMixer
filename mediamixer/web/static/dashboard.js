@@ -281,9 +281,25 @@ function reconcileFxSpriteCount() {
 }
 
 function spawnFxSprite(slot, delayMs) {
-  const sprite = { slot, el: null, timer: null, state: 'pending' };
+  const sprite = { slot, el: null, timer: null, state: 'pending', currentPath: null };
   fxSprites[slot] = sprite;
   sprite.timer = setTimeout(() => activateFxSprite(sprite), delayMs);
+}
+
+function pickFxItem(items, sprite) {
+  // Avoid picking something another currently-visible (or still-fading-out)
+  // sprite is already showing, so two floaters don't end up playing the
+  // same clip at once. Falls back to the full list if exclusion would
+  // otherwise leave nothing to pick from.
+  const exclude = new Set();
+  fxSprites.forEach(s => {
+    if (s && s !== sprite && (s.state === 'visible' || s.state === 'fading') && s.currentPath) {
+      exclude.add(s.currentPath);
+    }
+  });
+  const filtered = items.filter(it => !exclude.has(it.base + it.path));
+  const pool = filtered.length ? filtered : items;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function activateFxSprite(sprite) {
@@ -295,7 +311,8 @@ function activateFxSprite(sprite) {
       return;
     }
 
-    const item = items[Math.floor(Math.random() * items.length)];
+    const item = pickFxItem(items, sprite);
+    sprite.currentPath = item.base + item.path;
     const layer = document.getElementById('fx-layer');
     let el = sprite.el;
     if (!el) {
