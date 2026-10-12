@@ -20,8 +20,150 @@ function mediaOrigin(screenIndex) {
 }
 
 let currentLayout = null;
+let currentColumns = 1;
+let currentTileCount = 0;
 let currentPaths = [];
 let preloadEnabled = true;
+let tileElements = [];
+
+// ---- Mosaic Fit (experimental) ----
+// Instead of a uniform grid, size each tile by its clip's own aspect ratio -
+// pack tiles into justified rows (same idea as a Flickr/Google-Photos photo
+// wall) so there's much less black-bar letterboxing. Aspect ratios only
+// become known once a clip's metadata loads, and clips rotate on their own
+// independent schedules, so reflowing on every single change would make
+// neighboring tiles constantly resize around each other; instead this
+// reflows periodically (MOSAIC_REFLOW_INTERVAL_MS) plus a few explicit
+// triggers (toggling on, tile count changing, window resize, and once
+// shortly after a tile's *first* real aspect ratio arrives).
+const MOSAIC_REFLOW_INTERVAL_MS = 8000;
+const DEFAULT_ASPECT = 16 / 9;
+let mosaicEnabled = false;
+let aspectRatios = [];
+let aspectKnown = [];
+let mosaicSettleTimer = null;
+
+function loadMosaicPref() {
+  try { mosaicEnabled = localStorage.getItem('mm_mosaic_enabled') === '1'; } catch (e) {}
+  const btn = document.getElementById('mosaic-toggle');
+  btn.innerText = mosaicEnabled ? 'ON' : 'OFF';
+  btn.classList.toggle('active', mosaicEnabled);
+}
+
+function toggleMosaic() {
+  mosaicEnabled = !mosaicEnabled;
+  try { localStorage.setItem('mm_mosaic_enabled', mosaicEnabled ? '1' : '0'); } catch (e) {}
+  const btn = document.getElementById('mosaic-toggle');
+  btn.innerText = mosaicEnabled ? 'ON' : 'OFF';
+  btn.classList.toggle('active', mosaicEnabled);
+  applyLayoutMode();
+}
+
+function onAspectKnown(i) {
+  const vid = tileElements[i] && tileElements[i].querySelector('#screen-' + i);
+  if (!vid || !vid.videoWidth || !vid.videoHeight) return;
+  const isFirstReal = !aspectKnown[i];
+  aspectKnown[i] = true;
+  aspectRatios[i] = vid.videoWidth / vid.videoHeight;
+  if (mosaicEnabled && isFirstReal) {
+    // Several tiles often get their first real aspect ratio within
+    // milliseconds of each other (e.g. right after a layout switch) -
+    // settle once, shortly after the last one arrives, not once per tile.
+    clearTimeout(mosaicSettleTimer);
+    mosaicSettleTimer = setTimeout(() => { if (mosaicEnabled) layoutMosaic(); }, 200);
+  }
+}
+
+function splitEvenly(n, rows) {
+  const base = Math.floor(n / rows);
+  const extra = n % rows;
+  const sizes = [];
+  for (let r = 0; r < rows; r++) sizes.push(base + (r < extra ? 1 : 0));
+  return sizes;
+}
+
+function computeMosaicRows(aspects, containerWidth, containerHeight) {
+  const n = aspects.length;
+  if (n === 0 || containerWidth < 1 || containerHeight < 1) return [];
+
+  let best = null;
+  for (let rows = 1; rows <= n; rows++) {
+    const sizes = splitEvenly(n, rows);
+    if (sizes.some(s => s === 0)) continue;
+
+    let idx = 0;
+    const groups = sizes.map(size => aspects.slice(idx, (idx += size)));
+    const rowNaturalHeights = groups.map(g => containerWidth / g.reduce((a, b) => a + b, 0));
+    const totalNaturalHeight = rowNaturalHeights.reduce((a, b) => a + b, 0);
+    const diff = Math.abs(totalNaturalHeight - containerHeight);
+    if (!best || diff < best.diff) best = { groups, rowNaturalHeights, totalNaturalHeight, diff };
+  }
+  if (!best) return [];
+
+  // Scale row heights so they sum to exactly containerHeight (no leftover
+  // vertical gap, no overflow). Width shares are computed independently,
+  // as each item's fraction of its row's total aspect ratio - that ALWAYS
+  // sums to exactly 100%, regardless of how far the height scale ends up
+  // from 1. The cost is that a cell's forced aspect may no longer exactly
+  // match its video's native aspect when the scale is far from 1; cover is
+  // applied in CSS so that shows up as a touch more cropping, never as a
+  // black bar or overflow.
+  const scale = containerHeight / best.totalNaturalHeight;
+  let index = 0;
+  return best.groups.map((group, gi) => {
+    const rowHeight = best.rowNaturalHeights[gi] * scale;
+    const aspectSum = group.reduce((a, b) => a + b, 0);
+    const items = group.map(aspect => ({
+      screenIndex: index++,
+      widthPct: (aspect / aspectSum) * 100,
+    }));
+    return { heightPx: rowHeight, items };
+  });
+}
+
+function layoutMosaic() {
+  const grid = document.getElementById('screen-grid');
+  const rect = grid.getBoundingClientRect();
+  if (rect.width < 10 || rect.height < 10 || tileElements.length === 0) return;
+
+  grid.className = 'screen-grid mosaic';
+  grid.style.gridTemplateColumns = '';
+  grid.style.gridTemplateRows = '';
+
+  const rows = computeMosaicRows(aspectRatios.slice(0, tileElements.length), rect.width, rect.height);
+  grid.innerHTML = '';
+  rows.forEach(row => {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'mosaic-row';
+    rowEl.style.height = row.heightPx + 'px';
+    row.items.forEach(item => {
+      const tile = tileElements[item.screenIndex];
+      if (!tile) return;
+      tile.style.flexBasis = item.widthPct + '%';
+      tile.style.width = item.widthPct + '%';
+      rowEl.appendChild(tile); // re-parents the existing tile (and its <video>) without reloading it
+    });
+    grid.appendChild(rowEl);
+  });
+}
+
+function applyUniformGrid() {
+  const grid = document.getElementById('screen-grid');
+  grid.className = 'screen-grid';
+  grid.style.gridTemplateColumns = 'repeat(' + currentColumns + ', 1fr)';
+  grid.style.gridTemplateRows = 'repeat(' + Math.ceil(currentTileCount / currentColumns) + ', 1fr)';
+  grid.innerHTML = '';
+  tileElements.forEach(tile => {
+    tile.style.flexBasis = '';
+    tile.style.width = '';
+    grid.appendChild(tile);
+  });
+}
+
+function applyLayoutMode() {
+  if (mosaicEnabled) layoutMosaic();
+  else applyUniformGrid();
+}
 
 // ---- Client-side audio engine ----
 // The binaural tone (Web Audio) and the overlay track (<audio>) both play
@@ -194,14 +336,13 @@ function setConnected(ok) {
   document.getElementById('conn-label').innerText = ok ? 'Connected' : 'Reconnecting…';
 }
 
-function ensureGrid(layout, count, columns) {
-  const grid = document.getElementById('screen-grid');
-  if (currentLayout === layout && grid.children.length === count) return;
-  currentLayout = layout;
+function ensureTiles(count) {
+  if (currentTileCount === count) return false;
+  currentTileCount = count;
   currentPaths = new Array(count).fill('');
-  grid.style.gridTemplateColumns = 'repeat(' + columns + ', 1fr)';
-  grid.style.gridTemplateRows = 'repeat(' + Math.ceil(count / columns) + ', 1fr)';
-  grid.innerHTML = '';
+  aspectRatios = new Array(count).fill(DEFAULT_ASPECT);
+  aspectKnown = new Array(count).fill(false);
+  tileElements = [];
   for (let i = 0; i < count; i++) {
     const tile = document.createElement('div');
     tile.className = 'tile';
@@ -214,9 +355,12 @@ function ensureGrid(layout, count, columns) {
       '<button class="up thumb" onclick="rateScreen(' + i + ',\'up\')">👍</button>' +
       '<button class="down thumb" onclick="rateScreen(' + i + ',\'down\')">👎</button>' +
       '</div></div>';
-    grid.appendChild(tile);
-    tile.querySelector('#screen-' + i).addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
+    const vid = tile.querySelector('#screen-' + i);
+    vid.addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
+    vid.addEventListener('loadedmetadata', () => onAspectKnown(i));
+    tileElements.push(tile);
   }
+  return true;
 }
 
 function applyRandomStart(vid) {
@@ -232,7 +376,11 @@ function applyRandomStart(vid) {
 
 function render(d) {
   if (!d.screens || !d.screens.length) return;
-  ensureGrid(d.layout, d.screens.length, d.columns);
+  const tilesRebuilt = ensureTiles(d.screens.length);
+  const columnsChanged = d.columns !== currentColumns;
+  currentLayout = d.layout;
+  currentColumns = d.columns;
+  if (tilesRebuilt || columnsChanged) applyLayoutMode();
 
   scrambleText(document.getElementById('t-audio'), d.audio_name);
   document.getElementById('t-lock').innerText = d.lock_label;
@@ -255,7 +403,7 @@ function render(d) {
 
   if (d.barrage > 0) uiGlitch();
 
-  document.querySelectorAll('.badge').forEach(b => { if (b.id !== 'preload-toggle') b.classList.remove('active'); });
+  document.querySelectorAll('.badge').forEach(b => { if (b.id !== 'preload-toggle' && b.id !== 'mosaic-toggle') b.classList.remove('active'); });
   const activeFolder = document.getElementById('folder-' + d.folder);
   if (activeFolder) activeFolder.classList.add('active');
   const activeLayout = document.getElementById('layout-' + d.layout);
@@ -314,8 +462,12 @@ function rateScreen(i, dir) { fetch('/api/rate?screen=' + i + '&dir=' + dir).the
 function rateAudio(d) { fetch('/api/rate_audio?dir=' + d).then(() => toast(d === 'up' ? '🔊 Audio rated up' : '🔇 Audio penalized', d !== 'up')); }
 function nextAudio() { fetch('/api/next_audio').then(() => toast('⏭️ Audio Skipped')); }
 
+window.addEventListener('resize', () => { if (mosaicEnabled) layoutMosaic(); });
+setInterval(() => { if (mosaicEnabled) layoutMosaic(); }, MOSAIC_REFLOW_INTERVAL_MS);
+
 window.onload = () => {
   restorePanelState();
+  loadMosaicPref();
   overlayEl = document.getElementById('overlay-audio');
   loadVolumePrefs();
   armAutoUnlock();

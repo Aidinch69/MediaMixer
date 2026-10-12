@@ -51,6 +51,11 @@
     <label>Preload Next Clip</label>
     <button class="badge{{ ' active' if preload_enabled else '' }}" id="preload-toggle" onclick="togglePreload()">{{ 'ON' if preload_enabled else 'OFF' }}</button>
   </div>
+  <div class="slider">
+    <label>Mosaic Fit (Experimental)</label>
+    <button class="badge" id="mosaic-toggle" onclick="toggleMosaic()">OFF</button>
+  </div>
+  <p class="hint">Sizes tiles by each clip's own aspect ratio to cut down on black bars, instead of a uniform grid. Reflows every few seconds, not on every clip change, to stay calm.</p>
   <h3>📂 Categories</h3>
   <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(110px,1fr))">
     {% for f in folders %}<div class="badge" id="folder-{{ f }}" onclick="cat('{{ f }}')">{{ f }}</div>{% endfor %}
