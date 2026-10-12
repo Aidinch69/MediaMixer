@@ -1,6 +1,24 @@
 const RANDOM_START_MAX_FRACTION = 0.5; // clips start somewhere in their first 0-50%
 const BINAURAL_BASE_GAIN = 0.15;
 
+// Browsers cap concurrent connections to ~6 per origin (HTTP/1.1). A big grid
+// can easily want 2x its tile count in flight at once (visible + preloaded
+// clip per tile), so beyond a few tiles, most requests just queue - which
+// looks like stalling even though neither the network nor the PC is actually
+// busy. When this page itself was loaded via a loopback address (i.e. this
+// is the PC's own browser, not a phone on the LAN), we can route different
+// tiles' media requests through different 127.0.0.x addresses - Windows
+// treats the whole 127.0.0.0/8 block as loopback, and the browser treats
+// each distinct host as a separate origin with its own 6-connection budget.
+const LOOPBACK_SHARDS = 6;
+const IS_LOOPBACK_VIEW = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+
+function mediaOrigin(screenIndex) {
+  if (!IS_LOOPBACK_VIEW) return ''; // phone/LAN viewers: just use this page's own origin
+  const shard = (screenIndex % LOOPBACK_SHARDS) + 1;
+  return `${location.protocol}//127.0.0.${shard}:${location.port}`;
+}
+
 let currentLayout = null;
 let currentPaths = [];
 let preloadEnabled = true;
@@ -248,7 +266,7 @@ function render(d) {
     if (!vid) return;
     if (s.path && s.path !== currentPaths[i]) {
       currentPaths[i] = s.path;
-      vid.src = '/media/' + s.path;
+      vid.src = mediaOrigin(i) + '/media/' + s.path;
       applyRandomStart(vid);
     }
     const label = document.getElementById('label-' + i);
@@ -256,7 +274,10 @@ function render(d) {
 
     if (preloadEnabled && s.next_path) {
       const pre = document.getElementById('preload-' + i);
-      const nextUrl = '/media/' + s.next_path;
+      // Shift the preload's shard off the main video's so a tile's own two
+      // requests (current + preloading-next) don't compete for the same
+      // origin's connection budget either.
+      const nextUrl = mediaOrigin(i + 3) + '/media/' + s.next_path;
       if (pre && pre.getAttribute('src') !== nextUrl) pre.src = nextUrl;
     }
 
