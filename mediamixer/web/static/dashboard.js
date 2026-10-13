@@ -25,6 +25,12 @@ let currentTileCount = 0;
 let currentPaths = [];
 let preloadEnabled = true;
 let tileElements = [];
+// Dedicated glow overlay divs, one per tile, cached alongside tileElements.
+// All FX opacity/animation lives on these instead of box-shadow/filter on
+// the tile or video itself, so effects never force a video repaint.
+let tileGlowEls = [];
+let tileAmbientEls = [];
+let lastFilterStr = [];
 
 // ---- Mosaic Fit (experimental) ----
 // Instead of a uniform grid, size each tile by its clip's own aspect ratio -
@@ -795,7 +801,7 @@ function runAnticipationBuildUp(durationS, isReal) {
   anticipationActive = true;
   const runId = ++anticipationRunId;
   const theater = document.getElementById('theater-box');
-  theater.style.transition = 'none';
+  const theaterGlow = document.getElementById('theater-glow');
   teaseNextTheme(theater);
   // Variable build-up length: the shape of the tension, not just whether
   // it resolves, is part of the uncertainty. Purely a visual/audio pacing
@@ -804,7 +810,6 @@ function runAnticipationBuildUp(durationS, isReal) {
   const variedDuration = durationS * (0.7 + Math.random() * 0.9);
   playRiserSound(variedDuration);
   const start = performance.now();
-  const glowRgb = currentThemeRgb('--theme-glow', '255,70,30');
   const weightedTiles = isReal ? pickWeightedTiles() : [];
 
   function tick() {
@@ -813,20 +818,22 @@ function runAnticipationBuildUp(durationS, isReal) {
     const progress = Math.min(1, elapsed / variedDuration);
     const intensity = progress * progress; // ease-in: stays subtle, then ramps hard near the end
     const freq = 2 + intensity * 10;
-    const glow = 10 + intensity * 55;
     const pulse = 0.5 + 0.5 * Math.sin(elapsed * freq);
-    theater.style.boxShadow = `0 0 ${(glow * pulse).toFixed(1)}px rgba(${glowRgb},${(0.25 + intensity * 0.55).toFixed(2)})`;
+    // Glow is driven entirely through opacity on dedicated overlay divs
+    // (never box-shadow/filter on the theater or tile/video elements
+    // themselves) so this per-frame loop only ever touches a
+    // compositor-only property - it doesn't force paint and so doesn't
+    // compete with video decode, no matter how many tiles are on screen.
+    if (theaterGlow) theaterGlow.style.opacity = Math.min(1, (0.15 + intensity * 0.65) * (0.6 + 0.4 * pulse)).toFixed(2);
     // Smooth, slow-sine glow on every tile (not a flicker/strobe - frequency
     // here tops out around 7Hz and the transition is a continuous sine, well
     // outside the 3-30Hz flash range that can trigger photosensitive seizures)
     // so the eye is drawn to the grid without any rapid on/off flashing.
-    const tileGlowPx = (6 + intensity * 20) * pulse;
-    const tileGlowAlpha = 0.15 + intensity * 0.5;
-    tileElements.forEach((t, idx) => {
+    const tileGlowAlpha = (0.15 + intensity * 0.5) * (0.65 + 0.35 * pulse);
+    tileGlowEls.forEach((el, idx) => {
+      if (!el) return;
       const weightedFade = weightedTiles.includes(idx) ? (1 - intensity) : 0;
-      const px = tileGlowPx + weightedFade * 16;
-      const alpha = Math.min(0.95, tileGlowAlpha + weightedFade * 0.25);
-      t.style.boxShadow = `0 0 ${px.toFixed(1)}px rgba(${glowRgb},${alpha.toFixed(2)})`;
+      el.style.opacity = Math.min(1, tileGlowAlpha + weightedFade * 0.4).toFixed(2);
     });
     if (progress < 1) {
       requestAnimationFrame(tick);
@@ -842,20 +849,20 @@ function runAnticipationBuildUp(durationS, isReal) {
 }
 
 function clearTileGlow() {
-  tileElements.forEach(t => { t.style.boxShadow = ''; });
+  tileGlowEls.forEach(el => { if (el) el.style.opacity = '0'; });
 }
 
 function fizzleAnticipation(runId) {
   if (runId !== anticipationRunId || !anticipationActive) return;
   const theater = document.getElementById('theater-box');
-  theater.style.transition = 'box-shadow 0.6s ease';
-  theater.style.boxShadow = 'none';
+  const theaterGlow = document.getElementById('theater-glow');
+  if (theaterGlow) { theaterGlow.style.transition = 'opacity 0.6s ease'; theaterGlow.style.opacity = '0'; }
   clearTileGlow();
   theater.classList.add('glitch');
   playFizzleSound();
   setTimeout(() => {
     theater.classList.remove('glitch');
-    theater.style.transition = '';
+    if (theaterGlow) theaterGlow.style.transition = '';
     anticipationActive = false;
   }, 650);
 }
@@ -901,11 +908,6 @@ function applyColorTheme(idx) {
 function rotateColorTheme() {
   colorThemeIndex++;
   applyColorTheme(colorThemeIndex);
-}
-
-function currentThemeRgb(cssVar, fallback) {
-  const val = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
-  return val || fallback;
 }
 
 // Flash-forward teaser: a sub-second glimpse of the *next* theme in the
@@ -957,8 +959,8 @@ function tickDueAura() {
       mostIdleTile = i;
     }
   });
-  tileElements.forEach((tile, i) => {
-    if (tile) tile.classList.toggle('due-aura', i === mostIdleTile);
+  tileAmbientEls.forEach((el, i) => {
+    if (el) el.classList.toggle('due-aura', i === mostIdleTile);
   });
 }
 
@@ -1295,16 +1297,16 @@ function runPayoff(chainDepth) {
 
 function applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk, chainDepth, willChain) {
   const theater = document.getElementById('theater-box');
+  const theaterGlow = document.getElementById('theater-glow');
   theater.style.setProperty('--flash-opacity', Math.min(0.9, 0.6 * tier.flash).toFixed(2));
   theater.style.setProperty('--flash-duration', (0.65 * Math.min(1.3, tier.flash)).toFixed(2) + 's');
-  theater.style.transition = 'box-shadow 0.5s ease';
-  theater.style.boxShadow = 'none';
+  if (theaterGlow) { theaterGlow.style.transition = 'opacity 0.5s ease'; theaterGlow.style.opacity = '0'; }
   theater.classList.add('payoff-flash');
   if (tier.shake) {
     theater.classList.add('shake-mega');
     setTimeout(() => theater.classList.remove('shake-mega'), 450);
   }
-  setTimeout(() => { theater.classList.remove('payoff-flash'); theater.style.transition = ''; }, 650);
+  setTimeout(() => { theater.classList.remove('payoff-flash'); if (theaterGlow) theaterGlow.style.transition = ''; }, 650);
 
   // Afterglow: a slow-fading warm wash instead of snapping straight back to
   // normal, so the peak lingers a little rather than cutting off instantly.
@@ -1695,6 +1697,9 @@ function ensureTiles(count) {
   aspectRatios = new Array(count).fill(DEFAULT_ASPECT);
   aspectKnown = new Array(count).fill(false);
   tileElements = [];
+  tileGlowEls = [];
+  tileAmbientEls = [];
+  lastFilterStr = new Array(count).fill('');
   clearTimeout(bonusWindowTimer);
   bonusWindowTileIndex = -1; // old tile references are about to be discarded
   for (let i = 0; i < count; i++) {
@@ -1703,6 +1708,8 @@ function ensureTiles(count) {
     tile.innerHTML =
       '<video id="screen-' + i + '" autoplay controls></video>' +
       '<video id="preload-' + i + '" class="preload" preload="auto" muted></video>' +
+      '<div class="tile-glow-fx"></div>' +
+      '<div class="tile-ambient-fx"></div>' +
       '<div class="tile-overlay">' +
       '<div class="src-label" id="label-' + i + '"></div>' +
       '<div class="tile-actions">' +
@@ -1713,6 +1720,8 @@ function ensureTiles(count) {
     vid.addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
     vid.addEventListener('loadedmetadata', () => onAspectKnown(i));
     tileElements.push(tile);
+    tileGlowEls.push(tile.querySelector('.tile-glow-fx'));
+    tileAmbientEls.push(tile.querySelector('.tile-ambient-fx'));
   }
   return true;
 }
@@ -1791,7 +1800,14 @@ function render(d) {
     vid.playbackRate = s.speed;
     const sat = Math.floor((s.tension - 1.0) * 60 + 100);
     const cont = Math.floor((s.tension - 1.0) * 40 + 100);
-    vid.style.filter = `saturate(${sat}%) contrast(${cont}%)`;
+    const filterStr = `saturate(${sat}%) contrast(${cont}%)`;
+    // The status stream pushes several times a second; tension often comes
+    // back unchanged between polls, so skip the write (and the repaint it'd
+    // force on a <video>) unless the computed filter actually moved.
+    if (filterStr !== lastFilterStr[i]) {
+      lastFilterStr[i] = filterStr;
+      vid.style.filter = filterStr;
+    }
   });
 }
 
@@ -1849,15 +1865,15 @@ function maybeTriggerBonusWindow() {
     const idx = Math.floor(Math.random() * tileElements.length);
     bonusWindowTileIndex = idx;
     bonusWindowExpireAt = Date.now() + BONUS_WINDOW_DURATION_MS;
-    const tile = tileElements[idx];
-    if (tile) tile.classList.add('bonus-window');
+    const el = tileAmbientEls[idx];
+    if (el) el.classList.add('bonus-window');
     bonusWindowTimer = setTimeout(() => clearBonusWindow(idx), BONUS_WINDOW_DURATION_MS);
   }
 }
 
 function clearBonusWindow(idx) {
-  const tile = tileElements[idx];
-  if (tile) tile.classList.remove('bonus-window');
+  const el = tileAmbientEls[idx];
+  if (el) el.classList.remove('bonus-window');
   if (bonusWindowTileIndex === idx) bonusWindowTileIndex = -1;
   clearTimeout(bonusWindowTimer);
 }

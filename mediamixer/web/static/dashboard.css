@@ -22,10 +22,18 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 #tier-reveal.tier-small{color:#d6a3ff}
 #tier-reveal.tier-medium{color:#ffa94d}
 #tier-reveal.tier-mega,#tier-reveal.tier-milestone{color:#ffd43b;font-size:2.9rem}
-.tile.bonus-window{animation:bonus-pulse 1s ease-in-out infinite}
-@keyframes bonus-pulse{0%{box-shadow:0 0 10px rgba(255,212,59,.5) inset,0 0 10px rgba(255,212,59,.5)}50%{box-shadow:0 0 22px rgba(255,212,59,.9) inset,0 0 22px rgba(255,212,59,.9)}100%{box-shadow:0 0 10px rgba(255,212,59,.5) inset,0 0 10px rgba(255,212,59,.5)}}
-.tile.due-aura{animation:due-pulse 3s ease-in-out infinite}
-@keyframes due-pulse{0%,100%{box-shadow:0 0 6px rgba(120,120,255,.25) inset}50%{box-shadow:0 0 18px rgba(120,120,255,.55) inset}}
+/* All jackpot/ambient tile glow lives on these dedicated overlay divs via
+   opacity only (never box-shadow/filter on the tile or video), so effects
+   never force a repaint of the video underneath - opacity/transform are
+   compositor-only and don't compete with video decode no matter how many
+   tiles or simultaneous effects are on screen. */
+#theater-glow{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;will-change:opacity;background:radial-gradient(ellipse at center,rgba(var(--theme-glow,255,70,30),.6),rgba(var(--theme-glow,255,70,30),0) 70%)}
+.tile-glow-fx{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;will-change:opacity;background:radial-gradient(ellipse at center,rgba(var(--theme-glow,255,70,30),.75),rgba(var(--theme-glow,255,70,30),0) 70%)}
+.tile-ambient-fx{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;will-change:opacity}
+.tile-ambient-fx.bonus-window{opacity:1;background:radial-gradient(circle,rgba(255,212,59,.7),rgba(255,212,59,0) 70%);animation:bonus-pulse-opacity 1s ease-in-out infinite}
+@keyframes bonus-pulse-opacity{0%,100%{opacity:.45}50%{opacity:.9}}
+.tile-ambient-fx.due-aura{opacity:1;background:radial-gradient(circle,rgba(120,120,255,.6),rgba(120,120,255,0) 70%);animation:due-pulse-opacity 3s ease-in-out infinite}
+@keyframes due-pulse-opacity{0%,100%{opacity:.3}50%{opacity:.7}}
 .tile.mystery-tile video{filter:blur(14px)}
 .tile.mystery-reveal video{transition:filter .3s ease}
 .mystery-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:2.4rem;font-weight:bold;color:#fff;text-shadow:0 0 12px #000;pointer-events:none;z-index:2}
@@ -43,7 +51,7 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .tile video{width:100%;height:100%;object-fit:contain;transition:filter .3s ease}
 .screen-grid.mosaic .tile video{object-fit:cover}
 .preload{display:none}
-.tile-overlay{position:absolute;top:0;left:0;right:0;display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:6px;opacity:0;transition:opacity .15s;pointer-events:none}
+.tile-overlay{position:absolute;top:0;left:0;right:0;z-index:2;display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:6px;opacity:0;transition:opacity .15s;pointer-events:none}
 .tile:hover .tile-overlay{opacity:1}
 .tile-overlay>*{pointer-events:auto}
 .src-label{font-size:11px;font-family:monospace;color:#fff;background:rgba(0,0,0,.6);padding:2px 6px;border-radius:4px;max-width:92%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
