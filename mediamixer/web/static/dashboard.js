@@ -10,7 +10,13 @@ const BINAURAL_BASE_GAIN = 0.15;
 // tiles' media requests through different 127.0.0.x addresses - Windows
 // treats the whole 127.0.0.0/8 block as loopback, and the browser treats
 // each distinct host as a separate origin with its own 6-connection budget.
-const LOOPBACK_SHARDS = 6;
+// 6 shards x Chrome's 6-connections-per-origin limit = a 36-connection
+// ceiling. A 5x5 grid needs 25 main-video streams, and with preload
+// (below) doubles to 50 - comfortably over 36, so requests queue waiting
+// for a free connection, which shows up as stalled/non-playing video.
+// 16 shards x 6 = 96, enough headroom for the largest grid plus preload
+// plus everything else (audio, SSE) sharing the budget.
+const LOOPBACK_SHARDS = 16;
 const IS_LOOPBACK_VIEW = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 
 function mediaOrigin(screenIndex) {
@@ -24,6 +30,7 @@ let currentColumns = 1;
 let currentTileCount = 0;
 let currentPaths = [];
 let preloadEnabled = true;
+const PRELOAD_MAX_TILES = 9; // dual/2x2/2x3/3x3 keep deterministic preload; 4x4/5x5 skip it
 let tileElements = [];
 // Dedicated glow overlay divs, one per tile, cached alongside tileElements.
 // All FX opacity/animation lives on these instead of box-shadow/filter on
@@ -1788,7 +1795,15 @@ function render(d) {
     const label = document.getElementById('label-' + i);
     if (label) label.innerText = s.name || '';
 
-    if (preloadEnabled && s.next_path) {
+    // Preload doubles the number of simultaneous <video> elements (one
+    // playing + one buffering per tile), and decode/network load scales
+    // with that total count, not just connection slots. On big grids
+    // (4x4/5x5) that doubling is the difference between comfortably
+    // within the machine's decode budget and well past it, so skip the
+    // dedicated preload buffer there - rotations may hitch slightly
+    // instead of being seamless, trading that for everything actually
+    // staying playable.
+    if (preloadEnabled && s.next_path && currentTileCount <= PRELOAD_MAX_TILES) {
       const pre = document.getElementById('preload-' + i);
       // Shift the preload's shard off the main video's so a tile's own two
       // requests (current + preloading-next) don't compete for the same
