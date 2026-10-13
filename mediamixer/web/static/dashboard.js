@@ -1462,16 +1462,28 @@ function tickSurgeBadge() {
 }
 
 function oddsMultiplier() {
-  return engagementMultiplier()
+  // These stack multiplicatively and can combine into a huge number (up to
+  // ~30x at the extreme), which was pushing fake-near-miss/bonus-window
+  // odds past 100% per check - firing the expensive per-tile glow loop on
+  // almost every 15s tick instead of occasionally, which showed up as
+  // frequent playback lag. Capped so the boosts still stack and feel
+  // noticeable without letting the triggers run back-to-back.
+  const raw = engagementMultiplier()
     * (isGoldenHourActive() ? GOLDEN_HOUR_MULTIPLIER : 1)
     * (isSurgeActive() ? SURGE_MULTIPLIER : 1)
     * comboMultiplier();
+  return Math.min(3, raw);
 }
+
+const NEAR_MISS_COOLDOWN_MS = 20000;
+let lastNearMissAt = 0;
 
 function maybeTriggerFakeNearMiss() {
   if (!anticipationFxEnabled || !nearMissEnabled || anticipationActive) return;
   if (lastKnownBarrage > 0 || lastKnownJackpot) return; // don't step on a real one
+  if (Date.now() - lastNearMissAt < NEAR_MISS_COOLDOWN_MS) return; // even at max odds, leave breathing room
   if (Math.random() < FAKE_NEAR_MISS_PROBABILITY * oddsMultiplier()) {
+    lastNearMissAt = Date.now();
     runAnticipationBuildUp(FAKE_NEAR_MISS_BUILD_S, false);
   }
 }
