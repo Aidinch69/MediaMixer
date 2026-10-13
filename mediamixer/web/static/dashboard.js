@@ -761,6 +761,7 @@ function runAnticipationBuildUp(durationS, isReal) {
   theater.style.transition = 'none';
   playRiserSound(durationS);
   const start = performance.now();
+  const glowRgb = currentThemeRgb('--theme-glow', '255,70,30');
 
   function tick() {
     if (runId !== anticipationRunId) return;
@@ -770,14 +771,14 @@ function runAnticipationBuildUp(durationS, isReal) {
     const freq = 2 + intensity * 10;
     const glow = 10 + intensity * 55;
     const pulse = 0.5 + 0.5 * Math.sin(elapsed * freq);
-    theater.style.boxShadow = `0 0 ${(glow * pulse).toFixed(1)}px rgba(255,70,30,${(0.25 + intensity * 0.55).toFixed(2)})`;
+    theater.style.boxShadow = `0 0 ${(glow * pulse).toFixed(1)}px rgba(${glowRgb},${(0.25 + intensity * 0.55).toFixed(2)})`;
     // Smooth, slow-sine glow on every tile (not a flicker/strobe - frequency
     // here tops out around 7Hz and the transition is a continuous sine, well
     // outside the 3-30Hz flash range that can trigger photosensitive seizures)
     // so the eye is drawn to the grid without any rapid on/off flashing.
     const tileGlowPx = (6 + intensity * 20) * pulse;
     const tileGlowAlpha = (0.15 + intensity * 0.5).toFixed(2);
-    tileElements.forEach(t => { t.style.boxShadow = `0 0 ${tileGlowPx.toFixed(1)}px rgba(255,130,40,${tileGlowAlpha})`; });
+    tileElements.forEach(t => { t.style.boxShadow = `0 0 ${tileGlowPx.toFixed(1)}px rgba(${glowRgb},${tileGlowAlpha})`; });
     if (progress < 1) {
       requestAnimationFrame(tick);
     } else if (!isReal) {
@@ -822,8 +823,93 @@ const JACKPOT_TIERS = [
 const MILESTONE_TIER = { name: 'milestone', flash: 2.2, chime: 1.5, burst: 3.5, bass: 2.0, shake: true };
 const MILESTONE_COUNTS = [5, 10, 25, 50, 100, 200, 500, 1000];
 const STREAK_RESET_MS = 180000; // 3 minutes without a jackpot resets the streak back to 0
+const STREAK_WARNING_S = 30; // show the "at risk" countdown in the last 30s before that reset
 const TIER_REVEAL_DELAYS = [70, 70, 80, 90, 110, 140, 180, 230, 320]; // speeds up then settles, like a reel stopping
 const TIER_LABELS = { small: 'JACKPOT', medium: 'BIG JACKPOT', mega: 'MEGA JACKPOT', milestone: 'MILESTONE' };
+
+// Rotating color themes: each real jackpot shifts the palette for the next
+// build-up/payoff cycle. Partly "craft and variety" (keeps a long session
+// feeling fresh), partly functional - identical repeated stimuli habituate
+// the reward response, so novelty here also keeps the payoff itself from
+// going stale.
+const COLOR_THEMES = [
+  { glow: '255,70,30', flash: '255,220,120', after: '255,190,100' }, // ember
+  { glow: '190,60,255', flash: '220,160,255', after: '200,140,255' }, // violet
+  { glow: '40,220,130', flash: '160,255,200', after: '120,255,180' }, // emerald
+  { glow: '40,140,255', flash: '160,210,255', after: '120,190,255' }, // azure
+  { glow: '255,60,110', flash: '255,170,200', after: '255,150,190' }, // rose
+];
+let colorThemeIndex = 0;
+
+function applyColorTheme(idx) {
+  const theme = COLOR_THEMES[((idx % COLOR_THEMES.length) + COLOR_THEMES.length) % COLOR_THEMES.length];
+  const root = document.documentElement.style;
+  root.setProperty('--theme-glow', theme.glow);
+  root.setProperty('--theme-flash', theme.flash);
+  root.setProperty('--theme-after', theme.after);
+}
+
+function rotateColorTheme() {
+  colorThemeIndex++;
+  applyColorTheme(colorThemeIndex);
+}
+
+function currentThemeRgb(cssVar, fallback) {
+  const val = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
+  return val || fallback;
+}
+
+// Leveling/XP: a persistent long-horizon progress bar across sessions,
+// separate from any single jackpot - the point is a number that only ever
+// goes up, so coming back later always has somewhere to pick up from.
+const XP_STORAGE_KEY = 'mm_xp_state';
+const XP_PER_TIER = { small: 10, medium: 20, mega: 40, milestone: 60 };
+const XP_PER_BONUS_CLAIM = 15;
+let xpTotal = 0;
+let xpLevel = 1;
+
+function xpForLevel(level) {
+  // Gentle escalating curve: level N needs 100*N^1.4 cumulative XP.
+  return Math.round(100 * Math.pow(level, 1.4));
+}
+
+function loadXpState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(XP_STORAGE_KEY) || '{}');
+    xpTotal = Number(saved.xpTotal) || 0;
+  } catch (e) { xpTotal = 0; }
+  recomputeLevel();
+  updateLevelUi();
+}
+
+function saveXpState() {
+  try { localStorage.setItem(XP_STORAGE_KEY, JSON.stringify({ xpTotal })); } catch (e) {}
+}
+
+function recomputeLevel() {
+  let level = 1;
+  while (xpTotal >= xpForLevel(level)) level++;
+  xpLevel = level;
+}
+
+function updateLevelUi() {
+  const el = document.getElementById('level-readout');
+  if (!el) return;
+  const curFloor = xpLevel > 1 ? xpForLevel(xpLevel - 1) : 0;
+  const nextCeil = xpForLevel(xpLevel);
+  const pct = Math.min(100, Math.round(((xpTotal - curFloor) / (nextCeil - curFloor)) * 100));
+  el.innerText = 'LV ' + xpLevel + ' · ' + xpTotal + 'xp (' + pct + '% to ' + (xpLevel + 1) + ')';
+}
+
+function awardXp(amount) {
+  const beforeLevel = xpLevel;
+  xpTotal += amount;
+  recomputeLevel();
+  updateLevelUi();
+  saveXpState();
+  if (xpLevel > beforeLevel) toast('⭐ Level ' + xpLevel + '!');
+}
+
 let jackpotStreak = 0;
 let lastJackpotAt = 0;
 let totalJackpotCount = 0;
@@ -844,8 +930,23 @@ function registerJackpotStreak() {
   jackpotStreak++;
   lastJackpotAt = now;
   const el = document.getElementById('jackpot-streak');
-  if (el) el.innerText = jackpotStreak > 1 ? ('🔥 ' + jackpotStreak) : '';
+  if (el) { el.innerText = jackpotStreak > 1 ? ('🔥 ' + jackpotStreak) : ''; el.style.color = '#ffcc55'; }
   return jackpotStreak;
+}
+
+// Loss-aversion countdown: once a streak is close to expiring, say so and
+// count down, instead of it just silently resetting next time you check.
+function tickStreakWarning() {
+  const el = document.getElementById('jackpot-streak');
+  if (!el || jackpotStreak <= 1) return;
+  const remaining = (lastJackpotAt + STREAK_RESET_MS - Date.now()) / 1000;
+  if (remaining <= 0) {
+    jackpotStreak = 0;
+    el.innerText = '';
+  } else if (remaining <= STREAK_WARNING_S) {
+    el.innerText = '⚠️ Streak ' + jackpotStreak + ' resets in ' + Math.ceil(remaining) + 's!';
+    el.style.color = '#ff6b6b';
+  }
 }
 
 function registerMilestone() {
@@ -885,9 +986,11 @@ function runPayoff() {
   anticipationRunId++; // invalidate any in-flight build-up loop (real or fake)
   anticipationActive = false;
   clearTileGlow();
+  rotateColorTheme();
   const milestoneCount = registerMilestone();
   const tier = milestoneCount ? MILESTONE_TIER : pickJackpotTier();
   const streak = registerJackpotStreak();
+  awardXp((XP_PER_TIER[tier.name] || 10) * (milestoneCount ? 3 : 1));
   revealTier(tier, () => applyPayoffEffects(tier, streak, milestoneCount));
 }
 
@@ -932,10 +1035,63 @@ function handleAnticipationStatus(d) {
   lastKnownJackpot = d.jackpot;
 }
 
+// Adaptive personalization: the longer a session runs uninterrupted, the
+// more often near-misses/bonus windows fire - ramping 1x to 2x over the
+// first 30 minutes - instead of a flat rate regardless of how locked-in
+// the viewer already is.
+const ENGAGEMENT_RAMP_MS = 30 * 60 * 1000;
+const sessionStartedAt = Date.now();
+
+function engagementMultiplier() {
+  const elapsed = Date.now() - sessionStartedAt;
+  return 1 + Math.min(1, elapsed / ENGAGEMENT_RAMP_MS);
+}
+
+// Golden Hour: a randomized ~20-minute FOMO window, scheduled once per day
+// and persisted, during which near-miss/bonus-window odds get an extra
+// boost and a badge says so - there to reward happening to be present for
+// it, not to pull anyone in from outside (nothing here notifies off-app).
+const GOLDEN_HOUR_STORAGE_KEY = 'mm_golden_hour';
+const GOLDEN_HOUR_DURATION_MS = 20 * 60 * 1000;
+const GOLDEN_HOUR_MULTIPLIER = 2.5;
+let goldenHourStart = 0;
+
+function scheduleGoldenHour() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(GOLDEN_HOUR_STORAGE_KEY) || '{}');
+    const today = new Date().toDateString();
+    if (saved.day === today && saved.start) {
+      goldenHourStart = saved.start;
+      return;
+    }
+  } catch (e) {}
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  // Anywhere from now (if already past some of the day) through end of day.
+  const earliest = Math.max(now.getTime(), dayStart);
+  const latest = dayStart + 24 * 60 * 60 * 1000 - GOLDEN_HOUR_DURATION_MS;
+  goldenHourStart = latest > earliest ? (earliest + Math.random() * (latest - earliest)) : now.getTime();
+  try {
+    localStorage.setItem(GOLDEN_HOUR_STORAGE_KEY, JSON.stringify({ day: now.toDateString(), start: goldenHourStart }));
+  } catch (e) {}
+}
+
+function isGoldenHourActive() {
+  const now = Date.now();
+  return now >= goldenHourStart && now < goldenHourStart + GOLDEN_HOUR_DURATION_MS;
+}
+
+function tickGoldenHour() {
+  const badge = document.getElementById('golden-hour-badge');
+  if (!badge) return;
+  badge.classList.toggle('show', isGoldenHourActive());
+}
+
 function maybeTriggerFakeNearMiss() {
   if (!anticipationFxEnabled || !nearMissEnabled || anticipationActive) return;
   if (lastKnownBarrage > 0 || lastKnownJackpot) return; // don't step on a real one
-  if (Math.random() < FAKE_NEAR_MISS_PROBABILITY) {
+  const mult = engagementMultiplier() * (isGoldenHourActive() ? GOLDEN_HOUR_MULTIPLIER : 1);
+  if (Math.random() < FAKE_NEAR_MISS_PROBABILITY * mult) {
     runAnticipationBuildUp(FAKE_NEAR_MISS_BUILD_S, false);
   }
 }
@@ -1293,7 +1449,8 @@ let bonusWindowTimer = null;
 function maybeTriggerBonusWindow() {
   if (!anticipationFxEnabled) return;
   if (bonusWindowTileIndex >= 0 || !tileElements.length) return;
-  if (Math.random() < BONUS_WINDOW_PROBABILITY) {
+  const mult = engagementMultiplier() * (isGoldenHourActive() ? GOLDEN_HOUR_MULTIPLIER : 1);
+  if (Math.random() < BONUS_WINDOW_PROBABILITY * mult) {
     const idx = Math.floor(Math.random() * tileElements.length);
     bonusWindowTileIndex = idx;
     bonusWindowExpireAt = Date.now() + BONUS_WINDOW_DURATION_MS;
@@ -1313,6 +1470,7 @@ function clearBonusWindow(idx) {
 function triggerMiniPayoff() {
   playChimeSound(0.7);
   burstExtraFloaters(0.5);
+  awardXp(XP_PER_BONUS_CLAIM);
   toast('✨ Bonus!');
 }
 function rateAudio(d) { fetch('/api/rate_audio?dir=' + d).then(() => toast(d === 'up' ? '🔊 Audio rated up' : '🔇 Audio penalized', d !== 'up')); }
@@ -1323,6 +1481,8 @@ setInterval(() => { if (mosaicEnabled) layoutMosaic(); }, MOSAIC_REFLOW_INTERVAL
 setInterval(maybeTriggerFakeNearMiss, FAKE_NEAR_MISS_CHECK_MS);
 setInterval(maybeTriggerBonusWindow, BONUS_WINDOW_CHECK_MS);
 setInterval(tickSessionTimer, 1000);
+setInterval(tickStreakWarning, 1000);
+setInterval(tickGoldenHour, 5000);
 
 window.onload = () => {
   restorePanelState();
@@ -1331,6 +1491,9 @@ window.onload = () => {
   loadAnticipationPrefs();
   loadAutopilotPrefs();
   loadSessionTimerPref();
+  applyColorTheme(0);
+  loadXpState();
+  scheduleGoldenHour();
   overlayEl = document.getElementById('overlay-audio');
   loadVolumePrefs();
   armAutoUnlock();

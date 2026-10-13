@@ -11,11 +11,11 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .fx-sprite video{width:100%;height:100%;object-fit:cover;display:block}
 .theater.flare{box-shadow:0 0 40px #b84dff;border-color:#b84dff}
 .theater.glitch{animation:glitch-anim .2s 3}
-.theater.payoff-flash::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(255,220,120,var(--flash-opacity,.6)),rgba(255,180,60,0) 70%);animation:payoff-flash-anim var(--flash-duration,.65s) ease-out}
+.theater.payoff-flash::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(var(--theme-flash,255,220,120),var(--flash-opacity,.6)),rgba(var(--theme-flash,255,180,60),0) 70%);animation:payoff-flash-anim var(--flash-duration,.65s) ease-out}
 @keyframes payoff-flash-anim{0%{opacity:1}100%{opacity:0}}
 .theater.shake-mega{animation:shake-mega-anim .4s 1}
 @keyframes shake-mega-anim{0%{transform:translate(0,0)}15%{transform:translate(-6px,4px)}30%{transform:translate(6px,-4px)}45%{transform:translate(-5px,-5px)}60%{transform:translate(5px,5px)}75%{transform:translate(-3px,3px)}90%{transform:translate(3px,-3px)}100%{transform:translate(0,0)}}
-.theater.afterglow::before{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(255,190,100,.22),rgba(255,190,100,0) 75%);animation:afterglow-anim var(--afterglow-duration,12s) ease-out forwards}
+.theater.afterglow::before{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(var(--theme-after,255,190,100),.22),rgba(var(--theme-after,255,190,100),0) 75%);animation:afterglow-anim var(--afterglow-duration,12s) ease-out forwards}
 @keyframes afterglow-anim{0%{opacity:1}100%{opacity:0}}
 #tier-reveal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.8);z-index:20;font-weight:bold;font-size:2.4rem;letter-spacing:2px;text-transform:uppercase;text-shadow:0 0 20px currentColor;pointer-events:none;opacity:0;transition:opacity .15s,transform .15s;color:#ffd43b}
 #tier-reveal.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
@@ -71,3 +71,4 @@ button:hover{background:#251538;border-color:#b84dff;box-shadow:0 0 10px rgba(18
 .status-dot.down{background:#ff4d4d}
 .offline-badge{display:none;background:#3a0f14;border:1px solid #ff4d4d;color:#ff9a9a;padding:4px 8px;border-radius:6px;font-size:.68rem;font-weight:bold;text-transform:uppercase}
 .offline-badge.show{display:inline-block}
+.golden-hour-badge{background:#3a2a05;border-color:#ffcc00;color:#ffe066;animation:pulse 1.4s infinite}
