@@ -5,6 +5,7 @@ __pycache__/
 system_memory.db
 system_memory.db-shm
 system_memory.db-wal
+native_state.json
 
 # runtime logs
 engine_stdout.log

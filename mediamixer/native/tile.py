@@ -16,10 +16,13 @@ if os.path.isdir(_NATIVE_DEPS):
     os.environ["PATH"] = _NATIVE_DEPS + os.pathsep + os.environ["PATH"]
 
 import mpv  # noqa: E402
+from PySide6.QtCore import Signal  # noqa: E402
 from PySide6.QtWidgets import QWidget, QLabel, QPushButton  # noqa: E402
 
 
 class VideoTile(QWidget):
+    rated = Signal(int, str)  # (tile index, "up"/"down") - shell.py uses this for combo/XP bookkeeping
+
     def __init__(self, index: int, controls, parent=None):
         super().__init__(parent)
         self.index = index
@@ -31,20 +34,35 @@ class VideoTile(QWidget):
         self.setStyleSheet("background-color: black;")
 
         self.label = QLabel("", self)
-        self.label.setStyleSheet("color: white; background: rgba(0,0,0,150); font-size: 10px; padding: 2px;")
-        self.label.move(2, 2)
+        self.label.setStyleSheet(
+            "color: white; background: rgba(0,0,0,.6); font-size: 11px; font-family: monospace;"
+            "padding: 2px 6px; border-radius: 4px;"
+        )
+        self.label.move(4, 4)
 
         self.up_btn = QPushButton("\U0001F44D", self)
         self.down_btn = QPushButton("\U0001F44E", self)
+        self.up_btn.setStyleSheet(
+            "QPushButton { background-color: #1a0a29; border: 1px solid #3d1e4c; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #2a1040; border-color: #c866ff; }"
+        )
+        self.down_btn.setStyleSheet(
+            "QPushButton { background-color: #2d0a16; border: 1px solid #4c1e22; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #401020; border-color: #ff668c; }"
+        )
         for btn in (self.up_btn, self.down_btn):
-            btn.setFixedSize(24, 24)
-        self.up_btn.clicked.connect(lambda: self.controls.rate(self.index, "up"))
-        self.down_btn.clicked.connect(lambda: self.controls.rate(self.index, "down"))
+            btn.setFixedSize(26, 26)
+        self.up_btn.clicked.connect(lambda: self._on_rate("up"))
+        self.down_btn.clicked.connect(lambda: self._on_rate("down"))
+
+    def _on_rate(self, direction: str) -> None:
+        self.controls.rate(self.index, direction)
+        self.rated.emit(self.index, direction)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.down_btn.move(self.width() - 26, self.height() - 26)
-        self.up_btn.move(self.width() - 52, self.height() - 26)
+        self.down_btn.move(self.width() - 30, self.height() - 30)
+        self.up_btn.move(self.width() - 60, self.height() - 30)
 
     def ensure_player(self) -> None:
         if self._player is not None:
