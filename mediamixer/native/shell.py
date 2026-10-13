@@ -131,7 +131,7 @@ class MainShell(QMainWindow):
         self.surge_timer.start(int(SURGE_CHECK_S * 1000))
 
         self.mosaic_timer = QTimer(self)
-        self.mosaic_timer.timeout.connect(self._layout_tiles)
+        self.mosaic_timer.timeout.connect(self._tick_mosaic_reflow)
         self.mosaic_timer.start(MOSAIC_REFLOW_INTERVAL_MS)
 
         self.anticipation_meter_timer = QTimer(self)
@@ -213,6 +213,18 @@ class MainShell(QMainWindow):
         self.toast.raise_()
         self.push_luck_prompt.raise_()
 
+    def _tick_mosaic_reflow(self) -> None:
+        # Only mosaic mode actually needs periodic re-layout (aspect
+        # ratios become known progressively as each clip's metadata
+        # loads). Re-running this unconditionally every 4s was resizing
+        # every tile's native video window even when nothing had
+        # changed - a resize can reset a native window's OS-level
+        # stacking order, which both caused a visible all-at-once hiccup
+        # and could bury the global glow/flash overlays back underneath
+        # the tiles.
+        if self.mosaic_enabled:
+            self._layout_tiles()
+
     def _layout_tiles(self) -> None:
         central = self.centralWidget()
         width, height = central.width(), central.height()
@@ -226,6 +238,11 @@ class MainShell(QMainWindow):
             geometry = uniform_layout(len(self.tiles), self.current_columns or 1, width, height)
         for tile, geo in zip(self.tiles, geometry):
             tile.setGeometry(round(geo["x"]), round(geo["y"]), round(geo["width"]), round(geo["height"]))
+        # Defensive: a tile resize can reset its native window's stacking
+        # order, which can bury the global overlays (theater glow, payoff
+        # flash, toast, etc.) back underneath the video - re-assert them
+        # on top after every geometry pass, not just after a full rebuild.
+        self._raise_global_overlays()
 
     def set_mosaic_enabled(self, enabled: bool) -> None:
         self.mosaic_enabled = enabled

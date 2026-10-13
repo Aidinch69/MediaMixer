@@ -16,7 +16,7 @@ if os.path.isdir(_NATIVE_DEPS):
     os.environ["PATH"] = _NATIVE_DEPS + os.pathsep + os.environ["PATH"]
 
 import mpv  # noqa: E402
-from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation  # noqa: E402
+from PySide6.QtCore import Qt, QEasingCurve, QPoint, QPropertyAnimation  # noqa: E402
 from PySide6.QtWidgets import QApplication, QGraphicsOpacityEffect, QWidget  # noqa: E402
 
 
@@ -28,11 +28,32 @@ class FloaterSprite(QWidget):
         super().__init__(parent)
         self._on_finished = on_finished
         self.setFixedSize(size, size)
-        self.setStyleSheet("background-color: black; border-radius: 6px;")
 
         self._effect = QGraphicsOpacityEffect(self)
         self._effect.setOpacity(0.0)
         self.setGraphicsEffect(self._effect)
+
+        # mpv embeds into this dedicated child, not self - same reason
+        # VideoTile does it this way: a native embedded window always
+        # paints above regular Qt sibling widgets, so the vignette has
+        # to live on a separate layer raised above it afterward.
+        self.video_surface = QWidget(self)
+        self.video_surface.setGeometry(0, 0, size, size)
+        self.video_surface.setStyleSheet("background-color: black;")
+
+        # Vignette: a radial gradient fading from transparent at the
+        # center to the grid's background color at the edge. Qt can't
+        # alpha-mask a native embedded window directly (no equivalent of
+        # the browser's CSS mask-image on this content), so this
+        # approximates the same soft-edge look by blending into the
+        # background color behind it instead of true alpha transparency.
+        self.vignette = QWidget(self)
+        self.vignette.setGeometry(0, 0, size, size)
+        self.vignette.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.vignette.setStyleSheet(
+            "background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5,"
+            " stop:0 rgba(0,0,0,0), stop:0.6 rgba(0,0,0,0), stop:1 rgba(5,2,10,255));"
+        )
 
         self.move(*start)
         self.show()
@@ -41,9 +62,9 @@ class FloaterSprite(QWidget):
 
         self._player = None
         try:
-            self._player = mpv.MPV(wid=int(self.winId()), vid="auto", hwdec="auto", mute=True, loop_file="inf")
+            self._player = mpv.MPV(wid=int(self.video_surface.winId()), vid="auto", hwdec="auto", mute=True, loop_file="inf")
             self._player.play(url)
-            self.raise_()  # mpv's own native window can reset z-order on creation
+            self.vignette.raise_()  # mpv's own native window can reset z-order on creation
         except Exception:
             self._player = None
 
