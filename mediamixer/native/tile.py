@@ -32,6 +32,7 @@ class VideoTile(QWidget):
         self.controls = controls
         self.current_path: str | None = None
         self._player: mpv.MPV | None = None
+        self._volume_pct = 100.0
 
         self.setMinimumSize(80, 60)
         self.setStyleSheet("background-color: black;")
@@ -121,6 +122,7 @@ class VideoTile(QWidget):
         if self._player is not None:
             return
         self._player = mpv.MPV(wid=int(self.video_surface.winId()), vid="auto", hwdec="auto", loop_file="no")
+        self._player.volume = self._volume_pct
         self._raise_overlays()
 
         @self._player.property_observer("eof-reached")
@@ -130,6 +132,14 @@ class VideoTile(QWidget):
             # <video>'s "ended" event, which has the same property.
             if value:
                 self.controls.rotate(self.index)
+
+    def set_volume(self, pct: float) -> None:
+        self._volume_pct = pct
+        if self._player is not None:
+            try:
+                self._player.volume = pct
+            except Exception:
+                pass
 
     def set_source(self, path: str, url: str, name: str) -> None:
         self.label.setText(name or "")

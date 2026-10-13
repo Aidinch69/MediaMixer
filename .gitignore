@@ -7,6 +7,7 @@ system_memory.db-shm
 system_memory.db-wal
 native_state.json
 native_quests.json
+native_prefs.json
 
 # runtime logs
 engine_stdout.log

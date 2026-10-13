@@ -9,7 +9,7 @@ import math
 import random
 import time
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QToolBar, QWidget
 
@@ -20,7 +20,7 @@ from .anticipation import (
     SESSION_PRIMER_MIN_S, SESSION_PRIMER_MAX_S, SURGE_CHECK_S, XP_PER_BONUS_CLAIM,
 )
 from .anticipation_fx import GlowOverlay, MeterBar
-from . import audio_engine
+from . import audio_engine, prefs
 from .autopilot import AutoPilotState
 from .controls import Controls
 from .floater import FloaterSprite
@@ -28,17 +28,12 @@ from .gamification import COLOR_THEME_FLASH, GamificationState, RATE_XP_BASE, ST
 from .mosaic import compute_mosaic_layout, uniform_layout
 from .payoff_fx import PayoffOverlay, PushLuckPrompt, TierRevealLabel, Toast
 from .quests import QuestState
+from .settings_panel import SettingsPanel
 from .tile import VideoTile
 
 MOSAIC_REFLOW_INTERVAL_MS = 4000
-FLOATER_TARGET_COUNT = 3
 FLOATER_CHECK_MS = 4000
 FLOATER_DURATION_RANGE_S = (10, 18)
-
-LAYOUT_LABELS = {
-    "dual": "Dual", "grid2x2": "2x2", "grid2x3": "2x3",
-    "grid3x3": "3x3", "grid4x4": "4x4", "grid5x5": "5x5",
-}
 
 
 class MainShell(QMainWindow):
@@ -53,10 +48,18 @@ class MainShell(QMainWindow):
         central.setStyleSheet("background-color: #05020a;")
         self.setCentralWidget(central)
 
+        self._prefs = prefs.load()
+
         self.tiles: list[VideoTile] = []
         self.current_columns: int | None = None
         self.current_tile_count: int | None = None
-        self.mosaic_enabled = False
+        self.mosaic_enabled = self._prefs["mosaic_enabled"]
+        self.anticipation_fx_enabled = self._prefs["anticipation_fx_enabled"]
+        self.near_miss_enabled = self._prefs["near_miss_enabled"]
+        self.sfx_volume = self._prefs["sfx_volume"]
+        self.tile_volume_pct = self._prefs["tile_volume"]
+        self.session_timer_enabled = self._prefs["session_timer_enabled"]
+        audio_engine.set_master_volume(self.sfx_volume)
 
         self.gamification = GamificationState()
         self.quests = QuestState()
@@ -74,7 +77,7 @@ class MainShell(QMainWindow):
         self.tile_last_rated_at: dict[int, float] = {}
         self.due_aura_tile_index = -1
         self.mystery_tile_index = -1
-        self.binaural = audio_engine.BinauralPlayer()
+        self.binaural = audio_engine.BinauralPlayer(volume=self._prefs["binaural_volume"])
 
         self.build_up_run_id = 0
         self.build_up_active = False
@@ -87,16 +90,24 @@ class MainShell(QMainWindow):
         self.bonus_tile_index = -1
         self.bonus_expire_at = 0.0
 
-        self.floating_fx_enabled = False
+        self.floating_fx_enabled = self._prefs["floater_enabled"]
+        self.floater_target_count = int(self._prefs["floater_count"])
+        self.floater_opacity = self._prefs["floater_opacity"]
+        self.floater_source = self._prefs["floater_source"]
         self.active_floaters: list[FloaterSprite] = []
         self.floater_timer = QTimer(self)
         self.floater_timer.timeout.connect(self._maybe_spawn_floater)
         self.floater_timer.start(FLOATER_CHECK_MS)
 
-        self.autopilot = AutoPilotState()
+        self.autopilot = AutoPilotState(cycle_minutes=self._prefs["autopilot_minutes"])
+        if self._prefs["autopilot_enabled"]:
+            self.autopilot.enable(time.time())
         self.autopilot_timer = QTimer(self)
         self.autopilot_timer.timeout.connect(self._tick_autopilot)
         self.autopilot_timer.start(5000)
+
+        self.settings_panel = SettingsPanel(self)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.settings_panel)
 
         self._build_toolbar()
         self._sync_overlay_geometry()
@@ -141,59 +152,31 @@ class MainShell(QMainWindow):
         QTimer.singleShot(int(random.uniform(SESSION_PRIMER_MIN_S, SESSION_PRIMER_MAX_S) * 1000), self._session_primer)
 
     def _build_toolbar(self) -> None:
-        bar = QToolBar("Controls")
+        # Everything adjustable now lives in the settings_panel dock;
+        # this toolbar is just the always-visible live readouts plus a
+        # way to bring the panel back if it's been closed/hidden.
+        bar = QToolBar("Status")
         self.addToolBar(bar)
 
-        skip_action = QAction("Skip All", self)
-        skip_action.triggered.connect(self.controls.skip)
-        bar.addAction(skip_action)
-
-        lock_action = QAction("Lock 60s", self)
-        lock_action.triggered.connect(self.controls.lock)
-        bar.addAction(lock_action)
-
-        self.autopilot_action = QAction("Auto-Pilot: OFF", self)
-        self.autopilot_action.triggered.connect(self._toggle_autopilot)
-        bar.addAction(self.autopilot_action)
-
-        self.mosaic_action = QAction("Mosaic Fit: OFF", self)
-        self.mosaic_action.triggered.connect(self._toggle_mosaic)
-        bar.addAction(self.mosaic_action)
-
-        self.floater_action = QAction("Floating FX: OFF", self)
-        self.floater_action.triggered.connect(self._toggle_floater_fx)
-        bar.addAction(self.floater_action)
-
-        bar.addSeparator()
-        for name, label in LAYOUT_LABELS.items():
-            action = QAction(label, self)
-            action.triggered.connect(lambda checked=False, n=name: self.controls.set_layout(n))
-            bar.addAction(action)
-
-        bar.addSeparator()
-        for folder in self.controls.list_folders():
-            action = QAction(folder, self)
-            action.triggered.connect(lambda checked=False, f=folder: self.controls.set_folder(f))
-            bar.addAction(action)
+        toggle_panel_action = QAction("⚙ Settings", self)
+        toggle_panel_action.triggered.connect(
+            lambda: self.settings_panel.setVisible(not self.settings_panel.isVisible())
+        )
+        bar.addAction(toggle_panel_action)
 
         bar.addSeparator()
         self.level_label = QLabel("")
         self.streak_label = QLabel("")
         self.combo_label = QLabel("")
-        self.bests_label = QLabel("")
-        for label in (self.level_label, self.streak_label, self.combo_label, self.bests_label):
+        self.session_timer_label = QLabel("")
+        for label in (self.level_label, self.streak_label, self.combo_label, self.session_timer_label):
             label.setStyleSheet("padding: 0 8px; font-weight: bold;")
             bar.addWidget(label)
 
-        self.prestige_action = QAction("⭐ Prestige", self)
-        self.prestige_action.triggered.connect(self._on_prestige)
-        self.prestige_action.setVisible(False)
-        bar.addAction(self.prestige_action)
-
-        bar.addSeparator()
-        self.quest_label = QLabel("")
-        self.quest_label.setStyleSheet("padding: 0 8px;")
-        bar.addWidget(self.quest_label)
+        self.session_timer_qtimer = QTimer(self)
+        self.session_timer_qtimer.timeout.connect(self._tick_session_timer)
+        self.session_timer_qtimer.start(1000)
+        self._session_started_at = time.time()
 
     def _rebuild_grid(self, tile_count: int, columns: int) -> None:
         for tile in self.tiles:
@@ -205,6 +188,7 @@ class MainShell(QMainWindow):
         for i in range(tile_count):
             tile = VideoTile(i, self.controls, central)
             tile.rated.connect(self._on_rated)
+            tile.set_volume(self.tile_volume_pct)
             tile.show()
             self.tiles.append(tile)
 
@@ -243,24 +227,41 @@ class MainShell(QMainWindow):
         for tile, geo in zip(self.tiles, geometry):
             tile.setGeometry(round(geo["x"]), round(geo["y"]), round(geo["width"]), round(geo["height"]))
 
-    def _toggle_mosaic(self) -> None:
-        self.mosaic_enabled = not self.mosaic_enabled
-        self.mosaic_action.setText(f"Mosaic Fit: {'ON' if self.mosaic_enabled else 'OFF'}")
+    def set_mosaic_enabled(self, enabled: bool) -> None:
+        self.mosaic_enabled = enabled
         self._layout_tiles()
+        self._save_prefs()
 
     # ---- floating overlay fx ----
-    def _toggle_floater_fx(self) -> None:
-        self.floating_fx_enabled = not self.floating_fx_enabled
-        self.floater_action.setText(f"Floating FX: {'ON' if self.floating_fx_enabled else 'OFF'}")
-        if not self.floating_fx_enabled:
+    def set_floater_enabled(self, enabled: bool) -> None:
+        self.floating_fx_enabled = enabled
+        if not enabled:
             for floater in list(self.active_floaters):
                 floater.shutdown()
             self.active_floaters = []
+        self._save_prefs()
+
+    def set_floater_source(self, source: str) -> None:
+        self.floater_source = source
+        self._save_prefs()
+
+    def set_floater_count(self, count: int) -> None:
+        self.floater_target_count = count
+        self._save_prefs()
+
+    def set_floater_opacity(self, value: float) -> None:
+        self.floater_opacity = value
+        self._save_prefs()
 
     def _maybe_spawn_floater(self) -> None:
-        if not self.floating_fx_enabled or len(self.active_floaters) >= FLOATER_TARGET_COUNT:
+        if not self.floating_fx_enabled or len(self.active_floaters) >= self.floater_target_count:
             return
-        items = self.controls.list_overlay_fx("dedicated") or self.controls.list_overlay_fx("library")
+        source = self.floater_source
+        if source == "both":
+            source = random.choice(["dedicated", "library"])
+        items = self.controls.list_overlay_fx(source)
+        if not items and source != "library":
+            items = self.controls.list_overlay_fx("library")
         if not items:
             return
         item = random.choice(items)
@@ -275,7 +276,9 @@ class MainShell(QMainWindow):
         end = (random.randint(-size, cw), random.randint(-size, ch))
         duration_ms = int(random.uniform(*FLOATER_DURATION_RANGE_S) * 1000)
 
-        sprite = FloaterSprite(url, size, start, end, duration_ms, self._on_floater_finished, central)
+        sprite = FloaterSprite(
+            url, size, start, end, duration_ms, self._on_floater_finished, central, opacity=self.floater_opacity
+        )
         self.active_floaters.append(sprite)
         self._raise_global_overlays()
 
@@ -308,10 +311,11 @@ class MainShell(QMainWindow):
         barrage = int(snapshot.get("barrage") or 0)
         jackpot = bool(snapshot.get("jackpot"))
 
-        if barrage > 0 and not self.build_up_active:
-            self._start_build_up(max(1.5, barrage * 1.8), True)
-        if jackpot and not self.last_known_jackpot:
-            self._on_jackpot()
+        if self.anticipation_fx_enabled:
+            if barrage > 0 and not self.build_up_active:
+                self._start_build_up(max(1.5, barrage * 1.8), True)
+            if jackpot and not self.last_known_jackpot:
+                self._on_jackpot()
 
         self.last_known_barrage = barrage
         self.last_known_jackpot = jackpot
@@ -373,6 +377,8 @@ class MainShell(QMainWindow):
             tile.glow.set_opacity(0.0)
 
     def _maybe_near_miss(self) -> None:
+        if not self.anticipation_fx_enabled or not self.near_miss_enabled:
+            return
         if self.build_up_active or self.last_known_barrage > 0 or self.last_known_jackpot:
             return
         if self.anticipation.maybe_fake_near_miss(self.gamification.combo_multiplier()):
@@ -380,6 +386,8 @@ class MainShell(QMainWindow):
 
     # ---- bonus window ----
     def _maybe_bonus_window(self) -> None:
+        if not self.anticipation_fx_enabled:
+            return
         if self.bonus_tile_index >= 0 or not self.tiles:
             return
         if self.anticipation.maybe_bonus_window(self.gamification.combo_multiplier()):
@@ -443,6 +451,8 @@ class MainShell(QMainWindow):
         self.anticipation_meter.set_progress(min(100.0, effective / ANTICIPATION_METER_FULL_S * 100))
 
     def _session_primer(self) -> None:
+        if not self.anticipation_fx_enabled or not self.near_miss_enabled:
+            return
         if not self.build_up_active and self.last_known_barrage == 0 and not self.last_known_jackpot:
             self._start_build_up(FAKE_NEAR_MISS_BUILD_S, False)
 
@@ -521,16 +531,74 @@ class MainShell(QMainWindow):
         self.gamification.prestige()
         self._update_readouts()
 
-    def _toggle_autopilot(self) -> None:
-        if self.autopilot.enabled:
-            self.autopilot.disable()
-            self.autopilot_action.setText("Auto-Pilot: OFF")
-        else:
+    def set_autopilot_enabled(self, enabled: bool) -> None:
+        if enabled:
             self.autopilot.enable(time.time())
-            self.autopilot_action.setText("Auto-Pilot: ON")
+        else:
+            self.autopilot.disable()
+        self._save_prefs()
+
+    def set_autopilot_minutes(self, minutes: float) -> None:
+        self.autopilot.cycle_minutes = minutes
+        self._save_prefs()
 
     def _tick_autopilot(self) -> None:
         self.autopilot.tick(time.time(), self.controls)
+
+    def set_anticipation_fx_enabled(self, enabled: bool) -> None:
+        self.anticipation_fx_enabled = enabled
+        self._save_prefs()
+
+    def set_near_miss_enabled(self, enabled: bool) -> None:
+        self.near_miss_enabled = enabled
+        self._save_prefs()
+
+    def set_sfx_volume(self, value: float) -> None:
+        self.sfx_volume = value
+        audio_engine.set_master_volume(value)
+        self._save_prefs()
+
+    def set_binaural_volume(self, value: float) -> None:
+        self.binaural.volume = value
+        self._save_prefs()
+
+    def set_tile_volume(self, pct: float) -> None:
+        self.tile_volume_pct = pct
+        for tile in self.tiles:
+            tile.set_volume(pct)
+        self._save_prefs()
+
+    def set_session_timer_enabled(self, enabled: bool) -> None:
+        self.session_timer_enabled = enabled
+        if not enabled:
+            self.session_timer_label.setText("")
+        self._save_prefs()
+
+    def _tick_session_timer(self) -> None:
+        if not self.session_timer_enabled:
+            return
+        elapsed = int(time.time() - self._session_started_at)
+        h, rem = divmod(elapsed, 3600)
+        m, s = divmod(rem, 60)
+        text = f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+        self.session_timer_label.setText(f"⏱️ {text}")
+
+    def _save_prefs(self) -> None:
+        prefs.save({
+            "sfx_volume": self.sfx_volume,
+            "binaural_volume": self.binaural.volume,
+            "tile_volume": self.tile_volume_pct,
+            "mosaic_enabled": self.mosaic_enabled,
+            "floater_enabled": self.floating_fx_enabled,
+            "floater_count": self.floater_target_count,
+            "floater_opacity": self.floater_opacity,
+            "floater_source": self.floater_source,
+            "anticipation_fx_enabled": self.anticipation_fx_enabled,
+            "near_miss_enabled": self.near_miss_enabled,
+            "autopilot_enabled": self.autopilot.enabled,
+            "autopilot_minutes": self.autopilot.cycle_minutes,
+            "session_timer_enabled": self.session_timer_enabled,
+        })
 
     def _tick_streak_warning(self) -> None:
         remaining = self.gamification.streak_remaining_s()
@@ -554,9 +622,11 @@ class MainShell(QMainWindow):
             self.streak_label.setText("")
         mult = g.combo_multiplier()
         self.combo_label.setText(f"x{mult:.2f} combo" if mult > 1 else "")
-        self.bests_label.setText(f"Best streak: {g.best_streak} · Lifetime jackpots: {g.lifetime_jackpots}")
-        self.prestige_action.setVisible(g.can_prestige())
-        self.quest_label.setText(self.quests.summary_text())
+        self.settings_panel.update_readouts(
+            f"Best streak: {g.best_streak} · Lifetime jackpots: {g.lifetime_jackpots}",
+            self.quests.summary_text(),
+            g.can_prestige(),
+        )
 
     def _sync_overlay_geometry(self) -> None:
         rect = self.centralWidget().rect()

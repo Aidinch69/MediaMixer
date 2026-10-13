@@ -21,7 +21,10 @@ from PySide6.QtWidgets import QApplication, QGraphicsOpacityEffect, QWidget  # n
 
 
 class FloaterSprite(QWidget):
-    def __init__(self, url: str, size: int, start: tuple, end: tuple, duration_ms: int, on_finished, parent=None):
+    def __init__(
+        self, url: str, size: int, start: tuple, end: tuple, duration_ms: int, on_finished,
+        parent=None, opacity: float = 0.6,
+    ):
         super().__init__(parent)
         self._on_finished = on_finished
         self.setFixedSize(size, size)
@@ -53,8 +56,8 @@ class FloaterSprite(QWidget):
         self._opacity_anim = QPropertyAnimation(self._effect, b"opacity")
         self._opacity_anim.setDuration(duration_ms)
         self._opacity_anim.setKeyValueAt(0.0, 0.0)
-        self._opacity_anim.setKeyValueAt(0.15, 0.6)
-        self._opacity_anim.setKeyValueAt(0.85, 0.6)
+        self._opacity_anim.setKeyValueAt(0.15, opacity)
+        self._opacity_anim.setKeyValueAt(0.85, opacity)
         self._opacity_anim.setKeyValueAt(1.0, 0.0)
         self._opacity_anim.finished.connect(self._finish)
 

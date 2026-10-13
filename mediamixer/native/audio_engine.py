@@ -15,11 +15,17 @@ import numpy as np
 import sounddevice as sd
 
 SAMPLE_RATE = 44100
+_master_volume = 0.7
+
+
+def set_master_volume(value: float) -> None:
+    global _master_volume
+    _master_volume = max(0.0, min(1.0, value))
 
 
 def _play(buf: np.ndarray) -> None:
     try:
-        sd.play(np.clip(buf, -1.0, 1.0).astype(np.float32), samplerate=SAMPLE_RATE)
+        sd.play(np.clip(buf * _master_volume, -1.0, 1.0).astype(np.float32), samplerate=SAMPLE_RATE)
     except Exception:
         pass
 
