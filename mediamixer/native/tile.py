@@ -33,6 +33,16 @@ class VideoTile(QWidget):
         self.setMinimumSize(80, 60)
         self.setStyleSheet("background-color: black;")
 
+        # mpv embeds into this dedicated child widget's native window
+        # handle, not VideoTile's own - a native video window always
+        # paints above regular (non-native) Qt sibling widgets within the
+        # same parent, so the rating buttons/label have to live on a
+        # separate layer and get explicitly raised above it, or the video
+        # covers them the moment it starts rendering.
+        self.video_surface = QWidget(self)
+        self.video_surface.setStyleSheet("background-color: black;")
+        self.video_surface.setGeometry(self.rect())
+
         self.label = QLabel("", self)
         self.label.setStyleSheet(
             "color: white; background: rgba(0,0,0,.6); font-size: 11px; font-family: monospace;"
@@ -61,13 +71,23 @@ class VideoTile(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self.video_surface.setGeometry(0, 0, self.width(), self.height())
         self.down_btn.move(self.width() - 30, self.height() - 30)
         self.up_btn.move(self.width() - 60, self.height() - 30)
+        # Re-assert z-order on every resize too, since some platforms
+        # re-raise native child windows to the top as a side effect of
+        # a resize/geometry change.
+        self.label.raise_()
+        self.up_btn.raise_()
+        self.down_btn.raise_()
 
     def ensure_player(self) -> None:
         if self._player is not None:
             return
-        self._player = mpv.MPV(wid=int(self.winId()), vid="auto", hwdec="auto", mute=True, loop_file="no")
+        self._player = mpv.MPV(wid=int(self.video_surface.winId()), vid="auto", hwdec="auto", mute=True, loop_file="no")
+        self.label.raise_()
+        self.up_btn.raise_()
+        self.down_btn.raise_()
 
         @self._player.property_observer("eof-reached")
         def _on_eof(_name, value):
