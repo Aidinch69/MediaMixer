@@ -34,6 +34,7 @@ class Config:
     media_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_MEDIA_DIR", "./media_assets"))
     audio_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_AUDIO_DIR", "./Audios"))
     overlay_fx_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_OVERLAY_FX_DIR", "./overlay_fx"))
+    proxy_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_PROXY_DIR", "./media_proxies"))
     db_path: str = field(default_factory=lambda: os.environ.get("MEDIAMIXER_DB_PATH", "system_memory.db"))
 
     video_exts: Tuple[str, ...] = (".mp4", ".mkv", ".avi", ".mov", ".webm")
@@ -65,6 +66,15 @@ class Config:
     )
     default_layout: str = "dual"
     default_preload_enabled: bool = True
+
+    # -- low-res proxy for dense grids --
+    # Source clips are full 1080p+ at several Mbps - fine decoded one or two
+    # at a time, wasteful decoded 16-25x at once into a tile a fraction of
+    # that size. Layouts past this tile count get a cached, cheaper-to-decode
+    # proxy instead of the original; matches grid4x4/grid5x5 (16/25 tiles).
+    proxy_tile_threshold: int = 9
+    proxy_max_dimension: int = 640
+    proxy_bitrate_kbps: int = 1200
 
     # -- barrage / jackpot events --
     barrage_probability: float = 0.05

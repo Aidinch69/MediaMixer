@@ -1789,7 +1789,11 @@ function render(d) {
     if (!vid) return;
     if (s.path && s.path !== currentPaths[i]) {
       currentPaths[i] = s.path;
-      vid.src = mediaOrigin(i) + '/media/' + s.path;
+      // Tells the server how many tiles are active, so dense layouts
+      // (4x4/5x5) get a cached low-res proxy instead of the full-size
+      // source - matches PRELOAD_MAX_TILES: same grids that skip preload
+      // also get the lighter file.
+      vid.src = mediaOrigin(i) + '/media/' + s.path + '?tiles=' + d.screens.length;
       applyRandomStart(vid);
     }
     const label = document.getElementById('label-' + i);
