@@ -16,11 +16,17 @@
 </head>
 <body>
 <button class="panel-toggle" id="panel-toggle" onclick="togglePanel()" title="Show/hide panel">✕</button>
+<div id="anticipation-meter"><div id="anticipation-meter-fill"></div></div>
 <div class="theater" id="theater-box">
   <div class="screen-grid" id="screen-grid"></div>
 </div>
 <div id="fx-layer"></div>
 <div id="tier-reveal"></div>
+<div id="push-luck-prompt">
+  <span>Push your luck?</span>
+  <button onclick="bankWin()">🏦 Bank</button>
+  <button onclick="pushLuck()">🎲 Push</button>
+</div>
 <div class="panel" id="panel">
   <h2>
     <span>🧬 MediaMixer</span>
@@ -90,7 +96,7 @@
     <button class="badge" id="near-miss-toggle" onclick="toggleNearMiss()">OFF</button>
   </div>
   <div class="slider"><label>SFX Volume: <b><span id="l-sfx-vol">70%</span></b></label><input type="range" id="sfx-vol-input" min="0" max="100" value="70" oninput="setSfxVolume(this.value)"></div>
-  <p class="hint">Tension builds (visual pulse, heartbeat, panned riser) when a jackpot is really incoming, with a tier reveal (small/big/mega) and a flash/chime/bass/floater-burst payoff + lingering afterglow when it lands. Milestone jackpot counts get an even bigger one. Near-misses play the same build-up with nothing behind it. Also enables occasional golden "bonus" tiles - rate one 👍 while it's glowing for a quick bonus. Jackpots and bonuses earn XP toward a level that only ever goes up (top right), each one shifts the color theme, and a daily ~20min "Golden Hour" boosts the odds of all of the above if you happen to be around for it. Near-miss/bonus odds also creep up the longer a single session runs.</p>
+  <p class="hint">Tension builds (visual pulse, heartbeat, panned riser) when a jackpot is really incoming, with a tier reveal (small/big/mega) and a flash/chime/bass/floater-burst payoff + lingering afterglow when it lands. Milestone jackpot counts get an even bigger one. Near-misses play the same build-up with nothing behind it. Also enables occasional golden "bonus" tiles - rate one 👍 while it's glowing for a quick bonus. Jackpots and bonuses earn XP toward a level that only ever goes up (top right), each one shifts the color theme, and a daily ~20min "Golden Hour" boosts the odds of all of the above if you happen to be around for it. Near-miss/bonus odds also creep up the longer a single session runs. The thin bar at the very top is an always-on charge meter; quiet tiles get a faint "due" aura; a build-up opens with a quick flash of the next color theme; mega/milestone jackpots can chain into a re-spin; and landing one gives you a few seconds to bank it or push your luck for a bonus (or lose the streak). Occasional "mystery tiles" blur and un-blur on their own with nothing behind them, just curiosity.</p>
   <h3>🏆 Progress &amp; Challenges</h3>
   <div class="metric" id="personal-best"></div>
   <div class="metric" id="quest-list"></div>

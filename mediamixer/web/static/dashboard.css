@@ -24,6 +24,16 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 #tier-reveal.tier-mega,#tier-reveal.tier-milestone{color:#ffd43b;font-size:2.9rem}
 .tile.bonus-window{animation:bonus-pulse 1s ease-in-out infinite}
 @keyframes bonus-pulse{0%{box-shadow:0 0 10px rgba(255,212,59,.5) inset,0 0 10px rgba(255,212,59,.5)}50%{box-shadow:0 0 22px rgba(255,212,59,.9) inset,0 0 22px rgba(255,212,59,.9)}100%{box-shadow:0 0 10px rgba(255,212,59,.5) inset,0 0 10px rgba(255,212,59,.5)}}
+.tile.due-aura{animation:due-pulse 3s ease-in-out infinite}
+@keyframes due-pulse{0%,100%{box-shadow:0 0 6px rgba(120,120,255,.25) inset}50%{box-shadow:0 0 18px rgba(120,120,255,.55) inset}}
+.tile.mystery-tile video{filter:blur(14px)}
+.tile.mystery-reveal video{transition:filter .3s ease}
+.mystery-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:2.4rem;font-weight:bold;color:#fff;text-shadow:0 0 12px #000;pointer-events:none;z-index:2}
+#anticipation-meter{position:fixed;top:0;left:0;width:100%;height:4px;z-index:18;background:rgba(255,255,255,.05);pointer-events:none}
+#anticipation-meter-fill{height:100%;width:0%;background:linear-gradient(90deg,rgba(var(--theme-glow,255,70,30),.35),rgba(var(--theme-glow,255,70,30),1));transition:width 1s linear}
+.theater.theme-teaser::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(var(--theme-flash,255,220,120),.28),rgba(var(--theme-flash,255,220,120),0) 70%);animation:teaser-flash-anim .15s ease-out}
+@keyframes teaser-flash-anim{0%{opacity:1}100%{opacity:0}}
+#push-luck-prompt{display:none;position:fixed;top:58%;left:50%;transform:translate(-50%,0);z-index:21;align-items:center;gap:10px;background:#150a28;border:1px solid #b84dff;border-radius:8px;padding:10px 14px;box-shadow:0 0 20px rgba(184,77,255,.4);font-size:.82rem;font-weight:bold;color:#fff}
 @keyframes glitch-anim{0%{transform:translate(0)}20%{transform:translate(-2px,2px)}40%{transform:translate(-2px,-2px)}60%{transform:translate(2px,2px)}80%{transform:translate(2px,-2px)}100%{transform:translate(0)}}
 .screen-grid{display:grid;gap:8px;width:100%;height:100%}
 .screen-grid.mosaic{display:flex;flex-direction:column;gap:0}

@@ -781,6 +781,7 @@ function runAnticipationBuildUp(durationS, isReal) {
   const runId = ++anticipationRunId;
   const theater = document.getElementById('theater-box');
   theater.style.transition = 'none';
+  teaseNextTheme(theater);
   playRiserSound(durationS);
   const start = performance.now();
   const glowRgb = currentThemeRgb('--theme-glow', '255,70,30');
@@ -879,6 +880,49 @@ function rotateColorTheme() {
 function currentThemeRgb(cssVar, fallback) {
   const val = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
   return val || fallback;
+}
+
+// Flash-forward teaser: a sub-second glimpse of the *next* theme in the
+// rotation, right as a build-up starts - like a coming-attractions sting.
+// Safe to overwrite --theme-flash here: a real payoff always calls
+// rotateColorTheme() -> applyColorTheme() before using it, which resets it.
+function teaseNextTheme(theater) {
+  const preview = COLOR_THEMES[(colorThemeIndex + 1) % COLOR_THEMES.length];
+  theater.style.setProperty('--theme-flash', preview.flash);
+  theater.classList.add('theme-teaser');
+  setTimeout(() => theater.classList.remove('theme-teaser'), 150);
+}
+
+// Always-on anticipation meter: a persistent charge bar that fills up the
+// longer it's been since the last jackpot, instead of tension only
+// becoming visible once a barrage is already underway. Purely a feeling -
+// it doesn't change real odds - but it ticks faster during Golden
+// Hour/Surge/combo since those *do* raise real odds, so it stays honest
+// about when things are actually hotter.
+const ANTICIPATION_METER_FULL_MS = 90000;
+let lastAnyPayoffAt = 0;
+
+function tickAnticipationMeter() {
+  const fill = document.getElementById('anticipation-meter-fill');
+  if (!fill) return;
+  const effectiveElapsed = (Date.now() - lastAnyPayoffAt) * oddsMultiplier();
+  const pct = Math.min(100, (effectiveElapsed / ANTICIPATION_METER_FULL_MS) * 100);
+  fill.style.width = pct + '%';
+}
+
+// "Due" tile aura: tiles that haven't been rated in a while get a faint,
+// slow pulsing aura - leans into the (not literally true) sense that a
+// quiet tile is "due," drawing the eye back to it.
+const DUE_AURA_THRESHOLD_MS = 45000;
+let tileLastRatedAt = {};
+
+function tickDueAura() {
+  const now = Date.now();
+  tileElements.forEach((tile, i) => {
+    if (!tile) return;
+    const idleMs = now - (tileLastRatedAt[i] || sessionStartedAt);
+    tile.classList.toggle('due-aura', idleMs > DUE_AURA_THRESHOLD_MS);
+  });
 }
 
 // Leveling/XP: a persistent long-horizon progress bar across sessions,
@@ -1177,7 +1221,20 @@ function revealTier(tier, onDone) {
   step(0);
 }
 
-function runPayoff() {
+// Jackpot chain re-triggers: mega/milestone payoffs get a shrinking chance
+// to immediately re-fire into another payoff (slot-machine "re-spin"
+// feel), capped so a chain can't run away indefinitely.
+const CHAIN_BASE_PROBABILITY = 0.3;
+const MAX_CHAIN_DEPTH = 2;
+
+function decideChain(tier, chainDepth) {
+  if (chainDepth >= MAX_CHAIN_DEPTH) return false;
+  if (tier.name !== 'mega' && tier.name !== 'milestone') return false;
+  return Math.random() < CHAIN_BASE_PROBABILITY * Math.pow(0.5, chainDepth);
+}
+
+function runPayoff(chainDepth) {
+  chainDepth = chainDepth || 0;
   anticipationRunId++; // invalidate any in-flight build-up loop (real or fake)
   anticipationActive = false;
   clearTileGlow();
@@ -1188,13 +1245,18 @@ function runPayoff() {
   const milestoneCount = registerMilestone();
   const tier = milestoneCount ? MILESTONE_TIER : pickJackpotTier();
   const streak = registerJackpotStreak();
+  lastAnyPayoffAt = Date.now();
   awardXp((XP_PER_TIER[tier.name] || 10) * (milestoneCount ? 3 : 1));
   recordPayoffStats(streak, milestoneCount);
   incrementQuestMetric('jackpots', 1);
-  revealTier(tier, () => applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk));
+  revealTier(tier, () => {
+    const willChain = decideChain(tier, chainDepth);
+    applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk, chainDepth, willChain);
+    if (willChain) setTimeout(() => runPayoff(chainDepth + 1), 900);
+  });
 }
 
-function applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk) {
+function applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk, chainDepth, willChain) {
   const theater = document.getElementById('theater-box');
   theater.style.setProperty('--flash-opacity', Math.min(0.9, 0.6 * tier.flash).toFixed(2));
   theater.style.setProperty('--flash-duration', (0.65 * Math.min(1.3, tier.flash)).toFixed(2) + 's');
@@ -1220,8 +1282,53 @@ function applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk) {
   burstExtraFloaters(tier.burst);
   if (wasAtRisk) playClutchSting();
   const label = milestoneCount ? ('🏆 MILESTONE: ' + milestoneCount + ' JACKPOTS!') : '🎰 ' + (tier.name === 'mega' ? 'MEGA JACKPOT' : tier.name === 'medium' ? 'Jackpot!' : 'Jackpot');
-  const prefix = wasAtRisk ? '🔥 SAVED! ' : '';
+  const prefix = (chainDepth > 0 ? '⛓ CHAIN! ' : '') + (wasAtRisk ? '🔥 SAVED! ' : '');
   toast(prefix + label + (streak > 1 ? ' (streak ' + streak + ')' : ''));
+  if (!willChain) showPushLuckPrompt();
+}
+
+// Press-your-luck: after a payoff settles, a short voluntary window to
+// either bank the win as-is or push for a second roll that can grant a
+// bonus or cost the current streak. Entirely optional - doing nothing
+// auto-banks, so there's no penalty for ignoring it.
+const PUSH_LUCK_WINDOW_MS = 6000;
+let pushLuckTimer = null;
+
+function showPushLuckPrompt() {
+  if (pushLuckTimer) bankWin(true); // a prior prompt was still open; settle it quietly first
+  const box = document.getElementById('push-luck-prompt');
+  if (!box) return;
+  box.style.display = 'flex';
+  pushLuckTimer = setTimeout(() => bankWin(), PUSH_LUCK_WINDOW_MS);
+}
+
+function hidePushLuckPrompt() {
+  const box = document.getElementById('push-luck-prompt');
+  if (box) box.style.display = 'none';
+  clearTimeout(pushLuckTimer);
+  pushLuckTimer = null;
+}
+
+function bankWin(quiet) {
+  hidePushLuckPrompt();
+  if (!quiet) toast('🏦 Banked.');
+}
+
+function pushLuck() {
+  hidePushLuckPrompt();
+  const won = Math.random() < 0.5;
+  if (won) {
+    const bonus = Math.round(25 * comboMultiplier());
+    awardXp(bonus);
+    burstExtraFloaters(0.6);
+    playChimeSound(0.8);
+    toast('🎉 Pushed and won +' + bonus + 'xp!');
+  } else {
+    jackpotStreak = 0;
+    const el = document.getElementById('jackpot-streak');
+    if (el) el.innerText = '';
+    toast('💥 Pushed and lost the streak!', true);
+  }
 }
 
 function handleAnticipationStatus(d) {
@@ -1670,6 +1777,7 @@ function rateScreen(i, dir) {
   const mult = registerCombo();
   awardXp(Math.round(RATE_XP_BASE * mult));
   incrementQuestMetric('rates', 1);
+  tileLastRatedAt[i] = Date.now();
   fetch('/api/rate?screen=' + i + '&dir=' + dir).then(() => toast(dir === 'up' ? '👍 Reinforced' : '👎 Penalized', dir !== 'up'));
 }
 
@@ -1705,6 +1813,41 @@ function clearBonusWindow(idx) {
   clearTimeout(bonusWindowTimer);
 }
 
+// Mystery tile: a pure curiosity-gap hit, distinct from the loss-aversion
+// and reward mechanics above - a tile briefly blurs under a "?" overlay
+// and un-blurs on its own, nothing to act on and no payoff behind it.
+const MYSTERY_TILE_CHECK_MS = 30000;
+const MYSTERY_TILE_PROBABILITY = 0.15;
+const MYSTERY_TILE_DURATION_MS = 1600;
+let mysteryTileIndex = -1;
+
+function maybeTriggerMysteryTile() {
+  if (!anticipationFxEnabled) return;
+  if (mysteryTileIndex >= 0 || !tileElements.length) return;
+  if (Math.random() >= MYSTERY_TILE_PROBABILITY) return;
+  const idx = Math.floor(Math.random() * tileElements.length);
+  const tile = tileElements[idx];
+  if (!tile) return;
+  mysteryTileIndex = idx;
+  tile.classList.add('mystery-tile');
+  const overlay = document.createElement('div');
+  overlay.className = 'mystery-overlay';
+  overlay.innerText = '?';
+  tile.appendChild(overlay);
+  setTimeout(() => clearMysteryTile(idx, overlay), MYSTERY_TILE_DURATION_MS);
+}
+
+function clearMysteryTile(idx, overlay) {
+  const tile = tileElements[idx];
+  if (tile) {
+    tile.classList.remove('mystery-tile');
+    tile.classList.add('mystery-reveal');
+    setTimeout(() => tile.classList.remove('mystery-reveal'), 300);
+    if (overlay && overlay.parentNode === tile) tile.removeChild(overlay);
+  }
+  if (mysteryTileIndex === idx) mysteryTileIndex = -1;
+}
+
 function triggerMiniPayoff() {
   playChimeSound(0.7);
   burstExtraFloaters(0.5);
@@ -1724,6 +1867,18 @@ setInterval(tickStreakWarning, 1000);
 setInterval(tickGoldenHour, 5000);
 setInterval(maybeTriggerSurge, SURGE_CHECK_MS);
 setInterval(tickSurgeBadge, 5000);
+setInterval(tickAnticipationMeter, 1000);
+setInterval(tickDueAura, 5000);
+setInterval(maybeTriggerMysteryTile, MYSTERY_TILE_CHECK_MS);
+
+// Session-opening primer: guarantee a near-miss within the first ~15-25s
+// of opening the dashboard (if anticipation/near-miss are on), so a
+// session never starts cold waiting for the random checks to land one.
+function runSessionPrimer() {
+  if (anticipationFxEnabled && nearMissEnabled && !anticipationActive && !lastKnownBarrage && !lastKnownJackpot) {
+    runAnticipationBuildUp(FAKE_NEAR_MISS_BUILD_S, false);
+  }
+}
 
 window.onload = () => {
   restorePanelState();
@@ -1737,11 +1892,13 @@ window.onload = () => {
   scheduleGoldenHour();
   loadStats();
   loadQuests();
+  lastAnyPayoffAt = sessionStartedAt;
   overlayEl = document.getElementById('overlay-audio');
   loadVolumePrefs();
   armAutoUnlock();
   fetch('/api/status').then(r => r.json()).then(render);
   connectStream();
+  setTimeout(runSessionPrimer, 15000 + Math.random() * 10000);
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
