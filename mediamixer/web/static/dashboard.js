@@ -639,7 +639,7 @@ function playChimeSound() {
     const t0 = now + i * 0.09;
     osc.frequency.setValueAtTime(freq, t0);
     g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(0.3, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.255, t0 + 0.02); // 15% quieter
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
     osc.start(t0);
     osc.stop(t0 + 0.55);
