@@ -18,6 +18,7 @@ from .anticipation import (
     FAKE_NEAR_MISS_CHECK_S, HONEST_BUILD_SAFETY_S, SURGE_CHECK_S, XP_PER_BONUS_CLAIM,
 )
 from .anticipation_fx import GlowOverlay
+from .autopilot import AutoPilotState
 from .controls import Controls
 from .gamification import GamificationState, RATE_XP_BASE, STREAK_WARNING_S
 from .payoff_fx import PayoffOverlay, PushLuckPrompt, TierRevealLabel, Toast
@@ -71,6 +72,11 @@ class MainShell(QMainWindow):
         self.bonus_tile_index = -1
         self.bonus_expire_at = 0.0
 
+        self.autopilot = AutoPilotState()
+        self.autopilot_timer = QTimer(self)
+        self.autopilot_timer.timeout.connect(self._tick_autopilot)
+        self.autopilot_timer.start(5000)
+
         self._build_toolbar()
         self._sync_overlay_geometry()
         self._update_readouts()
@@ -103,6 +109,10 @@ class MainShell(QMainWindow):
         lock_action = QAction("Lock 60s", self)
         lock_action.triggered.connect(self.controls.lock)
         bar.addAction(lock_action)
+
+        self.autopilot_action = QAction("Auto-Pilot: OFF", self)
+        self.autopilot_action.triggered.connect(self._toggle_autopilot)
+        bar.addAction(self.autopilot_action)
 
         bar.addSeparator()
         for name, label in LAYOUT_LABELS.items():
@@ -332,6 +342,17 @@ class MainShell(QMainWindow):
     def _on_prestige(self) -> None:
         self.gamification.prestige()
         self._update_readouts()
+
+    def _toggle_autopilot(self) -> None:
+        if self.autopilot.enabled:
+            self.autopilot.disable()
+            self.autopilot_action.setText("Auto-Pilot: OFF")
+        else:
+            self.autopilot.enable(time.time())
+            self.autopilot_action.setText("Auto-Pilot: ON")
+
+    def _tick_autopilot(self) -> None:
+        self.autopilot.tick(time.time(), self.controls)
 
     def _tick_streak_warning(self) -> None:
         remaining = self.gamification.streak_remaining_s()
