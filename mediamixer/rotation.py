@@ -151,11 +151,13 @@ class RotationEngine:
             # use it so the swap is instant instead of starting a cold fetch.
             picked = preferred
         else:
-            picked = library.pick_video(self._db, cfg, folder, exclude=exclude)
+            bonus = self._state.get_exploration_bonus()
+            picked = library.pick_video(self._db, cfg, folder, exclude=exclude, exploration_bonus=bonus)
         if not picked:
             return None
         library.reward_video(self._db, cfg, picked, 0.0, played=True)
-        nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | {picked}) or picked
+        bonus = self._state.get_exploration_bonus()
+        nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | {picked}, exploration_bonus=bonus) or picked
         self._state.set_screen(index, picked, nxt, time.time() + expires_in)
         return picked
 

@@ -20,6 +20,7 @@
   <div class="screen-grid" id="screen-grid"></div>
 </div>
 <div id="fx-layer"></div>
+<div id="tier-reveal"></div>
 <div class="panel" id="panel">
   <h2>
     <span>🧬 MediaMixer</span>
@@ -85,14 +86,14 @@
     <button class="badge" id="near-miss-toggle" onclick="toggleNearMiss()">OFF</button>
   </div>
   <div class="slider"><label>SFX Volume: <b><span id="l-sfx-vol">70%</span></b></label><input type="range" id="sfx-vol-input" min="0" max="100" value="70" oninput="setSfxVolume(this.value)"></div>
-  <p class="hint">Tension builds (visual pulse + audio riser) when a jackpot is really incoming, with a flash/chime/floater-burst payoff when it lands. Near-misses play the same build-up at random with nothing behind it.</p>
+  <p class="hint">Tension builds (visual pulse, heartbeat, panned riser) when a jackpot is really incoming, with a tier reveal (small/big/mega) and a flash/chime/bass/floater-burst payoff + lingering afterglow when it lands. Milestone jackpot counts get an even bigger one. Near-misses play the same build-up with nothing behind it. Also enables occasional golden "bonus" tiles - rate one 👍 while it's glowing for a quick bonus.</p>
   <h3>🎬 Auto-Pilot (Experimental)</h3>
   <div class="slider">
     <label>Enabled</label>
     <button class="badge" id="autopilot-toggle" onclick="toggleAutopilot()">OFF</button>
   </div>
   <div class="slider"><label>Cycle Length: <b><span id="l-autopilot-minutes">6 min</span></b></label><input type="range" id="autopilot-minutes-input" min="2" max="15" step="1" value="6" oninput="setAutopilotMinutes(this.value)"></div>
-  <p class="hint">Scripts pace, barrage/jackpot odds, mosaic, and floater count through a calm -&gt; building -&gt; climax -&gt; cooldown arc on a repeating timer, instead of those staying wherever you last set them. Turns Floating Overlay on if it's off.</p>
+  <p class="hint">Scripts pace, barrage/jackpot odds, mosaic, floater count, and content novelty through a calm -&gt; building -&gt; climax -&gt; cooldown arc on a repeating timer, instead of those staying wherever you last set them. Turns Floating Overlay on if it's off.</p>
   <div class="slider">
     <label>Session Timer (opt-in)</label>
     <button class="badge" id="session-timer-toggle" onclick="toggleSessionTimer()">OFF</button>

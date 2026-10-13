@@ -564,11 +564,58 @@ function ensureSfxBus() {
   return sfxGain;
 }
 
+let reverbImpulseBuffer = null;
+let reverbSendGain = null;
+
+function getReverbImpulse() {
+  if (reverbImpulseBuffer) return reverbImpulseBuffer;
+  // Synthesized impulse response (exponentially-decaying noise) - no audio
+  // asset needed, consistent with every other sound in this file.
+  const len = Math.ceil(audioCtx.sampleRate * 2.2);
+  const buffer = audioCtx.createBuffer(2, len, audioCtx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buffer.getChannelData(ch);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.5);
+  }
+  reverbImpulseBuffer = buffer;
+  return buffer;
+}
+
+function ensureReverbSend() {
+  const bus = ensureSfxBus();
+  if (!bus) return null;
+  if (!reverbSendGain) {
+    const convolver = audioCtx.createConvolver();
+    convolver.buffer = getReverbImpulse();
+    reverbSendGain = audioCtx.createGain();
+    reverbSendGain.gain.value = 0.55;
+    reverbSendGain.connect(convolver);
+    convolver.connect(bus);
+  }
+  return reverbSendGain;
+}
+
 function playRiserSound(durationS) {
   const bus = ensureSfxBus();
   if (!bus) return;
   const now = audioCtx.currentTime;
   const tail = durationS + 0.35;
+
+  // Pan the riser across the stereo field, speeding up as it builds (same
+  // trick film sound design uses to pull attention) - routed in front of
+  // the bus so both layers below move together.
+  const panner = audioCtx.createStereoPanner();
+  panner.connect(bus);
+  const panLfo = audioCtx.createOscillator();
+  panLfo.type = 'sine';
+  const panLfoGain = audioCtx.createGain();
+  panLfoGain.gain.value = 0.85;
+  panLfo.connect(panLfoGain);
+  panLfoGain.connect(panner.pan);
+  panLfo.frequency.setValueAtTime(0.3, now);
+  panLfo.frequency.exponentialRampToValueAtTime(3.2, now + durationS);
+  panLfo.start(now);
+  panLfo.stop(now + tail);
 
   // Main body: filtered noise that starts muffled and quiet, then opens up
   // in brightness and volume as it builds - the standard "cinematic riser"
@@ -593,7 +640,7 @@ function playRiserSound(durationS) {
   noiseGain.gain.setValueAtTime(0.0001, now);
   noiseGain.gain.exponentialRampToValueAtTime(0.18, now + durationS * 0.9);
   noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + tail);
-  noise.connect(filter); filter.connect(noiseGain); noiseGain.connect(bus);
+  noise.connect(filter); filter.connect(noiseGain); noiseGain.connect(panner);
 
   // Soft sine undertone: adds a sense of pitch rising without the harmonics
   // a sawtooth/square would add.
@@ -605,10 +652,46 @@ function playRiserSound(durationS) {
   oscGain.gain.setValueAtTime(0.0001, now);
   oscGain.gain.exponentialRampToValueAtTime(0.09, now + durationS * 0.85);
   oscGain.gain.exponentialRampToValueAtTime(0.0001, now + tail);
-  osc.connect(oscGain); oscGain.connect(bus);
+  osc.connect(oscGain); oscGain.connect(panner);
 
   noise.start(now); noise.stop(now + tail);
   osc.start(now); osc.stop(now + tail);
+
+  scheduleHeartbeat(durationS);
+}
+
+function scheduleHeartbeat(durationS) {
+  // A low rhythmic thump that speeds up through the build-up - the
+  // thriller-score trick for perceived urgency, distinct from the riser's
+  // continuous pitch/brightness sweep. Scheduled all at once up front using
+  // precise Web Audio timestamps (accurate; a setTimeout loop would drift).
+  const bus = ensureSfxBus();
+  if (!bus) return;
+  const now = audioCtx.currentTime;
+  const minInterval = 0.14;
+  const maxInterval = 0.62;
+  let t = 0;
+  while (t < durationS) {
+    const frac = t / durationS;
+    playHeartbeatThump(now + t);
+    const interval = maxInterval - (maxInterval - minInterval) * (frac * frac);
+    t += interval;
+  }
+}
+
+function playHeartbeatThump(startTime) {
+  const bus = ensureSfxBus();
+  if (!bus) return;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  const g = audioCtx.createGain();
+  osc.connect(g); g.connect(bus);
+  osc.frequency.setValueAtTime(70, startTime);
+  g.gain.setValueAtTime(0.0001, startTime);
+  g.gain.exponentialRampToValueAtTime(0.16, startTime + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.12);
+  osc.start(startTime);
+  osc.stop(startTime + 0.15);
 }
 
 function playFizzleSound() {
@@ -635,11 +718,13 @@ function playChimeSound(scale) {
   const notes = scale >= 1.3
     ? [523.25, 659.25, 783.99, 1046.5, 1318.5] // mega gets a fifth, higher note
     : [523.25, 659.25, 783.99, 1046.5];
+  const reverbSend = scale >= 1.3 ? ensureReverbSend() : null; // mega only: richer, more "epic" tail
   notes.forEach((freq, i) => {
     const osc = audioCtx.createOscillator();
     osc.type = 'triangle';
     const g = audioCtx.createGain();
     osc.connect(g); g.connect(bus);
+    if (reverbSend) g.connect(reverbSend);
     const t0 = now + i * 0.09;
     osc.frequency.setValueAtTime(freq, t0);
     g.gain.setValueAtTime(0.0001, t0);
@@ -734,9 +819,14 @@ const JACKPOT_TIERS = [
   { name: 'medium', weight: 28, flash: 1.3, chime: 1.15, burst: 1.6, bass: 1.25, shake: false },
   { name: 'mega', weight: 7, flash: 1.7, chime: 1.3, burst: 2.4, bass: 1.6, shake: true },
 ];
+const MILESTONE_TIER = { name: 'milestone', flash: 2.2, chime: 1.5, burst: 3.5, bass: 2.0, shake: true };
+const MILESTONE_COUNTS = [5, 10, 25, 50, 100, 200, 500, 1000];
 const STREAK_RESET_MS = 180000; // 3 minutes without a jackpot resets the streak back to 0
+const TIER_REVEAL_DELAYS = [70, 70, 80, 90, 110, 140, 180, 230, 320]; // speeds up then settles, like a reel stopping
+const TIER_LABELS = { small: 'JACKPOT', medium: 'BIG JACKPOT', mega: 'MEGA JACKPOT', milestone: 'MILESTONE' };
 let jackpotStreak = 0;
 let lastJackpotAt = 0;
+let totalJackpotCount = 0;
 
 function pickJackpotTier() {
   const total = JACKPOT_TIERS.reduce((sum, t) => sum + t.weight, 0);
@@ -758,28 +848,75 @@ function registerJackpotStreak() {
   return jackpotStreak;
 }
 
+function registerMilestone() {
+  totalJackpotCount++;
+  return MILESTONE_COUNTS.includes(totalJackpotCount) ? totalJackpotCount : null;
+}
+
+// Rolling tier reveal: flickers through tier names before settling on the
+// real one, like a slot-machine reel - a second layer of dopamine-relevant
+// uncertainty (how big, not just whether) resolved right before the actual
+// celebration fires.
+function revealTier(tier, onDone) {
+  const el = document.getElementById('tier-reveal');
+  const order = ['small', 'medium', 'mega'];
+  el.style.display = 'block';
+  requestAnimationFrame(() => el.classList.add('show'));
+  let i = 0;
+  function step(n) {
+    const isLast = n >= TIER_REVEAL_DELAYS.length - 1;
+    const name = isLast ? tier.name : order[i++ % order.length];
+    el.innerText = TIER_LABELS[name] || name.toUpperCase();
+    el.className = 'show tier-' + name;
+    if (!isLast) {
+      setTimeout(() => step(n + 1), TIER_REVEAL_DELAYS[n]);
+    } else {
+      setTimeout(() => {
+        el.classList.remove('show');
+        setTimeout(() => { el.style.display = 'none'; }, 300);
+        onDone();
+      }, 500);
+    }
+  }
+  step(0);
+}
+
 function runPayoff() {
   anticipationRunId++; // invalidate any in-flight build-up loop (real or fake)
   anticipationActive = false;
-  const tier = pickJackpotTier();
+  clearTileGlow();
+  const milestoneCount = registerMilestone();
+  const tier = milestoneCount ? MILESTONE_TIER : pickJackpotTier();
   const streak = registerJackpotStreak();
+  revealTier(tier, () => applyPayoffEffects(tier, streak, milestoneCount));
+}
+
+function applyPayoffEffects(tier, streak, milestoneCount) {
   const theater = document.getElementById('theater-box');
   theater.style.setProperty('--flash-opacity', Math.min(0.9, 0.6 * tier.flash).toFixed(2));
   theater.style.setProperty('--flash-duration', (0.65 * Math.min(1.3, tier.flash)).toFixed(2) + 's');
   theater.style.transition = 'box-shadow 0.5s ease';
   theater.style.boxShadow = 'none';
-  clearTileGlow();
   theater.classList.add('payoff-flash');
   if (tier.shake) {
     theater.classList.add('shake-mega');
     setTimeout(() => theater.classList.remove('shake-mega'), 450);
   }
   setTimeout(() => { theater.classList.remove('payoff-flash'); theater.style.transition = ''; }, 650);
+
+  // Afterglow: a slow-fading warm wash instead of snapping straight back to
+  // normal, so the peak lingers a little rather than cutting off instantly.
+  theater.classList.remove('afterglow');
+  void theater.offsetWidth; // force reflow so the animation restarts if one was already fading
+  theater.style.setProperty('--afterglow-duration', (milestoneCount ? 22 : 10 + tier.flash * 4) + 's');
+  theater.classList.add('afterglow');
+
   uiFlare();
   playChimeSound(tier.chime);
   playBassDropSound(tier.bass);
   burstExtraFloaters(tier.burst);
-  toast('🎰 ' + (tier.name === 'mega' ? 'MEGA JACKPOT' : tier.name === 'medium' ? 'Jackpot!' : 'Jackpot') + (streak > 1 ? ' (streak ' + streak + ')' : ''));
+  const label = milestoneCount ? ('🏆 MILESTONE: ' + milestoneCount + ' JACKPOTS!') : '🎰 ' + (tier.name === 'mega' ? 'MEGA JACKPOT' : tier.name === 'medium' ? 'Jackpot!' : 'Jackpot');
+  toast(label + (streak > 1 ? ' (streak ' + streak + ')' : ''));
 }
 
 function handleAnticipationStatus(d) {
@@ -812,12 +949,12 @@ function maybeTriggerFakeNearMiss() {
 // so it has no server-side component of its own.
 const AUTOPILOT_TICK_MS = 4000;
 const AUTOPILOT_KEYFRAMES = [
-  { t: 0.00, pace: 3, barrage: 0.01, jackpot: 0.02, mosaic: false, fx: 1 },
-  { t: 0.35, pace: 2, barrage: 0.03, jackpot: 0.06, mosaic: false, fx: 2 },
-  { t: 0.60, pace: 1, barrage: 0.10, jackpot: 0.18, mosaic: true, fx: 4 },
-  { t: 0.75, pace: 0, barrage: 0.22, jackpot: 0.35, mosaic: true, fx: 6 },
-  { t: 0.85, pace: 1, barrage: 0.08, jackpot: 0.15, mosaic: true, fx: 3 },
-  { t: 1.00, pace: 3, barrage: 0.01, jackpot: 0.02, mosaic: false, fx: 1 },
+  { t: 0.00, pace: 3, barrage: 0.01, jackpot: 0.02, mosaic: false, fx: 1, novelty: 0.10 },
+  { t: 0.35, pace: 2, barrage: 0.03, jackpot: 0.06, mosaic: false, fx: 2, novelty: 0.15 },
+  { t: 0.60, pace: 1, barrage: 0.10, jackpot: 0.18, mosaic: true, fx: 4, novelty: 0.30 },
+  { t: 0.75, pace: 0, barrage: 0.22, jackpot: 0.35, mosaic: true, fx: 6, novelty: 0.50 },
+  { t: 0.85, pace: 1, barrage: 0.08, jackpot: 0.15, mosaic: true, fx: 3, novelty: 0.30 },
+  { t: 1.00, pace: 3, barrage: 0.01, jackpot: 0.02, mosaic: false, fx: 1, novelty: 0.10 },
 ];
 
 let autopilotEnabled = false;
@@ -861,11 +998,13 @@ function autopilotTick() {
 
   const barrageP = lerp(a.barrage, b.barrage, lf);
   const jackpotP = lerp(a.jackpot, b.jackpot, lf);
+  const noveltyBonus = lerp(a.novelty, b.novelty, lf);
   const fxTarget = Math.round(lerp(a.fx, b.fx, lf));
   const targetPace = lf < 0.5 ? a.pace : b.pace;
   const targetMosaic = lf < 0.5 ? a.mosaic : b.mosaic;
 
   fetch('/api/intensity?barrage=' + barrageP.toFixed(3) + '&jackpot=' + jackpotP.toFixed(3));
+  fetch('/api/novelty?bonus=' + noveltyBonus.toFixed(3));
   if (targetPace !== autopilotLastPace) { autopilotLastPace = targetPace; pace(targetPace, true); }
   if (targetMosaic !== autopilotLastMosaic) {
     autopilotLastMosaic = targetMosaic;
@@ -1008,6 +1147,8 @@ function ensureTiles(count) {
   aspectRatios = new Array(count).fill(DEFAULT_ASPECT);
   aspectKnown = new Array(count).fill(false);
   tileElements = [];
+  clearTimeout(bonusWindowTimer);
+  bonusWindowTileIndex = -1; // old tile references are about to be discarded
   for (let i = 0; i < count; i++) {
     const tile = document.createElement('div');
     tile.className = 'tile';
@@ -1129,13 +1270,58 @@ function pace(v, quiet) {
   fetch('/api/pace?mode=' + v).then(() => { if (!quiet) toast('Pace updated'); });
 }
 function vec(k, v) { fetch('/api/vector?key=' + k + '&val=' + v); }
-function rateScreen(i, dir) { fetch('/api/rate?screen=' + i + '&dir=' + dir).then(() => toast(dir === 'up' ? '👍 Reinforced' : '👎 Penalized', dir !== 'up')); }
+function rateScreen(i, dir) {
+  if (dir === 'up' && i === bonusWindowTileIndex && Date.now() < bonusWindowExpireAt) {
+    clearBonusWindow(i);
+    triggerMiniPayoff();
+  }
+  fetch('/api/rate?screen=' + i + '&dir=' + dir).then(() => toast(dir === 'up' ? '👍 Reinforced' : '👎 Penalized', dir !== 'up'));
+}
+
+// ---- Interactive bonus window ----
+// Occasionally one tile gets a golden pulse; rating it 👍 within the window
+// triggers a small payoff. Acting on it is what pays off, not passively
+// waiting - a distinct ("operant") reward trigger from the purely passive
+// jackpot/near-miss system above.
+const BONUS_WINDOW_CHECK_MS = 25000;
+const BONUS_WINDOW_PROBABILITY = 0.3;
+const BONUS_WINDOW_DURATION_MS = 5000;
+let bonusWindowTileIndex = -1;
+let bonusWindowExpireAt = 0;
+let bonusWindowTimer = null;
+
+function maybeTriggerBonusWindow() {
+  if (!anticipationFxEnabled) return;
+  if (bonusWindowTileIndex >= 0 || !tileElements.length) return;
+  if (Math.random() < BONUS_WINDOW_PROBABILITY) {
+    const idx = Math.floor(Math.random() * tileElements.length);
+    bonusWindowTileIndex = idx;
+    bonusWindowExpireAt = Date.now() + BONUS_WINDOW_DURATION_MS;
+    const tile = tileElements[idx];
+    if (tile) tile.classList.add('bonus-window');
+    bonusWindowTimer = setTimeout(() => clearBonusWindow(idx), BONUS_WINDOW_DURATION_MS);
+  }
+}
+
+function clearBonusWindow(idx) {
+  const tile = tileElements[idx];
+  if (tile) tile.classList.remove('bonus-window');
+  if (bonusWindowTileIndex === idx) bonusWindowTileIndex = -1;
+  clearTimeout(bonusWindowTimer);
+}
+
+function triggerMiniPayoff() {
+  playChimeSound(0.7);
+  burstExtraFloaters(0.5);
+  toast('✨ Bonus!');
+}
 function rateAudio(d) { fetch('/api/rate_audio?dir=' + d).then(() => toast(d === 'up' ? '🔊 Audio rated up' : '🔇 Audio penalized', d !== 'up')); }
 function nextAudio() { fetch('/api/next_audio').then(() => toast('⏭️ Audio Skipped')); }
 
 window.addEventListener('resize', () => { if (mosaicEnabled) layoutMosaic(); });
 setInterval(() => { if (mosaicEnabled) layoutMosaic(); }, MOSAIC_REFLOW_INTERVAL_MS);
 setInterval(maybeTriggerFakeNearMiss, FAKE_NEAR_MISS_CHECK_MS);
+setInterval(maybeTriggerBonusWindow, BONUS_WINDOW_CHECK_MS);
 setInterval(tickSessionTimer, 1000);
 
 window.onload = () => {

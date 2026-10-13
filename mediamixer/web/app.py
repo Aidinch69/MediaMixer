@@ -286,6 +286,15 @@ def create_app(ctx: AppContext) -> Flask:
         g.session.state.set_intensity(barrage_p, jackpot_p)
         return jsonify(ok=True)
 
+    @app.route("/api/novelty")
+    def api_novelty():
+        try:
+            bonus = float(request.args.get("bonus", ""))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="invalid value"), 400
+        g.session.state.set_exploration_bonus(bonus)
+        return jsonify(ok=True)
+
     @app.route("/api/rate")
     def api_rate():
         session = g.session

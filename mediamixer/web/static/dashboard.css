@@ -15,6 +15,15 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 @keyframes payoff-flash-anim{0%{opacity:1}100%{opacity:0}}
 .theater.shake-mega{animation:shake-mega-anim .4s 1}
 @keyframes shake-mega-anim{0%{transform:translate(0,0)}15%{transform:translate(-6px,4px)}30%{transform:translate(6px,-4px)}45%{transform:translate(-5px,-5px)}60%{transform:translate(5px,5px)}75%{transform:translate(-3px,3px)}90%{transform:translate(3px,-3px)}100%{transform:translate(0,0)}}
+.theater.afterglow::before{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(255,190,100,.22),rgba(255,190,100,0) 75%);animation:afterglow-anim var(--afterglow-duration,12s) ease-out forwards}
+@keyframes afterglow-anim{0%{opacity:1}100%{opacity:0}}
+#tier-reveal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.8);z-index:20;font-weight:bold;font-size:2.4rem;letter-spacing:2px;text-transform:uppercase;text-shadow:0 0 20px currentColor;pointer-events:none;opacity:0;transition:opacity .15s,transform .15s;color:#ffd43b}
+#tier-reveal.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+#tier-reveal.tier-small{color:#d6a3ff}
+#tier-reveal.tier-medium{color:#ffa94d}
+#tier-reveal.tier-mega,#tier-reveal.tier-milestone{color:#ffd43b;font-size:2.9rem}
+.tile.bonus-window{animation:bonus-pulse 1s ease-in-out infinite}
+@keyframes bonus-pulse{0%{box-shadow:0 0 10px rgba(255,212,59,.5) inset,0 0 10px rgba(255,212,59,.5)}50%{box-shadow:0 0 22px rgba(255,212,59,.9) inset,0 0 22px rgba(255,212,59,.9)}100%{box-shadow:0 0 10px rgba(255,212,59,.5) inset,0 0 10px rgba(255,212,59,.5)}}
 @keyframes glitch-anim{0%{transform:translate(0)}20%{transform:translate(-2px,2px)}40%{transform:translate(-2px,-2px)}60%{transform:translate(2px,2px)}80%{transform:translate(2px,-2px)}100%{transform:translate(0)}}
 .screen-grid{display:grid;gap:8px;width:100%;height:100%}
 .screen-grid.mosaic{display:flex;flex-direction:column;gap:0}

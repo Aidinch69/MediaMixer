@@ -57,6 +57,7 @@ class RuntimeState:
         # mode can ramp how often barrage/jackpot events happen over time.
         self.barrage_probability = config.barrage_probability
         self.jackpot_probability = config.jackpot_probability
+        self.exploration_bonus = config.exploration_bonus_c
 
         self.locked = False
         self.is_jackpot = False
@@ -110,6 +111,14 @@ class RuntimeState:
     def event_probabilities(self):
         with self._lock:
             return self.barrage_probability, self.jackpot_probability
+
+    def set_exploration_bonus(self, value: float):
+        with self._lock:
+            self.exploration_bonus = max(0.0, min(2.0, value))
+
+    def get_exploration_bonus(self) -> float:
+        with self._lock:
+            return self.exploration_bonus
 
     # -- skip/lock flags (set from the web thread, consumed by the control loop) --
     def request_skip(self):

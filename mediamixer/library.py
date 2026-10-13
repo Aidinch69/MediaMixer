@@ -81,12 +81,22 @@ def pick_folder(db: Database, config: Config, exclude: Optional[str] = None) -> 
 
 
 def pick_video(
-    db: Database, config: Config, folder: str, exclude: Union[str, Iterable[str], None] = None
+    db: Database,
+    config: Config,
+    folder: str,
+    exclude: Union[str, Iterable[str], None] = None,
+    exploration_bonus: Optional[float] = None,
 ) -> Optional[str]:
     """Pick a video from `folder`, avoiding `exclude` (one path, or any collection of
     paths - e.g. every video currently showing on another screen, so the same clip
-    doesn't end up playing simultaneously in two tiles)."""
+    doesn't end up playing simultaneously in two tiles).
+
+    `exploration_bonus` overrides config.exploration_bonus_c when given - e.g. an
+    auto-pilot mode can turn this up during a climax to favor fresher/rarely-played
+    clips specifically when attention is already heightened.
+    """
     now = time.time()
+    bonus = config.exploration_bonus_c if exploration_bonus is None else exploration_bonus
     rows = db.video_rewards(folder)
     if not rows:
         return None
@@ -99,7 +109,7 @@ def pick_video(
         exploration_score(
             decayed_value(r["ema_reward"], r["updated_at"], now, config.decay_halflife_s),
             r["play_count"],
-            config.exploration_bonus_c,
+            bonus,
         )
         for r in rows
     ]
