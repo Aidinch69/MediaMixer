@@ -14,13 +14,15 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QToolBar, QWidget
 
 from .anticipation import (
-    AnticipationState, BONUS_WINDOW_CHECK_S, BONUS_WINDOW_DURATION_S, FAKE_NEAR_MISS_BUILD_S,
-    FAKE_NEAR_MISS_CHECK_S, HONEST_BUILD_SAFETY_S, SURGE_CHECK_S, XP_PER_BONUS_CLAIM,
+    AnticipationState, ANTICIPATION_METER_FULL_S, BONUS_WINDOW_CHECK_S, BONUS_WINDOW_DURATION_S,
+    DUE_AURA_THRESHOLD_S, FAKE_NEAR_MISS_BUILD_S, FAKE_NEAR_MISS_CHECK_S, HONEST_BUILD_SAFETY_S,
+    MYSTERY_TILE_CHECK_S, MYSTERY_TILE_PROBABILITY, MYSTERY_TILE_DURATION_S,
+    SESSION_PRIMER_MIN_S, SESSION_PRIMER_MAX_S, SURGE_CHECK_S, XP_PER_BONUS_CLAIM,
 )
-from .anticipation_fx import GlowOverlay
+from .anticipation_fx import GlowOverlay, MeterBar
 from .autopilot import AutoPilotState
 from .controls import Controls
-from .gamification import GamificationState, RATE_XP_BASE, STREAK_WARNING_S
+from .gamification import COLOR_THEME_FLASH, GamificationState, RATE_XP_BASE, STREAK_WARNING_S
 from .mosaic import compute_mosaic_layout, uniform_layout
 from .payoff_fx import PayoffOverlay, PushLuckPrompt, TierRevealLabel, Toast
 from .quests import QuestState
@@ -61,7 +63,12 @@ class MainShell(QMainWindow):
         self.toast = Toast(central)
         self.push_luck_prompt = PushLuckPrompt(central)
         self.theater_glow = GlowOverlay(central)
+        self.anticipation_meter = MeterBar(central)
         self.statusBar().hide()  # replaced by the floating toast, which is what the browser actually had
+
+        self.tile_last_rated_at: dict[int, float] = {}
+        self.due_aura_tile_index = -1
+        self.mystery_tile_index = -1
 
         self.build_up_run_id = 0
         self.build_up_active = False
@@ -103,6 +110,23 @@ class MainShell(QMainWindow):
         self.mosaic_timer = QTimer(self)
         self.mosaic_timer.timeout.connect(self._layout_tiles)
         self.mosaic_timer.start(MOSAIC_REFLOW_INTERVAL_MS)
+
+        self.anticipation_meter_timer = QTimer(self)
+        self.anticipation_meter_timer.timeout.connect(self._tick_anticipation_meter)
+        self.anticipation_meter_timer.start(1000)
+
+        self.due_aura_timer = QTimer(self)
+        self.due_aura_timer.timeout.connect(self._tick_due_aura)
+        self.due_aura_timer.start(5000)
+
+        self.mystery_tile_timer = QTimer(self)
+        self.mystery_tile_timer.timeout.connect(self._maybe_mystery_tile)
+        self.mystery_tile_timer.start(int(MYSTERY_TILE_CHECK_S * 1000))
+
+        # Session-opening primer: guarantee a near-miss within the first
+        # ~15-25s of opening the window, so a session never starts cold
+        # waiting for the random checks to land one.
+        QTimer.singleShot(int(random.uniform(SESSION_PRIMER_MIN_S, SESSION_PRIMER_MAX_S) * 1000), self._session_primer)
 
     def _build_toolbar(self) -> None:
         bar = QToolBar("Controls")
@@ -177,6 +201,7 @@ class MainShell(QMainWindow):
         # before embedding mpv into the widget).
         QApplication.processEvents()
         self.theater_glow.raise_()
+        self.anticipation_meter.raise_()
         self.payoff_overlay.raise_()
         self.tier_reveal.raise_()
         self.toast.raise_()
@@ -241,7 +266,16 @@ class MainShell(QMainWindow):
         self.theater_glow.set_color(color)
         for tile in self.tiles:
             tile.glow.set_color(color)
+        self._tease_next_theme()
         self.build_up_timer.start(33)
+
+    def _tease_next_theme(self) -> None:
+        # A sub-second glimpse of the *next* theme in the rotation, right
+        # as a build-up starts - a coming-attractions sting. Safe even if
+        # a real jackpot later rotates the theme differently; this is
+        # purely a one-off flash, not persisted state.
+        next_color = COLOR_THEME_FLASH[(self.gamification.color_theme_index + 1) % len(COLOR_THEME_FLASH)]
+        self.payoff_overlay.flash(next_color, 0.3, 150)
 
     def _tick_buildup(self) -> None:
         elapsed = time.time() - self._build_up_start
@@ -302,6 +336,54 @@ class MainShell(QMainWindow):
             self.tiles[idx].glow.set_opacity(0.0)
         self.bonus_tile_index = -1
 
+    # ---- mystery tile / due aura / anticipation meter / session primer ----
+    def _maybe_mystery_tile(self) -> None:
+        if self.mystery_tile_index >= 0 or not self.tiles:
+            return
+        if random.random() < MYSTERY_TILE_PROBABILITY:
+            idx = random.randrange(len(self.tiles))
+            self.mystery_tile_index = idx
+            self.tiles[idx].show_mystery()
+            QTimer.singleShot(int(MYSTERY_TILE_DURATION_S * 1000), lambda: self._clear_mystery_tile(idx))
+
+    def _clear_mystery_tile(self, idx: int) -> None:
+        if self.mystery_tile_index != idx:
+            return
+        if idx < len(self.tiles):
+            self.tiles[idx].hide_mystery()
+        self.mystery_tile_index = -1
+
+    def _tick_due_aura(self) -> None:
+        # Only ever the single most-idle tile, not every tile past the
+        # threshold - an earlier version of this in the browser build
+        # animated every idle tile at once and that was heavy enough to
+        # visibly stall video playback.
+        now = time.time()
+        most_idle_tile = -1
+        most_idle_s = DUE_AURA_THRESHOLD_S
+        for i in range(len(self.tiles)):
+            idle_s = now - self.tile_last_rated_at.get(i, self.anticipation.session_started_at)
+            if idle_s > most_idle_s:
+                most_idle_s = idle_s
+                most_idle_tile = i
+        if most_idle_tile == self.due_aura_tile_index:
+            return
+        if self.due_aura_tile_index >= 0 and self.due_aura_tile_index < len(self.tiles):
+            self.tiles[self.due_aura_tile_index].glow.stop_pulse()
+        self.due_aura_tile_index = most_idle_tile
+        if most_idle_tile >= 0 and most_idle_tile != self.bonus_tile_index and not self.build_up_active:
+            self.tiles[most_idle_tile].glow.pulse("#7878ff", 0.25, 0.6, 3000)
+
+    def _tick_anticipation_meter(self) -> None:
+        last_payoff = self.gamification.last_jackpot_at or self.anticipation.session_started_at
+        elapsed = time.time() - last_payoff
+        effective = elapsed * self.anticipation.odds_multiplier(self.gamification.combo_multiplier())
+        self.anticipation_meter.set_progress(min(100.0, effective / ANTICIPATION_METER_FULL_S * 100))
+
+    def _session_primer(self) -> None:
+        if not self.build_up_active and self.last_known_barrage == 0 and not self.last_known_jackpot:
+            self._start_build_up(FAKE_NEAR_MISS_BUILD_S, False)
+
     def _on_jackpot(self, chain_depth: int = 0) -> None:
         self.build_up_run_id += 1  # invalidate any in-flight build-up loop (real or fake)
         self.build_up_active = False
@@ -352,6 +434,7 @@ class MainShell(QMainWindow):
         self._update_readouts()
 
     def _on_rated(self, index: int, direction: str) -> None:
+        self.tile_last_rated_at[index] = time.time()
         if direction == "up" and index == self.bonus_tile_index and time.time() < self.bonus_expire_at:
             self._clear_bonus_window(index)
             self.gamification.award_xp(XP_PER_BONUS_CLAIM)
@@ -414,6 +497,7 @@ class MainShell(QMainWindow):
         self.theater_glow.setGeometry(rect)
         self.payoff_overlay.setGeometry(rect)
         self.tier_reveal.setGeometry(rect)
+        self.anticipation_meter.setGeometry(0, 0, rect.width(), 4)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

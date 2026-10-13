@@ -16,7 +16,7 @@ if os.path.isdir(_NATIVE_DEPS):
     os.environ["PATH"] = _NATIVE_DEPS + os.pathsep + os.environ["PATH"]
 
 import mpv  # noqa: E402
-from PySide6.QtCore import Signal  # noqa: E402
+from PySide6.QtCore import Qt, Signal  # noqa: E402
 from PySide6.QtWidgets import QWidget, QLabel, QPushButton  # noqa: E402
 
 from .anticipation_fx import GlowOverlay  # noqa: E402
@@ -51,9 +51,22 @@ class VideoTile(QWidget):
         self.glow = GlowOverlay(self)
         self.glow.setGeometry(self.rect())
 
+        # Mystery tile: a pure curiosity-gap hit. True CSS-style blur
+        # can't apply to mpv's native embedded surface (same reason the
+        # rating buttons needed manual z-order fixing - a native child
+        # window bypasses Qt's own graphics-effect pipeline entirely), so
+        # this covers the tile solidly instead of blurring it.
+        self.mystery_label = QLabel("?", self)
+        self.mystery_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.mystery_label.setStyleSheet(
+            "color: white; background-color: rgba(10,5,20,235); font-size: 28px; font-weight: bold;"
+        )
+        self.mystery_label.setGeometry(self.rect())
+        self.mystery_label.hide()
+
         self.label = QLabel("", self)
         self.label.setStyleSheet(
-            "color: white; background: rgba(0,0,0,.6); font-size: 11px; font-family: monospace;"
+            "color: white; background: rgba(0,0,0,153); font-size: 11px; font-family: monospace;"
             "padding: 2px 6px; border-radius: 4px;"
         )
         self.label.move(4, 4)
@@ -81,6 +94,7 @@ class VideoTile(QWidget):
         super().resizeEvent(event)
         self.video_surface.setGeometry(0, 0, self.width(), self.height())
         self.glow.setGeometry(0, 0, self.width(), self.height())
+        self.mystery_label.setGeometry(0, 0, self.width(), self.height())
         self.down_btn.move(self.width() - 30, self.height() - 30)
         self.up_btn.move(self.width() - 60, self.height() - 30)
         # Re-assert z-order on every resize too, since some platforms
@@ -90,9 +104,17 @@ class VideoTile(QWidget):
 
     def _raise_overlays(self) -> None:
         self.glow.raise_()
+        self.mystery_label.raise_()
         self.label.raise_()
         self.up_btn.raise_()
         self.down_btn.raise_()
+
+    def show_mystery(self) -> None:
+        self.mystery_label.show()
+        self.mystery_label.raise_()
+
+    def hide_mystery(self) -> None:
+        self.mystery_label.hide()
 
     def ensure_player(self) -> None:
         if self._player is not None:
