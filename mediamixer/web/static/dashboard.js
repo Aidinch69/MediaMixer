@@ -775,6 +775,21 @@ function playBassDropSound(scale) {
   osc.stop(now + 0.6);
 }
 
+// Weighted tile glow: on a real barrage, 1-2 tiles get picked to glow
+// noticeably brighter than the rest right at the start of the build-up,
+// fading toward even as general intensity catches up - a sense of
+// "something's choosing" rather than everything lighting up at once.
+function pickWeightedTiles() {
+  if (!tileElements.length) return [];
+  const count = tileElements.length >= 2 && Math.random() < 0.5 ? 2 : 1;
+  const indices = [];
+  while (indices.length < count && indices.length < tileElements.length) {
+    const idx = Math.floor(Math.random() * tileElements.length);
+    if (!indices.includes(idx)) indices.push(idx);
+  }
+  return indices;
+}
+
 function runAnticipationBuildUp(durationS, isReal) {
   if (!anticipationFxEnabled) return;
   anticipationActive = true;
@@ -782,14 +797,20 @@ function runAnticipationBuildUp(durationS, isReal) {
   const theater = document.getElementById('theater-box');
   theater.style.transition = 'none';
   teaseNextTheme(theater);
-  playRiserSound(durationS);
+  // Variable build-up length: the shape of the tension, not just whether
+  // it resolves, is part of the uncertainty. Purely a visual/audio pacing
+  // change - a real jackpot's actual timing is still driven by the status
+  // stream, not by this duration.
+  const variedDuration = durationS * (0.7 + Math.random() * 0.9);
+  playRiserSound(variedDuration);
   const start = performance.now();
   const glowRgb = currentThemeRgb('--theme-glow', '255,70,30');
+  const weightedTiles = isReal ? pickWeightedTiles() : [];
 
   function tick() {
     if (runId !== anticipationRunId) return;
     const elapsed = (performance.now() - start) / 1000;
-    const progress = Math.min(1, elapsed / durationS);
+    const progress = Math.min(1, elapsed / variedDuration);
     const intensity = progress * progress; // ease-in: stays subtle, then ramps hard near the end
     const freq = 2 + intensity * 10;
     const glow = 10 + intensity * 55;
@@ -800,8 +821,13 @@ function runAnticipationBuildUp(durationS, isReal) {
     // outside the 3-30Hz flash range that can trigger photosensitive seizures)
     // so the eye is drawn to the grid without any rapid on/off flashing.
     const tileGlowPx = (6 + intensity * 20) * pulse;
-    const tileGlowAlpha = (0.15 + intensity * 0.5).toFixed(2);
-    tileElements.forEach(t => { t.style.boxShadow = `0 0 ${tileGlowPx.toFixed(1)}px rgba(${glowRgb},${tileGlowAlpha})`; });
+    const tileGlowAlpha = 0.15 + intensity * 0.5;
+    tileElements.forEach((t, idx) => {
+      const weightedFade = weightedTiles.includes(idx) ? (1 - intensity) : 0;
+      const px = tileGlowPx + weightedFade * 16;
+      const alpha = Math.min(0.95, tileGlowAlpha + weightedFade * 0.25);
+      t.style.boxShadow = `0 0 ${px.toFixed(1)}px rgba(${glowRgb},${alpha.toFixed(2)})`;
+    });
     if (progress < 1) {
       requestAnimationFrame(tick);
     } else if (!isReal) {
