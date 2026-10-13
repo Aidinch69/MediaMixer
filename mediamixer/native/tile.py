@@ -19,6 +19,8 @@ import mpv  # noqa: E402
 from PySide6.QtCore import Signal  # noqa: E402
 from PySide6.QtWidgets import QWidget, QLabel, QPushButton  # noqa: E402
 
+from .anticipation_fx import GlowOverlay  # noqa: E402
+
 
 class VideoTile(QWidget):
     rated = Signal(int, str)  # (tile index, "up"/"down") - shell.py uses this for combo/XP bookkeeping
@@ -42,6 +44,12 @@ class VideoTile(QWidget):
         self.video_surface = QWidget(self)
         self.video_surface.setStyleSheet("background-color: black;")
         self.video_surface.setGeometry(self.rect())
+
+        # Build-up tension pulse and bonus-window highlight both use this
+        # one overlay (a tile rarely needs both at once) - raised above
+        # the video surface but kept below the label/buttons.
+        self.glow = GlowOverlay(self)
+        self.glow.setGeometry(self.rect())
 
         self.label = QLabel("", self)
         self.label.setStyleSheet(
@@ -72,11 +80,16 @@ class VideoTile(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.video_surface.setGeometry(0, 0, self.width(), self.height())
+        self.glow.setGeometry(0, 0, self.width(), self.height())
         self.down_btn.move(self.width() - 30, self.height() - 30)
         self.up_btn.move(self.width() - 60, self.height() - 30)
         # Re-assert z-order on every resize too, since some platforms
         # re-raise native child windows to the top as a side effect of
         # a resize/geometry change.
+        self._raise_overlays()
+
+    def _raise_overlays(self) -> None:
+        self.glow.raise_()
         self.label.raise_()
         self.up_btn.raise_()
         self.down_btn.raise_()
@@ -85,9 +98,7 @@ class VideoTile(QWidget):
         if self._player is not None:
             return
         self._player = mpv.MPV(wid=int(self.video_surface.winId()), vid="auto", hwdec="auto", mute=True, loop_file="no")
-        self.label.raise_()
-        self.up_btn.raise_()
-        self.down_btn.raise_()
+        self._raise_overlays()
 
         @self._player.property_observer("eof-reached")
         def _on_eof(_name, value):

@@ -5,10 +5,19 @@ ensureTiles(), reading the exact same snapshot shape over the wire.
 """
 from __future__ import annotations
 
+import math
+import random
+import time
+
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QGridLayout, QLabel, QMainWindow, QToolBar, QWidget
 
+from .anticipation import (
+    AnticipationState, BONUS_WINDOW_CHECK_S, BONUS_WINDOW_DURATION_S, FAKE_NEAR_MISS_BUILD_S,
+    FAKE_NEAR_MISS_CHECK_S, HONEST_BUILD_SAFETY_S, SURGE_CHECK_S, XP_PER_BONUS_CLAIM,
+)
+from .anticipation_fx import GlowOverlay
 from .controls import Controls
 from .gamification import GamificationState, RATE_XP_BASE, STREAK_WARNING_S
 from .payoff_fx import PayoffOverlay, PushLuckPrompt, TierRevealLabel, Toast
@@ -41,12 +50,26 @@ class MainShell(QMainWindow):
 
         self.gamification = GamificationState()
         self.quests = QuestState()
+        self.anticipation = AnticipationState()
         self.last_known_jackpot = False
+        self.last_known_barrage = 0
         self.payoff_overlay = PayoffOverlay(central)
         self.tier_reveal = TierRevealLabel(central)
         self.toast = Toast(central)
         self.push_luck_prompt = PushLuckPrompt(central)
+        self.theater_glow = GlowOverlay(central)
         self.statusBar().hide()  # replaced by the floating toast, which is what the browser actually had
+
+        self.build_up_run_id = 0
+        self.build_up_active = False
+        self.build_up_is_real = False
+        self._build_up_start = 0.0
+        self._build_up_duration = 1.0
+        self.build_up_timer = QTimer(self)
+        self.build_up_timer.timeout.connect(self._tick_buildup)
+
+        self.bonus_tile_index = -1
+        self.bonus_expire_at = 0.0
 
         self._build_toolbar()
         self._sync_overlay_geometry()
@@ -56,6 +79,18 @@ class MainShell(QMainWindow):
         self.streak_timer = QTimer(self)
         self.streak_timer.timeout.connect(self._tick_streak_warning)
         self.streak_timer.start(1000)
+
+        self.near_miss_timer = QTimer(self)
+        self.near_miss_timer.timeout.connect(self._maybe_near_miss)
+        self.near_miss_timer.start(int(FAKE_NEAR_MISS_CHECK_S * 1000))
+
+        self.bonus_check_timer = QTimer(self)
+        self.bonus_check_timer.timeout.connect(self._maybe_bonus_window)
+        self.bonus_check_timer.start(int(BONUS_WINDOW_CHECK_S * 1000))
+
+        self.surge_timer = QTimer(self)
+        self.surge_timer.timeout.connect(self.anticipation.maybe_trigger_surge)
+        self.surge_timer.start(int(SURGE_CHECK_S * 1000))
 
     def _build_toolbar(self) -> None:
         bar = QToolBar("Controls")
@@ -121,6 +156,7 @@ class MainShell(QMainWindow):
         # the validated Phase 0 spike used: show() then processEvents()
         # before embedding mpv into the widget).
         QApplication.processEvents()
+        self.theater_glow.raise_()
         self.payoff_overlay.raise_()
         self.tier_reveal.raise_()
         self.toast.raise_()
@@ -144,12 +180,94 @@ class MainShell(QMainWindow):
             name = path.rsplit("/", 1)[-1]
             self.tiles[i].set_source(path, url, name)
 
+        barrage = int(snapshot.get("barrage") or 0)
         jackpot = bool(snapshot.get("jackpot"))
+
+        if barrage > 0 and not self.build_up_active:
+            self._start_build_up(max(1.5, barrage * 1.8), True)
         if jackpot and not self.last_known_jackpot:
             self._on_jackpot()
+
+        self.last_known_barrage = barrage
         self.last_known_jackpot = jackpot
 
+    # ---- anticipation build-up (real barrage or fake near-miss) ----
+    def _start_build_up(self, duration_s: float, is_real: bool) -> None:
+        self.build_up_run_id += 1
+        self.build_up_active = True
+        self.build_up_is_real = is_real
+        self._build_up_start = time.time()
+        self._build_up_duration = duration_s
+        color = self.gamification.current_flash_color()
+        self.theater_glow.set_color(color)
+        for tile in self.tiles:
+            tile.glow.set_color(color)
+        self.build_up_timer.start(33)
+
+    def _tick_buildup(self) -> None:
+        elapsed = time.time() - self._build_up_start
+        progress = min(1.0, elapsed / self._build_up_duration)
+        intensity = progress * progress
+        pulse = 0.5 + 0.5 * math.sin(elapsed * (2 + intensity * 10))
+        theater_alpha = min(1.0, (0.15 + intensity * 0.65) * (0.6 + 0.4 * pulse))
+        tile_alpha = min(1.0, (0.15 + intensity * 0.5) * (0.65 + 0.35 * pulse))
+        self.theater_glow.set_opacity(theater_alpha)
+        for tile in self.tiles:
+            tile.glow.set_opacity(tile_alpha)
+
+        if progress >= 1.0:
+            self.build_up_timer.stop()
+            if self.build_up_is_real:
+                # Peak reached before the real jackpot landed yet - hold,
+                # then a safety net in case it never actually arrives.
+                run_id = self.build_up_run_id
+                QTimer.singleShot(int(HONEST_BUILD_SAFETY_S * 1000), lambda: self._safety_fizzle(run_id))
+            else:
+                self._clear_build_up_glow()
+                self.build_up_active = False
+
+    def _safety_fizzle(self, run_id: int) -> None:
+        if run_id != self.build_up_run_id or not self.build_up_active:
+            return
+        self._clear_build_up_glow()
+        self.build_up_active = False
+
+    def _clear_build_up_glow(self) -> None:
+        self.theater_glow.set_opacity(0.0)
+        for tile in self.tiles:
+            tile.glow.set_opacity(0.0)
+
+    def _maybe_near_miss(self) -> None:
+        if self.build_up_active or self.last_known_barrage > 0 or self.last_known_jackpot:
+            return
+        if self.anticipation.maybe_fake_near_miss(self.gamification.combo_multiplier()):
+            self._start_build_up(FAKE_NEAR_MISS_BUILD_S, False)
+
+    # ---- bonus window ----
+    def _maybe_bonus_window(self) -> None:
+        if self.bonus_tile_index >= 0 or not self.tiles:
+            return
+        if self.anticipation.maybe_bonus_window(self.gamification.combo_multiplier()):
+            idx = random.randrange(len(self.tiles))
+            self.bonus_tile_index = idx
+            self.bonus_expire_at = time.time() + BONUS_WINDOW_DURATION_S
+            tile = self.tiles[idx]
+            tile.glow.set_color("#ffd43b")
+            tile.glow.set_opacity(0.6)
+            QTimer.singleShot(int(BONUS_WINDOW_DURATION_S * 1000), lambda: self._clear_bonus_window(idx))
+
+    def _clear_bonus_window(self, idx: int) -> None:
+        if self.bonus_tile_index != idx:
+            return
+        if idx < len(self.tiles):
+            self.tiles[idx].glow.set_opacity(0.0)
+        self.bonus_tile_index = -1
+
     def _on_jackpot(self, chain_depth: int = 0) -> None:
+        self.build_up_run_id += 1  # invalidate any in-flight build-up loop (real or fake)
+        self.build_up_active = False
+        self.build_up_timer.stop()
+        self._clear_build_up_glow()
         result = self.gamification.process_jackpot(chain_depth)
         self._update_readouts()
         tier = result["tier"]
@@ -194,7 +312,12 @@ class MainShell(QMainWindow):
             self.toast.show_message("\U0001F4A5 Pushed and lost the streak!", negative=True)
         self._update_readouts()
 
-    def _on_rated(self, _index: int, direction: str) -> None:
+    def _on_rated(self, index: int, direction: str) -> None:
+        if direction == "up" and index == self.bonus_tile_index and time.time() < self.bonus_expire_at:
+            self._clear_bonus_window(index)
+            self.gamification.award_xp(XP_PER_BONUS_CLAIM)
+            self.toast.show_message("✨ Bonus!")
+
         mult = self.gamification.register_combo()
         self.gamification.award_xp(round(RATE_XP_BASE * mult))
         quest_msgs = self.quests.increment("rates", self.gamification.award_xp)
@@ -238,6 +361,7 @@ class MainShell(QMainWindow):
 
     def _sync_overlay_geometry(self) -> None:
         rect = self.centralWidget().rect()
+        self.theater_glow.setGeometry(rect)
         self.payoff_overlay.setGeometry(rect)
         self.tier_reveal.setGeometry(rect)
 
