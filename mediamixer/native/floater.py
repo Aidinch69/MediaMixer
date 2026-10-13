@@ -1,7 +1,14 @@
 """A single Floating Overlay FX sprite: a small muted mpv-backed widget
-that drifts across the grid and fades in/out, then destroys itself.
-Native port of dashboard.js's drifting video sprites, using
-QPropertyAnimation for the drift/fade instead of CSS transitions.
+that drifts across the grid, then destroys itself. Native port of
+dashboard.js's drifting video sprites.
+
+No fade in/out: two prior attempts (a QGraphicsOpacityEffect on an
+ancestor of the native embedded window, then a translucent covering
+widget) both failed to render the video correctly - Qt's effect/
+translucency compositing doesn't reliably blend with a native embedded
+child window (mpv's surface), only with other Qt-rendered content.
+Rather than keep guessing at workarounds, the floater just appears at
+full visibility and disappears outright; only position animates.
 
 Muted deliberately - floaters are a decorative layer; the grid tiles
 and binaural tone already carry the session's primary audio.
@@ -17,7 +24,7 @@ if os.path.isdir(_NATIVE_DEPS):
 
 import mpv  # noqa: E402
 from PySide6.QtCore import Qt, QEasingCurve, QPoint, QPropertyAnimation  # noqa: E402
-from PySide6.QtWidgets import QApplication, QGraphicsOpacityEffect, QWidget  # noqa: E402
+from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 
 class FloaterSprite(QWidget):
@@ -29,47 +36,29 @@ class FloaterSprite(QWidget):
         self._on_finished = on_finished
         self.setFixedSize(size, size)
 
-        # mpv embeds into this dedicated child, not self - same reason
-        # VideoTile does it this way: a native embedded window always
-        # paints above regular Qt sibling widgets, so the vignette/fade
-        # cover have to live on separate layers raised above it.
+        # mpv embeds into this dedicated child, not self - a native
+        # embedded window always paints above regular Qt sibling
+        # widgets, so the vignette has to live on a separate layer
+        # raised above it, same pattern as VideoTile.
         self.video_surface = QWidget(self)
         self.video_surface.setGeometry(0, 0, size, size)
         self.video_surface.setStyleSheet("background-color: black;")
 
         # Vignette: a radial gradient fading from transparent at the
-        # center to the grid's background color at the edge. Qt can't
-        # alpha-mask a native embedded window directly (no equivalent of
-        # the browser's CSS mask-image on this content), so this
-        # approximates the same soft-edge look by blending into the
-        # background color behind it instead of true alpha transparency.
+        # center to the grid's background color at the edge - the
+        # native embedded window can't be alpha-masked directly (no
+        # equivalent of the browser's CSS mask-image), so this
+        # approximates the soft-edge look by blending into the
+        # background color instead. `opacity` scales how solid the
+        # outer ring gets, since the sprite no longer fades as a whole.
+        edge_alpha = max(40, min(255, int(opacity * 255)))
         self.vignette = QWidget(self)
         self.vignette.setGeometry(0, 0, size, size)
         self.vignette.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.vignette.setStyleSheet(
             "background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5,"
-            " stop:0 rgba(0,0,0,0), stop:0.6 rgba(0,0,0,0), stop:1 rgba(5,2,10,255));"
+            f" stop:0 rgba(0,0,0,0), stop:0.6 rgba(0,0,0,0), stop:1 rgba(5,2,10,{edge_alpha}));"
         )
-
-        # Fade in/out: a QGraphicsOpacityEffect on self (or any ancestor
-        # of video_surface) renders solid black instead of the video -
-        # Qt can't capture a native embedded window's pixels into its
-        # own offscreen compositing buffer for an effect, so wrapping
-        # the native content in one just blanks it. Fading a separate
-        # covering widget (no native descendant) up/down instead gets
-        # the same "appears, drifts, disappears" feel by covering and
-        # uncovering the video rather than truly blending it with
-        # whatever's behind - an approximation, not pixel-identical to
-        # the browser's continuously-translucent sprite, but this is a
-        # genuine limitation of embedding a native video window, not a
-        # setting to tune further.
-        self.fade_cover = QWidget(self)
-        self.fade_cover.setGeometry(0, 0, size, size)
-        self.fade_cover.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.fade_cover.setStyleSheet("background-color: #05020a;")
-        self._cover_effect = QGraphicsOpacityEffect(self.fade_cover)
-        self._cover_effect.setOpacity(1.0)
-        self.fade_cover.setGraphicsEffect(self._cover_effect)
 
         self.move(*start)
         self.show()
@@ -81,8 +70,8 @@ class FloaterSprite(QWidget):
             self._player = mpv.MPV(wid=int(self.video_surface.winId()), vid="auto", hwdec="auto", mute=True, loop_file="inf")
             self._player.play(url)
             self.vignette.raise_()  # mpv's own native window can reset z-order on creation
-            self.fade_cover.raise_()
-        except Exception:
+        except Exception as e:
+            print(f"[floater] mpv embed failed: {e}", flush=True)
             self._player = None
 
         self._pos_anim = QPropertyAnimation(self, b"pos")
@@ -90,17 +79,8 @@ class FloaterSprite(QWidget):
         self._pos_anim.setStartValue(QPoint(*start))
         self._pos_anim.setEndValue(QPoint(*end))
         self._pos_anim.setEasingCurve(QEasingCurve.Type.InOutSine)
-
-        self._opacity_anim = QPropertyAnimation(self._cover_effect, b"opacity")
-        self._opacity_anim.setDuration(duration_ms)
-        self._opacity_anim.setKeyValueAt(0.0, 1.0)
-        self._opacity_anim.setKeyValueAt(0.15, 1.0 - opacity)
-        self._opacity_anim.setKeyValueAt(0.85, 1.0 - opacity)
-        self._opacity_anim.setKeyValueAt(1.0, 1.0)
-        self._opacity_anim.finished.connect(self._finish)
-
+        self._pos_anim.finished.connect(self._finish)
         self._pos_anim.start()
-        self._opacity_anim.start()
 
     def _finish(self) -> None:
         self.shutdown()
