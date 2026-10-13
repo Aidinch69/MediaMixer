@@ -7,7 +7,7 @@ of CSS keyframes/requestAnimationFrame.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer, QPropertyAnimation
-from PySide6.QtWidgets import QGraphicsOpacityEffect, QLabel, QWidget
+from PySide6.QtWidgets import QGraphicsOpacityEffect, QHBoxLayout, QLabel, QPushButton, QWidget
 
 TIER_LABELS = {"small": "JACKPOT", "medium": "BIG JACKPOT", "mega": "MEGA JACKPOT", "milestone": "MILESTONE"}
 TIER_COLORS = {"small": "#d6a3ff", "medium": "#ffa94d", "mega": "#ffd43b", "milestone": "#ffd43b"}
@@ -108,3 +108,61 @@ class Toast(QLabel):
         self.show()
         self.raise_()
         self._timer.start(duration_ms)
+
+
+class PushLuckPrompt(QWidget):
+    """A short voluntary window after a payoff settles: bank the win as-is,
+    or push for a second roll that can grant a bonus or cost the streak.
+    Doing nothing auto-banks - mirrors dashboard.js's showPushLuckPrompt().
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet(
+            "background-color:#150a28; border:1px solid #b84dff; border-radius:8px;"
+        )
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(10)
+        label = QLabel("Push your luck?")
+        label.setStyleSheet("color:white; font-weight:bold; background:transparent; border:none;")
+        self.bank_btn = QPushButton("\U0001F3E6 Bank")
+        self.push_btn = QPushButton("\U0001F3B2 Push")
+        layout.addWidget(label)
+        layout.addWidget(self.bank_btn)
+        layout.addWidget(self.push_btn)
+
+        self._on_bank = None
+        self._on_push = None
+        self.bank_btn.clicked.connect(self._resolve_bank)
+        self.push_btn.clicked.connect(self._resolve_push)
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._resolve_bank)
+        self.hide()
+
+    def show_prompt(self, on_bank, on_push, window_ms: int = 6000) -> None:
+        if self.isVisible():
+            self._resolve_bank()  # settle any prior prompt quietly first
+        self._on_bank = on_bank
+        self._on_push = on_push
+        self.adjustSize()
+        parent_rect = self.parentWidget().rect()
+        self.move((parent_rect.width() - self.width()) // 2, int(parent_rect.height() * 0.58))
+        self.show()
+        self.raise_()
+        self._timer.start(window_ms)
+
+    def _resolve_bank(self) -> None:
+        self.hide()
+        self._timer.stop()
+        cb, self._on_bank, self._on_push = self._on_bank, None, None
+        if cb:
+            cb()
+
+    def _resolve_push(self) -> None:
+        self.hide()
+        self._timer.stop()
+        cb, self._on_bank, self._on_push = self._on_push, None, None
+        if cb:
+            cb()

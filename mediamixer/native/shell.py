@@ -11,7 +11,8 @@ from PySide6.QtWidgets import QApplication, QGridLayout, QLabel, QMainWindow, QT
 
 from .controls import Controls
 from .gamification import GamificationState, RATE_XP_BASE, STREAK_WARNING_S
-from .payoff_fx import PayoffOverlay, TierRevealLabel, Toast
+from .payoff_fx import PayoffOverlay, PushLuckPrompt, TierRevealLabel, Toast
+from .quests import QuestState
 from .tile import VideoTile
 
 LAYOUT_LABELS = {
@@ -39,10 +40,12 @@ class MainShell(QMainWindow):
         self.current_tile_count: int | None = None
 
         self.gamification = GamificationState()
+        self.quests = QuestState()
         self.last_known_jackpot = False
         self.payoff_overlay = PayoffOverlay(central)
         self.tier_reveal = TierRevealLabel(central)
         self.toast = Toast(central)
+        self.push_luck_prompt = PushLuckPrompt(central)
         self.statusBar().hide()  # replaced by the floating toast, which is what the browser actually had
 
         self._build_toolbar()
@@ -92,6 +95,11 @@ class MainShell(QMainWindow):
         self.prestige_action.setVisible(False)
         bar.addAction(self.prestige_action)
 
+        bar.addSeparator()
+        self.quest_label = QLabel("")
+        self.quest_label.setStyleSheet("padding: 0 8px;")
+        bar.addWidget(self.quest_label)
+
     def _rebuild_grid(self, tile_count: int, columns: int) -> None:
         for tile in self.tiles:
             tile.shutdown()
@@ -116,6 +124,7 @@ class MainShell(QMainWindow):
         self.payoff_overlay.raise_()
         self.tier_reveal.raise_()
         self.toast.raise_()
+        self.push_luck_prompt.raise_()
 
     def on_status(self, snapshot: dict) -> None:
         screens = snapshot.get("screens") or []
@@ -140,18 +149,22 @@ class MainShell(QMainWindow):
             self._on_jackpot()
         self.last_known_jackpot = jackpot
 
-    def _on_jackpot(self) -> None:
-        result = self.gamification.process_jackpot()
-        tier = result["tier"]
-        self.payoff_overlay.flash("#ffd166", min(0.75, 0.45 * tier["flash"]), int(650 * min(1.3, tier["flash"])))
-        self.tier_reveal.reveal(tier["name"], lambda: None)
+    def _on_jackpot(self, chain_depth: int = 0) -> None:
+        result = self.gamification.process_jackpot(chain_depth)
         self._update_readouts()
+        tier = result["tier"]
+        self.tier_reveal.reveal(tier["name"], lambda: self._after_reveal(result, chain_depth))
+
+    def _after_reveal(self, result: dict, chain_depth: int) -> None:
+        tier = result["tier"]
+        flash_color = self.gamification.current_flash_color()
+        self.payoff_overlay.flash(flash_color, min(0.75, 0.45 * tier["flash"]), int(650 * min(1.3, tier["flash"])))
 
         if result["milestone"]:
             label = f"\U0001F3C6 MILESTONE: {result['milestone']} JACKPOTS!"
         else:
             label = {"small": "Jackpot!", "medium": "Big Jackpot!", "mega": "MEGA JACKPOT!"}[tier["name"]]
-        prefix = "\U0001F525 SAVED! " if result["was_at_risk"] else ""
+        prefix = ("⛓ CHAIN! " if chain_depth > 0 else "") + ("\U0001F525 SAVED! " if result["was_at_risk"] else "")
         suffix = f" (streak {result['streak']})" if result["streak"] > 1 else ""
         self.toast.show_message(prefix + label + suffix, duration_ms=3000)
         if result["leveled_up"]:
@@ -161,15 +174,37 @@ class MainShell(QMainWindow):
                 f"\U0001F3C5 New best: {result['milestone']}th jackpot in {result['milestone_elapsed_s']}s!",
                 duration_ms=3000,
             )
+        for msg in self.quests.increment("jackpots", self.gamification.award_xp):
+            self.toast.show_message(msg, duration_ms=3000)
+        self._update_readouts()
+
+        if result["will_chain"]:
+            QTimer.singleShot(900, lambda: self._on_jackpot(chain_depth + 1))
+        else:
+            self.push_luck_prompt.show_prompt(self._bank_win, self._push_luck)
+
+    def _bank_win(self) -> None:
+        self.toast.show_message("\U0001F3E6 Banked.")
+
+    def _push_luck(self) -> None:
+        result = self.gamification.push_luck()
+        if result["won"]:
+            self.toast.show_message(f"\U0001F389 Pushed and won +{result['bonus']}xp!")
+        else:
+            self.toast.show_message("\U0001F4A5 Pushed and lost the streak!", negative=True)
+        self._update_readouts()
 
     def _on_rated(self, _index: int, direction: str) -> None:
         mult = self.gamification.register_combo()
         self.gamification.award_xp(round(RATE_XP_BASE * mult))
+        quest_msgs = self.quests.increment("rates", self.gamification.award_xp)
         self._update_readouts()
         if direction == "up":
             self.toast.show_message("\U0001F44D Reinforced")
         else:
             self.toast.show_message("\U0001F44E Penalized", negative=True)
+        for msg in quest_msgs:
+            self.toast.show_message(msg, duration_ms=3000)
 
     def _on_prestige(self) -> None:
         self.gamification.prestige()
@@ -199,6 +234,7 @@ class MainShell(QMainWindow):
         self.combo_label.setText(f"x{mult:.2f} combo" if mult > 1 else "")
         self.bests_label.setText(f"Best streak: {g.best_streak} · Lifetime jackpots: {g.lifetime_jackpots}")
         self.prestige_action.setVisible(g.can_prestige())
+        self.quest_label.setText(self.quests.summary_text())
 
     def _sync_overlay_geometry(self) -> None:
         rect = self.centralWidget().rect()

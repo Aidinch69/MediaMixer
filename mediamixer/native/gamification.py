@@ -28,6 +28,22 @@ XP_PER_TIER = {"small": 10, "medium": 20, "mega": 40, "milestone": 60}
 RATE_XP_BASE = 2
 COMBO_WINDOW_S = 4
 PRESTIGE_LEVEL_CAP = 20
+CHAIN_BASE_PROBABILITY = 0.3
+MAX_CHAIN_DEPTH = 2
+PUSH_LUCK_BONUS_BASE = 25
+
+# Rotating color themes: each real jackpot shifts the flash color for the
+# next payoff - partly variety (a long session's payoff flash doesn't go
+# visually stale), matching dashboard.js's COLOR_THEMES/rotateColorTheme().
+COLOR_THEME_FLASH = ["#ffdc78", "#dca0ff", "#a0ffc8", "#a0d2ff", "#ffaac8"]
+
+
+def _decide_chain(tier_name: str, chain_depth: int) -> bool:
+    if chain_depth >= MAX_CHAIN_DEPTH:
+        return False
+    if tier_name not in ("mega", "milestone"):
+        return False
+    return random.random() < CHAIN_BASE_PROBABILITY * (0.5 ** chain_depth)
 
 
 def xp_for_level(level: int) -> int:
@@ -48,6 +64,7 @@ class GamificationState:
         self.best_milestone_seconds: dict[int, int] = {}
         self.combo_count = 0
         self.combo_expire_at = 0.0
+        self.color_theme_index = 0  # not persisted - resets each session, matching the browser
         self.session_started_at = time.time()
         self._load()
 
@@ -115,6 +132,23 @@ class GamificationState:
     def combo_multiplier(self) -> float:
         return min(3.0, 1 + (self.combo_count - 1) * 0.25) if time.time() < self.combo_expire_at else 1.0
 
+    # ---- press-your-luck ----
+    def push_luck(self) -> dict:
+        won = random.random() < 0.5
+        if won:
+            bonus = round(PUSH_LUCK_BONUS_BASE * self.combo_multiplier())
+            self.award_xp(bonus)
+            return {"won": True, "bonus": bonus}
+        self.jackpot_streak = 0
+        return {"won": False}
+
+    # ---- color theme ----
+    def rotate_theme(self) -> None:
+        self.color_theme_index += 1
+
+    def current_flash_color(self) -> str:
+        return COLOR_THEME_FLASH[self.color_theme_index % len(COLOR_THEME_FLASH)]
+
     # ---- jackpot / streak / milestone ----
     def _pick_tier(self) -> dict:
         total = sum(t["weight"] for t in JACKPOT_TIERS)
@@ -130,12 +164,14 @@ class GamificationState:
             return None
         return STREAK_RESET_S - (time.time() - self.last_jackpot_at)
 
-    def process_jackpot(self) -> dict:
+    def process_jackpot(self, chain_depth: int = 0) -> dict:
         """Call when the backend reports a real jackpot (snapshot["jackpot"]
-        flips True). Returns a result dict describing what happened, for
-        the shell to render - mirrors runPayoff() in dashboard.js."""
+        flips True), or again from a chain re-trigger. Returns a result
+        dict describing what happened, for the shell to render - mirrors
+        runPayoff() in dashboard.js."""
         now = time.time()
         was_at_risk = self.jackpot_streak > 1 and (now - self.last_jackpot_at) >= (STREAK_RESET_S - STREAK_WARNING_S)
+        self.rotate_theme()
 
         self.total_jackpot_count += 1
         milestone = self.total_jackpot_count if self.total_jackpot_count in MILESTONE_COUNTS else None
@@ -169,4 +205,5 @@ class GamificationState:
             "leveled_up": leveled_up,
             "new_milestone_record": new_milestone_record,
             "milestone_elapsed_s": self.best_milestone_seconds.get(milestone) if milestone else None,
+            "will_chain": _decide_chain(tier["name"], chain_depth),
         }
