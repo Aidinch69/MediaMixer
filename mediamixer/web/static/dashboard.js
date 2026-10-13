@@ -735,6 +735,28 @@ function playChimeSound(scale) {
   });
 }
 
+// A short, distinct two-note blip (square wave, not the chime's triangle)
+// layered on top of the normal payoff when a jackpot lands right inside
+// the streak-reset warning window - a "just made it" cue, not a bigger one.
+function playClutchSting() {
+  const bus = ensureSfxBus();
+  if (!bus) return;
+  const now = audioCtx.currentTime;
+  [880, 1174.66].forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'square';
+    const g = audioCtx.createGain();
+    osc.connect(g); g.connect(bus);
+    const t0 = now + i * 0.07;
+    osc.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.18, t0 + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+    osc.start(t0);
+    osc.stop(t0 + 0.2);
+  });
+}
+
 function playBassDropSound(scale) {
   const bus = ensureSfxBus();
   if (!bus) return;
@@ -865,8 +887,11 @@ function currentThemeRgb(cssVar, fallback) {
 const XP_STORAGE_KEY = 'mm_xp_state';
 const XP_PER_TIER = { small: 10, medium: 20, mega: 40, milestone: 60 };
 const XP_PER_BONUS_CLAIM = 15;
+const RATE_XP_BASE = 2;
+const PRESTIGE_LEVEL_CAP = 20;
 let xpTotal = 0;
 let xpLevel = 1;
+let prestigeCount = 0;
 
 function xpForLevel(level) {
   // Gentle escalating curve: level N needs 100*N^1.4 cumulative XP.
@@ -877,13 +902,14 @@ function loadXpState() {
   try {
     const saved = JSON.parse(localStorage.getItem(XP_STORAGE_KEY) || '{}');
     xpTotal = Number(saved.xpTotal) || 0;
-  } catch (e) { xpTotal = 0; }
+    prestigeCount = Number(saved.prestigeCount) || 0;
+  } catch (e) { xpTotal = 0; prestigeCount = 0; }
   recomputeLevel();
   updateLevelUi();
 }
 
 function saveXpState() {
-  try { localStorage.setItem(XP_STORAGE_KEY, JSON.stringify({ xpTotal })); } catch (e) {}
+  try { localStorage.setItem(XP_STORAGE_KEY, JSON.stringify({ xpTotal, prestigeCount })); } catch (e) {}
 }
 
 function recomputeLevel() {
@@ -894,11 +920,15 @@ function recomputeLevel() {
 
 function updateLevelUi() {
   const el = document.getElementById('level-readout');
-  if (!el) return;
-  const curFloor = xpLevel > 1 ? xpForLevel(xpLevel - 1) : 0;
-  const nextCeil = xpForLevel(xpLevel);
-  const pct = Math.min(100, Math.round(((xpTotal - curFloor) / (nextCeil - curFloor)) * 100));
-  el.innerText = 'LV ' + xpLevel + ' · ' + xpTotal + 'xp (' + pct + '% to ' + (xpLevel + 1) + ')';
+  if (el) {
+    const curFloor = xpLevel > 1 ? xpForLevel(xpLevel - 1) : 0;
+    const nextCeil = xpForLevel(xpLevel);
+    const pct = Math.min(100, Math.round(((xpTotal - curFloor) / (nextCeil - curFloor)) * 100));
+    const stars = prestigeCount > 0 ? '★'.repeat(Math.min(prestigeCount, 5)) + ' ' : '';
+    el.innerText = stars + 'LV ' + xpLevel + ' · ' + xpTotal + 'xp (' + pct + '% to ' + (xpLevel + 1) + ')';
+  }
+  const btn = document.getElementById('prestige-btn');
+  if (btn) btn.style.display = xpLevel >= PRESTIGE_LEVEL_CAP ? 'inline-block' : 'none';
 }
 
 function awardXp(amount) {
@@ -908,6 +938,158 @@ function awardXp(amount) {
   updateLevelUi();
   saveXpState();
   if (xpLevel > beforeLevel) toast('⭐ Level ' + xpLevel + '!');
+}
+
+// Prestige: once the level cap is hit, trade it back to 0 for a permanent
+// star rank instead of the number just climbing forever uncapped - keeps
+// "leveling up" meaningful again after the curve would otherwise flatten.
+function prestige() {
+  if (xpLevel < PRESTIGE_LEVEL_CAP) return;
+  prestigeCount++;
+  xpTotal = 0;
+  recomputeLevel();
+  updateLevelUi();
+  saveXpState();
+  toast('🌟 Prestige ' + prestigeCount + '!');
+}
+
+// Rating combo: rating clips in quick succession builds a short-lived
+// multiplier (capped 3x) on XP and on near-miss/bonus-window odds, so
+// bursts of activity feel more electric than idly spaced-out clicks.
+const COMBO_WINDOW_MS = 4000;
+let comboCount = 0;
+let comboExpireAt = 0;
+
+function registerCombo() {
+  const now = Date.now();
+  comboCount = now < comboExpireAt ? comboCount + 1 : 1;
+  comboExpireAt = now + COMBO_WINDOW_MS;
+  updateComboUi();
+  return comboMultiplier();
+}
+
+function comboMultiplier() {
+  return Date.now() < comboExpireAt ? Math.min(3, 1 + (comboCount - 1) * 0.25) : 1;
+}
+
+function updateComboUi() {
+  const el = document.getElementById('combo-readout');
+  if (!el) return;
+  el.innerText = comboCount > 1 && Date.now() < comboExpireAt ? ('x' + comboMultiplier().toFixed(2) + ' combo') : '';
+}
+
+// Personal bests: lifetime stats that only ever improve, persisted across
+// sessions - self-competition against your own history rather than a
+// social leaderboard.
+const STATS_STORAGE_KEY = 'mm_stats';
+let statsBestStreak = 0;
+let statsLifetimeJackpots = 0;
+let statsBestMilestoneSeconds = {};
+
+function loadStats() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STATS_STORAGE_KEY) || '{}');
+    statsBestStreak = Number(saved.bestStreak) || 0;
+    statsLifetimeJackpots = Number(saved.lifetimeJackpots) || 0;
+    statsBestMilestoneSeconds = saved.bestMilestoneSeconds || {};
+  } catch (e) { statsBestStreak = 0; statsLifetimeJackpots = 0; statsBestMilestoneSeconds = {}; }
+  updateStatsUi();
+}
+
+function saveStats() {
+  try {
+    localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify({
+      bestStreak: statsBestStreak, lifetimeJackpots: statsLifetimeJackpots, bestMilestoneSeconds: statsBestMilestoneSeconds,
+    }));
+  } catch (e) {}
+}
+
+function recordPayoffStats(streak, milestoneCount) {
+  statsLifetimeJackpots++;
+  if (streak > statsBestStreak) statsBestStreak = streak;
+  if (milestoneCount) {
+    const elapsedS = Math.round((Date.now() - sessionStartedAt) / 1000);
+    const prevBest = statsBestMilestoneSeconds[milestoneCount];
+    if (prevBest === undefined || elapsedS < prevBest) {
+      statsBestMilestoneSeconds[milestoneCount] = elapsedS;
+      toast('🏅 New best: ' + milestoneCount + 'th jackpot in ' + elapsedS + 's!');
+    }
+  }
+  saveStats();
+  updateStatsUi();
+}
+
+function updateStatsUi() {
+  const el = document.getElementById('personal-best');
+  if (!el) return;
+  el.innerText = 'Best streak: ' + statsBestStreak + ' · Lifetime jackpots: ' + statsLifetimeJackpots;
+}
+
+// Daily quests: a couple of lightweight in-app checklist items, re-rolled
+// once per real day, claimed automatically for XP the moment a counter
+// hits its target. Entirely self-contained - nothing reminds you of these
+// outside an open tab.
+const QUEST_STORAGE_KEY = 'mm_quests';
+const QUEST_DEFS = [
+  { id: 'rate15', desc: 'Rate 15 clips', target: 15, metric: 'rates', xp: 30 },
+  { id: 'rate40', desc: 'Rate 40 clips', target: 40, metric: 'rates', xp: 70 },
+  { id: 'bonus3', desc: 'Catch 3 bonus windows', target: 3, metric: 'bonuses', xp: 40 },
+  { id: 'jackpot2', desc: 'Land 2 jackpots', target: 2, metric: 'jackpots', xp: 50 },
+  { id: 'jackpot5', desc: 'Land 5 jackpots', target: 5, metric: 'jackpots', xp: 90 },
+];
+let questState = { day: '', quests: [], counters: {} };
+
+function loadQuests() {
+  const today = new Date().toDateString();
+  try {
+    const saved = JSON.parse(localStorage.getItem(QUEST_STORAGE_KEY) || '{}');
+    if (saved.day === today && Array.isArray(saved.quests)) {
+      questState = saved;
+      updateQuestUi();
+      return;
+    }
+  } catch (e) {}
+  const shuffled = QUEST_DEFS.slice().sort(() => Math.random() - 0.5);
+  questState = {
+    day: today,
+    quests: shuffled.slice(0, 2).map(q => ({ id: q.id, progress: 0, claimed: false })),
+    counters: { rates: 0, bonuses: 0, jackpots: 0 },
+  };
+  saveQuests();
+  updateQuestUi();
+}
+
+function saveQuests() {
+  try { localStorage.setItem(QUEST_STORAGE_KEY, JSON.stringify(questState)); } catch (e) {}
+}
+
+function incrementQuestMetric(metric, amount) {
+  questState.counters[metric] = (questState.counters[metric] || 0) + (amount || 1);
+  let changed = false;
+  for (const entry of questState.quests) {
+    if (entry.claimed) continue;
+    const def = QUEST_DEFS.find(q => q.id === entry.id);
+    if (!def || def.metric !== metric) continue;
+    entry.progress = questState.counters[metric];
+    changed = true;
+    if (entry.progress >= def.target) {
+      entry.claimed = true;
+      awardXp(def.xp);
+      toast('✅ Quest complete: ' + def.desc);
+    }
+  }
+  if (changed) { saveQuests(); updateQuestUi(); }
+}
+
+function updateQuestUi() {
+  const el = document.getElementById('quest-list');
+  if (!el) return;
+  el.innerHTML = questState.quests.map(entry => {
+    const def = QUEST_DEFS.find(q => q.id === entry.id);
+    if (!def) return '';
+    const mark = entry.claimed ? '✅' : '▫️';
+    return mark + ' ' + def.desc + ' (' + Math.min(entry.progress, def.target) + '/' + def.target + ')';
+  }).join('<br>');
 }
 
 let jackpotStreak = 0;
@@ -958,25 +1140,38 @@ function registerMilestone() {
 // real one, like a slot-machine reel - a second layer of dopamine-relevant
 // uncertainty (how big, not just whether) resolved right before the actual
 // celebration fires.
+// Fake-downgrade reveals: the reel-stop flicker occasionally holds on MEGA
+// before snapping down to the actual (lower) tier - the near-miss idea
+// applied to the reveal animation itself, not just the lead-up to it.
+const FAKE_DOWNGRADE_PROBABILITY = 0.2;
+
 function revealTier(tier, onDone) {
   const el = document.getElementById('tier-reveal');
   const order = ['small', 'medium', 'mega'];
   el.style.display = 'block';
   requestAnimationFrame(() => el.classList.add('show'));
+  const fakeDowngrade = (tier.name === 'small' || tier.name === 'medium') && Math.random() < FAKE_DOWNGRADE_PROBABILITY;
   let i = 0;
+  function lockIn() {
+    el.innerText = TIER_LABELS[tier.name] || tier.name.toUpperCase();
+    el.className = fakeDowngrade ? ('show snap tier-' + tier.name) : ('show tier-' + tier.name);
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => { el.style.display = 'none'; }, 300);
+      onDone();
+    }, 500);
+  }
   function step(n) {
     const isLast = n >= TIER_REVEAL_DELAYS.length - 1;
-    const name = isLast ? tier.name : order[i++ % order.length];
+    const name = isLast ? (fakeDowngrade ? 'mega' : tier.name) : order[i++ % order.length];
     el.innerText = TIER_LABELS[name] || name.toUpperCase();
     el.className = 'show tier-' + name;
     if (!isLast) {
       setTimeout(() => step(n + 1), TIER_REVEAL_DELAYS[n]);
+    } else if (fakeDowngrade) {
+      setTimeout(lockIn, 480); // extra dwell on the fake MEGA hold before the downgrade snaps in
     } else {
-      setTimeout(() => {
-        el.classList.remove('show');
-        setTimeout(() => { el.style.display = 'none'; }, 300);
-        onDone();
-      }, 500);
+      setTimeout(lockIn, 500);
     }
   }
   step(0);
@@ -987,14 +1182,19 @@ function runPayoff() {
   anticipationActive = false;
   clearTileGlow();
   rotateColorTheme();
+  // Snapshot before registerJackpotStreak() overwrites lastJackpotAt/jackpotStreak,
+  // so a jackpot landing inside the streak-reset warning window reads as a "save".
+  const wasAtRisk = jackpotStreak > 1 && (Date.now() - lastJackpotAt) >= (STREAK_RESET_MS - STREAK_WARNING_S * 1000);
   const milestoneCount = registerMilestone();
   const tier = milestoneCount ? MILESTONE_TIER : pickJackpotTier();
   const streak = registerJackpotStreak();
   awardXp((XP_PER_TIER[tier.name] || 10) * (milestoneCount ? 3 : 1));
-  revealTier(tier, () => applyPayoffEffects(tier, streak, milestoneCount));
+  recordPayoffStats(streak, milestoneCount);
+  incrementQuestMetric('jackpots', 1);
+  revealTier(tier, () => applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk));
 }
 
-function applyPayoffEffects(tier, streak, milestoneCount) {
+function applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk) {
   const theater = document.getElementById('theater-box');
   theater.style.setProperty('--flash-opacity', Math.min(0.9, 0.6 * tier.flash).toFixed(2));
   theater.style.setProperty('--flash-duration', (0.65 * Math.min(1.3, tier.flash)).toFixed(2) + 's');
@@ -1018,8 +1218,10 @@ function applyPayoffEffects(tier, streak, milestoneCount) {
   playChimeSound(tier.chime);
   playBassDropSound(tier.bass);
   burstExtraFloaters(tier.burst);
+  if (wasAtRisk) playClutchSting();
   const label = milestoneCount ? ('🏆 MILESTONE: ' + milestoneCount + ' JACKPOTS!') : '🎰 ' + (tier.name === 'mega' ? 'MEGA JACKPOT' : tier.name === 'medium' ? 'Jackpot!' : 'Jackpot');
-  toast(label + (streak > 1 ? ' (streak ' + streak + ')' : ''));
+  const prefix = wasAtRisk ? '🔥 SAVED! ' : '';
+  toast(prefix + label + (streak > 1 ? ' (streak ' + streak + ')' : ''));
 }
 
 function handleAnticipationStatus(d) {
@@ -1087,11 +1289,45 @@ function tickGoldenHour() {
   badge.classList.toggle('show', isGoldenHourActive());
 }
 
+// Surge: a short, unscheduled surprise window (unlike Golden Hour's fixed
+// daily slot) that randomly doubles the same odds for a minute or two -
+// stacks unscheduled variable-ratio surprise on top of the scheduled one.
+const SURGE_CHECK_MS = 20000;
+const SURGE_PROBABILITY = 0.08;
+const SURGE_DURATION_RANGE_MS = [60000, 90000];
+const SURGE_MULTIPLIER = 2.0;
+let surgeExpireAt = 0;
+
+function maybeTriggerSurge() {
+  if (Date.now() < surgeExpireAt) return;
+  if (Math.random() < SURGE_PROBABILITY) {
+    const [lo, hi] = SURGE_DURATION_RANGE_MS;
+    surgeExpireAt = Date.now() + lo + Math.random() * (hi - lo);
+    toast('⚡ Surge! Odds doubled for a bit');
+  }
+}
+
+function isSurgeActive() {
+  return Date.now() < surgeExpireAt;
+}
+
+function tickSurgeBadge() {
+  const badge = document.getElementById('surge-badge');
+  if (!badge) return;
+  badge.classList.toggle('show', isSurgeActive());
+}
+
+function oddsMultiplier() {
+  return engagementMultiplier()
+    * (isGoldenHourActive() ? GOLDEN_HOUR_MULTIPLIER : 1)
+    * (isSurgeActive() ? SURGE_MULTIPLIER : 1)
+    * comboMultiplier();
+}
+
 function maybeTriggerFakeNearMiss() {
   if (!anticipationFxEnabled || !nearMissEnabled || anticipationActive) return;
   if (lastKnownBarrage > 0 || lastKnownJackpot) return; // don't step on a real one
-  const mult = engagementMultiplier() * (isGoldenHourActive() ? GOLDEN_HOUR_MULTIPLIER : 1);
-  if (Math.random() < FAKE_NEAR_MISS_PROBABILITY * mult) {
+  if (Math.random() < FAKE_NEAR_MISS_PROBABILITY * oddsMultiplier()) {
     runAnticipationBuildUp(FAKE_NEAR_MISS_BUILD_S, false);
   }
 }
@@ -1431,6 +1667,9 @@ function rateScreen(i, dir) {
     clearBonusWindow(i);
     triggerMiniPayoff();
   }
+  const mult = registerCombo();
+  awardXp(Math.round(RATE_XP_BASE * mult));
+  incrementQuestMetric('rates', 1);
   fetch('/api/rate?screen=' + i + '&dir=' + dir).then(() => toast(dir === 'up' ? '👍 Reinforced' : '👎 Penalized', dir !== 'up'));
 }
 
@@ -1449,8 +1688,7 @@ let bonusWindowTimer = null;
 function maybeTriggerBonusWindow() {
   if (!anticipationFxEnabled) return;
   if (bonusWindowTileIndex >= 0 || !tileElements.length) return;
-  const mult = engagementMultiplier() * (isGoldenHourActive() ? GOLDEN_HOUR_MULTIPLIER : 1);
-  if (Math.random() < BONUS_WINDOW_PROBABILITY * mult) {
+  if (Math.random() < BONUS_WINDOW_PROBABILITY * oddsMultiplier()) {
     const idx = Math.floor(Math.random() * tileElements.length);
     bonusWindowTileIndex = idx;
     bonusWindowExpireAt = Date.now() + BONUS_WINDOW_DURATION_MS;
@@ -1471,6 +1709,7 @@ function triggerMiniPayoff() {
   playChimeSound(0.7);
   burstExtraFloaters(0.5);
   awardXp(XP_PER_BONUS_CLAIM);
+  incrementQuestMetric('bonuses', 1);
   toast('✨ Bonus!');
 }
 function rateAudio(d) { fetch('/api/rate_audio?dir=' + d).then(() => toast(d === 'up' ? '🔊 Audio rated up' : '🔇 Audio penalized', d !== 'up')); }
@@ -1483,6 +1722,8 @@ setInterval(maybeTriggerBonusWindow, BONUS_WINDOW_CHECK_MS);
 setInterval(tickSessionTimer, 1000);
 setInterval(tickStreakWarning, 1000);
 setInterval(tickGoldenHour, 5000);
+setInterval(maybeTriggerSurge, SURGE_CHECK_MS);
+setInterval(tickSurgeBadge, 5000);
 
 window.onload = () => {
   restorePanelState();
@@ -1494,6 +1735,8 @@ window.onload = () => {
   applyColorTheme(0);
   loadXpState();
   scheduleGoldenHour();
+  loadStats();
+  loadQuests();
   overlayEl = document.getElementById('overlay-audio');
   loadVolumePrefs();
   armAutoUnlock();

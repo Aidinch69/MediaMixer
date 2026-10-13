@@ -27,7 +27,9 @@
     <span class="badge jackpot-badge" id="jackpot-tag">🎰 JACKPOT</span>
     <span id="jackpot-streak" style="font-weight:bold;color:#ffcc55;font-size:.85rem"></span>
     <span id="level-readout" style="font-family:monospace;font-size:.72rem;color:#d6a3ff"></span>
+    <span id="combo-readout" style="font-weight:bold;color:#4dd4ff;font-size:.8rem"></span>
     <span class="offline-badge golden-hour-badge" id="golden-hour-badge">✨ GOLDEN HOUR</span>
+    <span class="offline-badge surge-badge" id="surge-badge">⚡ SURGE</span>
     <span class="offline-badge" id="audio-offline">🔇 No Overlay Tracks</span>
     <button class="offline-badge unlock-badge" id="audio-unlock" onclick="enableAudio()">🔈 Tap to Enable Audio</button>
     <span id="session-timer-readout" style="display:none;font-family:monospace;font-size:.75rem;color:#8e8e93"></span>
@@ -89,6 +91,11 @@
   </div>
   <div class="slider"><label>SFX Volume: <b><span id="l-sfx-vol">70%</span></b></label><input type="range" id="sfx-vol-input" min="0" max="100" value="70" oninput="setSfxVolume(this.value)"></div>
   <p class="hint">Tension builds (visual pulse, heartbeat, panned riser) when a jackpot is really incoming, with a tier reveal (small/big/mega) and a flash/chime/bass/floater-burst payoff + lingering afterglow when it lands. Milestone jackpot counts get an even bigger one. Near-misses play the same build-up with nothing behind it. Also enables occasional golden "bonus" tiles - rate one 👍 while it's glowing for a quick bonus. Jackpots and bonuses earn XP toward a level that only ever goes up (top right), each one shifts the color theme, and a daily ~20min "Golden Hour" boosts the odds of all of the above if you happen to be around for it. Near-miss/bonus odds also creep up the longer a single session runs.</p>
+  <h3>🏆 Progress &amp; Challenges</h3>
+  <div class="metric" id="personal-best"></div>
+  <div class="metric" id="quest-list"></div>
+  <button class="badge" id="prestige-btn" onclick="prestige()" style="display:none">⭐ Prestige (reset level for a rank)</button>
+  <p class="hint">Lifetime bests and two daily quests that re-roll each day and auto-claim XP on completion - all stored on this device, nothing leaves it.</p>
   <h3>🎬 Auto-Pilot (Experimental)</h3>
   <div class="slider">
     <label>Enabled</label>

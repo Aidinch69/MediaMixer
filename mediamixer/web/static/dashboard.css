@@ -72,3 +72,6 @@ button:hover{background:#251538;border-color:#b84dff;box-shadow:0 0 10px rgba(18
 .offline-badge{display:none;background:#3a0f14;border:1px solid #ff4d4d;color:#ff9a9a;padding:4px 8px;border-radius:6px;font-size:.68rem;font-weight:bold;text-transform:uppercase}
 .offline-badge.show{display:inline-block}
 .golden-hour-badge{background:#3a2a05;border-color:#ffcc00;color:#ffe066;animation:pulse 1.4s infinite}
+.surge-badge{background:#0a1a3a;border-color:#4dd4ff;color:#9fe3ff;animation:pulse 1.2s infinite}
+#tier-reveal.snap{animation:tier-snap-anim .25s ease}
+@keyframes tier-snap-anim{0%{transform:translate(-50%,-50%) scale(1.15)}100%{transform:translate(-50%,-50%) scale(1)}}
