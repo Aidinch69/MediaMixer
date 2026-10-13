@@ -11,7 +11,7 @@ import time
 
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QApplication, QGridLayout, QLabel, QMainWindow, QToolBar, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QToolBar, QWidget
 
 from .anticipation import (
     AnticipationState, BONUS_WINDOW_CHECK_S, BONUS_WINDOW_DURATION_S, FAKE_NEAR_MISS_BUILD_S,
@@ -21,9 +21,12 @@ from .anticipation_fx import GlowOverlay
 from .autopilot import AutoPilotState
 from .controls import Controls
 from .gamification import GamificationState, RATE_XP_BASE, STREAK_WARNING_S
+from .mosaic import compute_mosaic_layout, uniform_layout
 from .payoff_fx import PayoffOverlay, PushLuckPrompt, TierRevealLabel, Toast
 from .quests import QuestState
 from .tile import VideoTile
+
+MOSAIC_REFLOW_INTERVAL_MS = 4000
 
 LAYOUT_LABELS = {
     "dual": "Dual", "grid2x2": "2x2", "grid2x3": "2x3",
@@ -40,14 +43,13 @@ class MainShell(QMainWindow):
         self.controls = Controls(client.session, base_url)
 
         central = QWidget()
-        self.grid_layout = QGridLayout(central)
-        self.grid_layout.setSpacing(2)
-        self.grid_layout.setContentsMargins(2, 2, 2, 2)
+        central.setStyleSheet("background-color: #05020a;")
         self.setCentralWidget(central)
 
         self.tiles: list[VideoTile] = []
         self.current_columns: int | None = None
         self.current_tile_count: int | None = None
+        self.mosaic_enabled = False
 
         self.gamification = GamificationState()
         self.quests = QuestState()
@@ -98,6 +100,10 @@ class MainShell(QMainWindow):
         self.surge_timer.timeout.connect(self.anticipation.maybe_trigger_surge)
         self.surge_timer.start(int(SURGE_CHECK_S * 1000))
 
+        self.mosaic_timer = QTimer(self)
+        self.mosaic_timer.timeout.connect(self._layout_tiles)
+        self.mosaic_timer.start(MOSAIC_REFLOW_INTERVAL_MS)
+
     def _build_toolbar(self) -> None:
         bar = QToolBar("Controls")
         self.addToolBar(bar)
@@ -113,6 +119,10 @@ class MainShell(QMainWindow):
         self.autopilot_action = QAction("Auto-Pilot: OFF", self)
         self.autopilot_action.triggered.connect(self._toggle_autopilot)
         bar.addAction(self.autopilot_action)
+
+        self.mosaic_action = QAction("Mosaic Fit: OFF", self)
+        self.mosaic_action.triggered.connect(self._toggle_mosaic)
+        bar.addAction(self.mosaic_action)
 
         bar.addSeparator()
         for name, label in LAYOUT_LABELS.items():
@@ -148,19 +158,19 @@ class MainShell(QMainWindow):
     def _rebuild_grid(self, tile_count: int, columns: int) -> None:
         for tile in self.tiles:
             tile.shutdown()
-            self.grid_layout.removeWidget(tile)
             tile.deleteLater()
         self.tiles = []
 
+        central = self.centralWidget()
         for i in range(tile_count):
-            tile = VideoTile(i, self.controls)
+            tile = VideoTile(i, self.controls, central)
             tile.rated.connect(self._on_rated)
-            self.grid_layout.addWidget(tile, i // columns, i % columns)
             tile.show()
             self.tiles.append(tile)
 
         self.current_tile_count = tile_count
         self.current_columns = columns
+        self._layout_tiles()
         # Make sure every tile's native window handle is realized before
         # on_status() goes on to call ensure_player() on it (same pattern
         # the validated Phase 0 spike used: show() then processEvents()
@@ -171,6 +181,25 @@ class MainShell(QMainWindow):
         self.tier_reveal.raise_()
         self.toast.raise_()
         self.push_luck_prompt.raise_()
+
+    def _layout_tiles(self) -> None:
+        central = self.centralWidget()
+        width, height = central.width(), central.height()
+        if not self.tiles or width <= 0 or height <= 0:
+            return
+        if self.mosaic_enabled:
+            aspect_ratios = [tile.aspect_ratio() for tile in self.tiles]
+            target_rows = max(1, round(math.sqrt(len(self.tiles) * height / width)))
+            geometry = compute_mosaic_layout(aspect_ratios, width, height, height / target_rows)
+        else:
+            geometry = uniform_layout(len(self.tiles), self.current_columns or 1, width, height)
+        for tile, geo in zip(self.tiles, geometry):
+            tile.setGeometry(round(geo["x"]), round(geo["y"]), round(geo["width"]), round(geo["height"]))
+
+    def _toggle_mosaic(self) -> None:
+        self.mosaic_enabled = not self.mosaic_enabled
+        self.mosaic_action.setText(f"Mosaic Fit: {'ON' if self.mosaic_enabled else 'OFF'}")
+        self._layout_tiles()
 
     def on_status(self, snapshot: dict) -> None:
         screens = snapshot.get("screens") or []
@@ -389,6 +418,7 @@ class MainShell(QMainWindow):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._sync_overlay_geometry()
+        self._layout_tiles()
 
     def closeEvent(self, event) -> None:
         for tile in self.tiles:

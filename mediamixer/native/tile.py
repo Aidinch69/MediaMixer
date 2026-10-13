@@ -126,3 +126,13 @@ class VideoTile(QWidget):
             except Exception:
                 pass
             self._player = None
+
+    def aspect_ratio(self) -> float:
+        if self._player is not None:
+            try:
+                w, h = self._player.width, self._player.height
+                if w and h:
+                    return w / h
+            except Exception:
+                pass
+        return 16 / 9
