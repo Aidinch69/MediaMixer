@@ -24,8 +24,10 @@
   <h2>
     <span>🧬 MediaMixer</span>
     <span class="badge jackpot-badge" id="jackpot-tag">🎰 JACKPOT</span>
+    <span id="jackpot-streak" style="font-weight:bold;color:#ffcc55;font-size:.85rem"></span>
     <span class="offline-badge" id="audio-offline">🔇 No Overlay Tracks</span>
     <button class="offline-badge unlock-badge" id="audio-unlock" onclick="enableAudio()">🔈 Tap to Enable Audio</button>
+    <span id="session-timer-readout" style="display:none;font-family:monospace;font-size:.75rem;color:#8e8e93"></span>
   </h2>
   <div class="metric">
     <div style="display:flex;align-items:center;font-size:.7rem;color:#8e8e93">
@@ -91,6 +93,11 @@
   </div>
   <div class="slider"><label>Cycle Length: <b><span id="l-autopilot-minutes">6 min</span></b></label><input type="range" id="autopilot-minutes-input" min="2" max="15" step="1" value="6" oninput="setAutopilotMinutes(this.value)"></div>
   <p class="hint">Scripts pace, barrage/jackpot odds, mosaic, and floater count through a calm -&gt; building -&gt; climax -&gt; cooldown arc on a repeating timer, instead of those staying wherever you last set them. Turns Floating Overlay on if it's off.</p>
+  <div class="slider">
+    <label>Session Timer (opt-in)</label>
+    <button class="badge" id="session-timer-toggle" onclick="toggleSessionTimer()">OFF</button>
+  </div>
+  <p class="hint">Just a quiet elapsed-time readout up top, off by default - no reminders, just there if you want it.</p>
   <h3>📂 Categories</h3>
   <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(110px,1fr))">
     {% for f in folders %}<div class="badge" id="folder-{{ f }}" onclick="cat('{{ f }}')">{{ f }}</div>{% endfor %}

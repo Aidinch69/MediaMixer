@@ -376,9 +376,9 @@ function activateFxSprite(sprite) {
   });
 }
 
-function burstExtraFloaters() {
+function burstExtraFloaters(scale) {
   if (!fxEnabled) return;
-  const n = Math.min(4, Math.max(1, 10 - fxCount));
+  const n = Math.min(8, Math.max(1, Math.round(3 * (scale || 1.0))));
   for (let i = 0; i < n; i++) {
     const sprite = { slot: 1000 + i, el: null, timer: null, state: 'pending', currentPath: null, burst: true };
     fxSprites.push(sprite);
@@ -627,11 +627,15 @@ function playFizzleSound() {
   osc.stop(now + 0.6);
 }
 
-function playChimeSound() {
+function playChimeSound(scale) {
   const bus = ensureSfxBus();
   if (!bus) return;
+  scale = scale || 1.0;
   const now = audioCtx.currentTime;
-  [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+  const notes = scale >= 1.3
+    ? [523.25, 659.25, 783.99, 1046.5, 1318.5] // mega gets a fifth, higher note
+    : [523.25, 659.25, 783.99, 1046.5];
+  notes.forEach((freq, i) => {
     const osc = audioCtx.createOscillator();
     osc.type = 'triangle';
     const g = audioCtx.createGain();
@@ -639,11 +643,29 @@ function playChimeSound() {
     const t0 = now + i * 0.09;
     osc.frequency.setValueAtTime(freq, t0);
     g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(0.255, t0 + 0.02); // 15% quieter
+    g.gain.exponentialRampToValueAtTime(Math.min(0.45, 0.255 * scale), t0 + 0.02); // base is already 15% quieter
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
     osc.start(t0);
     osc.stop(t0 + 0.55);
   });
+}
+
+function playBassDropSound(scale) {
+  const bus = ensureSfxBus();
+  if (!bus) return;
+  scale = scale || 1.0;
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  const g = audioCtx.createGain();
+  osc.connect(g); g.connect(bus);
+  osc.frequency.setValueAtTime(150, now);
+  osc.frequency.exponentialRampToValueAtTime(42, now + 0.25); // fast pitch drop - the "thump"
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(Math.min(0.85, 0.5 * scale), now + 0.02); // fast attack, felt more than heard
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+  osc.start(now);
+  osc.stop(now + 0.6);
 }
 
 function runAnticipationBuildUp(durationS, isReal) {
@@ -664,6 +686,13 @@ function runAnticipationBuildUp(durationS, isReal) {
     const glow = 10 + intensity * 55;
     const pulse = 0.5 + 0.5 * Math.sin(elapsed * freq);
     theater.style.boxShadow = `0 0 ${(glow * pulse).toFixed(1)}px rgba(255,70,30,${(0.25 + intensity * 0.55).toFixed(2)})`;
+    // Smooth, slow-sine glow on every tile (not a flicker/strobe - frequency
+    // here tops out around 7Hz and the transition is a continuous sine, well
+    // outside the 3-30Hz flash range that can trigger photosensitive seizures)
+    // so the eye is drawn to the grid without any rapid on/off flashing.
+    const tileGlowPx = (6 + intensity * 20) * pulse;
+    const tileGlowAlpha = (0.15 + intensity * 0.5).toFixed(2);
+    tileElements.forEach(t => { t.style.boxShadow = `0 0 ${tileGlowPx.toFixed(1)}px rgba(255,130,40,${tileGlowAlpha})`; });
     if (progress < 1) {
       requestAnimationFrame(tick);
     } else if (!isReal) {
@@ -677,11 +706,16 @@ function runAnticipationBuildUp(durationS, isReal) {
   requestAnimationFrame(tick);
 }
 
+function clearTileGlow() {
+  tileElements.forEach(t => { t.style.boxShadow = ''; });
+}
+
 function fizzleAnticipation(runId) {
   if (runId !== anticipationRunId || !anticipationActive) return;
   const theater = document.getElementById('theater-box');
   theater.style.transition = 'box-shadow 0.6s ease';
   theater.style.boxShadow = 'none';
+  clearTileGlow();
   theater.classList.add('glitch');
   playFizzleSound();
   setTimeout(() => {
@@ -691,17 +725,61 @@ function fizzleAnticipation(runId) {
   }, 650);
 }
 
+// Jackpot tiers: magnitude is uncertain too, not just timing - bigger tiers
+// get a brighter flash, a fuller chime, more bass, a bigger floater burst,
+// and (mega only) a brief screen shake. Picked client-side purely for the
+// celebration's scale; doesn't affect what actually gets selected.
+const JACKPOT_TIERS = [
+  { name: 'small', weight: 65, flash: 1.0, chime: 1.0, burst: 1.0, bass: 1.0, shake: false },
+  { name: 'medium', weight: 28, flash: 1.3, chime: 1.15, burst: 1.6, bass: 1.25, shake: false },
+  { name: 'mega', weight: 7, flash: 1.7, chime: 1.3, burst: 2.4, bass: 1.6, shake: true },
+];
+const STREAK_RESET_MS = 180000; // 3 minutes without a jackpot resets the streak back to 0
+let jackpotStreak = 0;
+let lastJackpotAt = 0;
+
+function pickJackpotTier() {
+  const total = JACKPOT_TIERS.reduce((sum, t) => sum + t.weight, 0);
+  let r = Math.random() * total;
+  for (const tier of JACKPOT_TIERS) {
+    if (r < tier.weight) return tier;
+    r -= tier.weight;
+  }
+  return JACKPOT_TIERS[0];
+}
+
+function registerJackpotStreak() {
+  const now = Date.now();
+  if (now - lastJackpotAt > STREAK_RESET_MS) jackpotStreak = 0;
+  jackpotStreak++;
+  lastJackpotAt = now;
+  const el = document.getElementById('jackpot-streak');
+  if (el) el.innerText = jackpotStreak > 1 ? ('🔥 ' + jackpotStreak) : '';
+  return jackpotStreak;
+}
+
 function runPayoff() {
   anticipationRunId++; // invalidate any in-flight build-up loop (real or fake)
   anticipationActive = false;
+  const tier = pickJackpotTier();
+  const streak = registerJackpotStreak();
   const theater = document.getElementById('theater-box');
+  theater.style.setProperty('--flash-opacity', Math.min(0.9, 0.6 * tier.flash).toFixed(2));
+  theater.style.setProperty('--flash-duration', (0.65 * Math.min(1.3, tier.flash)).toFixed(2) + 's');
   theater.style.transition = 'box-shadow 0.5s ease';
   theater.style.boxShadow = 'none';
+  clearTileGlow();
   theater.classList.add('payoff-flash');
+  if (tier.shake) {
+    theater.classList.add('shake-mega');
+    setTimeout(() => theater.classList.remove('shake-mega'), 450);
+  }
   setTimeout(() => { theater.classList.remove('payoff-flash'); theater.style.transition = ''; }, 650);
   uiFlare();
-  playChimeSound();
-  burstExtraFloaters();
+  playChimeSound(tier.chime);
+  playBassDropSound(tier.bass);
+  burstExtraFloaters(tier.burst);
+  toast('🎰 ' + (tier.name === 'mega' ? 'MEGA JACKPOT' : tier.name === 'medium' ? 'Jackpot!' : 'Jackpot') + (streak > 1 ? ' (streak ' + streak + ')' : ''));
 }
 
 function handleAnticipationStatus(d) {
@@ -821,6 +899,42 @@ function setAutopilotMinutes(v) {
   autopilotCycleMinutes = parseFloat(v);
   document.getElementById('l-autopilot-minutes').innerText = autopilotCycleMinutes + ' min';
   try { localStorage.setItem('mm_autopilot_minutes', autopilotCycleMinutes); } catch (e) {}
+}
+
+// ---- Session timer (opt-in, off by default) ----
+// Just a quiet elapsed-time readout - no nagging, no popups. Entirely
+// optional; exists so time awareness is available at a glance during an
+// intense Auto-Pilot climax if you want it, without fighting the rest of
+// the experience if you don't.
+let sessionTimerEnabled = false;
+const sessionStartMs = Date.now();
+
+function loadSessionTimerPref() {
+  try { sessionTimerEnabled = localStorage.getItem('mm_session_timer') === '1'; } catch (e) {}
+  applySessionTimerUi();
+}
+
+function toggleSessionTimer() {
+  sessionTimerEnabled = !sessionTimerEnabled;
+  try { localStorage.setItem('mm_session_timer', sessionTimerEnabled ? '1' : '0'); } catch (e) {}
+  applySessionTimerUi();
+}
+
+function applySessionTimerUi() {
+  const btn = document.getElementById('session-timer-toggle');
+  btn.innerText = sessionTimerEnabled ? 'ON' : 'OFF';
+  btn.classList.toggle('active', sessionTimerEnabled);
+  document.getElementById('session-timer-readout').style.display = sessionTimerEnabled ? 'block' : 'none';
+}
+
+function tickSessionTimer() {
+  if (!sessionTimerEnabled) return;
+  const elapsedS = Math.floor((Date.now() - sessionStartMs) / 1000);
+  const h = Math.floor(elapsedS / 3600);
+  const m = Math.floor((elapsedS % 3600) / 60);
+  const s = elapsedS % 60;
+  const pad = n => String(n).padStart(2, '0');
+  document.getElementById('session-timer-readout').innerText = '⏱️ ' + (h > 0 ? h + ':' : '') + pad(m) + ':' + pad(s);
 }
 
 function copyPhoneUrl() {
@@ -957,7 +1071,7 @@ function render(d) {
 
   const persistentBadges = new Set([
     'preload-toggle', 'mosaic-toggle', 'fx-toggle', 'fx-source-dedicated', 'fx-source-library', 'fx-source-both',
-    'anticipation-toggle', 'near-miss-toggle', 'autopilot-toggle',
+    'anticipation-toggle', 'near-miss-toggle', 'autopilot-toggle', 'session-timer-toggle',
   ]);
   document.querySelectorAll('.badge').forEach(b => { if (!persistentBadges.has(b.id)) b.classList.remove('active'); });
   const activeFolder = document.getElementById('folder-' + d.folder);
@@ -1022,6 +1136,7 @@ function nextAudio() { fetch('/api/next_audio').then(() => toast('⏭️ Audio S
 window.addEventListener('resize', () => { if (mosaicEnabled) layoutMosaic(); });
 setInterval(() => { if (mosaicEnabled) layoutMosaic(); }, MOSAIC_REFLOW_INTERVAL_MS);
 setInterval(maybeTriggerFakeNearMiss, FAKE_NEAR_MISS_CHECK_MS);
+setInterval(tickSessionTimer, 1000);
 
 window.onload = () => {
   restorePanelState();
@@ -1029,6 +1144,7 @@ window.onload = () => {
   loadFxPrefs();
   loadAnticipationPrefs();
   loadAutopilotPrefs();
+  loadSessionTimerPref();
   overlayEl = document.getElementById('overlay-audio');
   loadVolumePrefs();
   armAutoUnlock();
