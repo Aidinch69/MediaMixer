@@ -10,6 +10,7 @@ layer is separate (see mediamixer/native/audio_engine.py).
 from __future__ import annotations
 
 import os
+import time
 
 _NATIVE_DEPS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "native_deps")
 if os.path.isdir(_NATIVE_DEPS):
@@ -132,6 +133,17 @@ class VideoTile(QWidget):
             # <video>'s "ended" event, which has the same property.
             if value:
                 self.controls.rotate(self.index)
+
+        # Diagnostic only, for tracking down the reported "goes black and
+        # stays black for a while" - prints when mpv itself reports it's
+        # stalled waiting on data, so the next occurrence can be
+        # correlated with real evidence instead of guessing again.
+        @self._player.property_observer("paused-for-cache")
+        def _on_buffering(_name, value):
+            if value:
+                print(f"[tile {self.index}] buffering (paused-for-cache) at {time.strftime('%H:%M:%S')}", flush=True)
+            else:
+                print(f"[tile {self.index}] resumed at {time.strftime('%H:%M:%S')}", flush=True)
 
     def set_volume(self, pct: float) -> None:
         self._volume_pct = pct

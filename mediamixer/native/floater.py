@@ -29,14 +29,10 @@ class FloaterSprite(QWidget):
         self._on_finished = on_finished
         self.setFixedSize(size, size)
 
-        self._effect = QGraphicsOpacityEffect(self)
-        self._effect.setOpacity(0.0)
-        self.setGraphicsEffect(self._effect)
-
         # mpv embeds into this dedicated child, not self - same reason
         # VideoTile does it this way: a native embedded window always
-        # paints above regular Qt sibling widgets, so the vignette has
-        # to live on a separate layer raised above it afterward.
+        # paints above regular Qt sibling widgets, so the vignette/fade
+        # cover have to live on separate layers raised above it.
         self.video_surface = QWidget(self)
         self.video_surface.setGeometry(0, 0, size, size)
         self.video_surface.setStyleSheet("background-color: black;")
@@ -55,6 +51,26 @@ class FloaterSprite(QWidget):
             " stop:0 rgba(0,0,0,0), stop:0.6 rgba(0,0,0,0), stop:1 rgba(5,2,10,255));"
         )
 
+        # Fade in/out: a QGraphicsOpacityEffect on self (or any ancestor
+        # of video_surface) renders solid black instead of the video -
+        # Qt can't capture a native embedded window's pixels into its
+        # own offscreen compositing buffer for an effect, so wrapping
+        # the native content in one just blanks it. Fading a separate
+        # covering widget (no native descendant) up/down instead gets
+        # the same "appears, drifts, disappears" feel by covering and
+        # uncovering the video rather than truly blending it with
+        # whatever's behind - an approximation, not pixel-identical to
+        # the browser's continuously-translucent sprite, but this is a
+        # genuine limitation of embedding a native video window, not a
+        # setting to tune further.
+        self.fade_cover = QWidget(self)
+        self.fade_cover.setGeometry(0, 0, size, size)
+        self.fade_cover.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.fade_cover.setStyleSheet("background-color: #05020a;")
+        self._cover_effect = QGraphicsOpacityEffect(self.fade_cover)
+        self._cover_effect.setOpacity(1.0)
+        self.fade_cover.setGraphicsEffect(self._cover_effect)
+
         self.move(*start)
         self.show()
         self.raise_()
@@ -65,6 +81,7 @@ class FloaterSprite(QWidget):
             self._player = mpv.MPV(wid=int(self.video_surface.winId()), vid="auto", hwdec="auto", mute=True, loop_file="inf")
             self._player.play(url)
             self.vignette.raise_()  # mpv's own native window can reset z-order on creation
+            self.fade_cover.raise_()
         except Exception:
             self._player = None
 
@@ -74,12 +91,12 @@ class FloaterSprite(QWidget):
         self._pos_anim.setEndValue(QPoint(*end))
         self._pos_anim.setEasingCurve(QEasingCurve.Type.InOutSine)
 
-        self._opacity_anim = QPropertyAnimation(self._effect, b"opacity")
+        self._opacity_anim = QPropertyAnimation(self._cover_effect, b"opacity")
         self._opacity_anim.setDuration(duration_ms)
-        self._opacity_anim.setKeyValueAt(0.0, 0.0)
-        self._opacity_anim.setKeyValueAt(0.15, opacity)
-        self._opacity_anim.setKeyValueAt(0.85, opacity)
-        self._opacity_anim.setKeyValueAt(1.0, 0.0)
+        self._opacity_anim.setKeyValueAt(0.0, 1.0)
+        self._opacity_anim.setKeyValueAt(0.15, 1.0 - opacity)
+        self._opacity_anim.setKeyValueAt(0.85, 1.0 - opacity)
+        self._opacity_anim.setKeyValueAt(1.0, 1.0)
         self._opacity_anim.finished.connect(self._finish)
 
         self._pos_anim.start()
