@@ -943,11 +943,22 @@ const DUE_AURA_THRESHOLD_MS = 45000;
 let tileLastRatedAt = {};
 
 function tickDueAura() {
+  // Only ever the single most-idle tile, not every tile past the threshold -
+  // an infinite box-shadow animation on every tile in the grid at once was
+  // heavy enough to visibly stall video playback across the whole screen.
   const now = Date.now();
+  let mostIdleTile = -1;
+  let mostIdleMs = DUE_AURA_THRESHOLD_MS;
   tileElements.forEach((tile, i) => {
     if (!tile) return;
     const idleMs = now - (tileLastRatedAt[i] || sessionStartedAt);
-    tile.classList.toggle('due-aura', idleMs > DUE_AURA_THRESHOLD_MS);
+    if (idleMs > mostIdleMs) {
+      mostIdleMs = idleMs;
+      mostIdleTile = i;
+    }
+  });
+  tileElements.forEach((tile, i) => {
+    if (tile) tile.classList.toggle('due-aura', i === mostIdleTile);
   });
 }
 
