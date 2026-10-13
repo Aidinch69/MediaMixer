@@ -20,8 +20,10 @@ from .anticipation import (
     SESSION_PRIMER_MIN_S, SESSION_PRIMER_MAX_S, SURGE_CHECK_S, XP_PER_BONUS_CLAIM,
 )
 from .anticipation_fx import GlowOverlay, MeterBar
+from . import audio_engine
 from .autopilot import AutoPilotState
 from .controls import Controls
+from .floater import FloaterSprite
 from .gamification import COLOR_THEME_FLASH, GamificationState, RATE_XP_BASE, STREAK_WARNING_S
 from .mosaic import compute_mosaic_layout, uniform_layout
 from .payoff_fx import PayoffOverlay, PushLuckPrompt, TierRevealLabel, Toast
@@ -29,6 +31,9 @@ from .quests import QuestState
 from .tile import VideoTile
 
 MOSAIC_REFLOW_INTERVAL_MS = 4000
+FLOATER_TARGET_COUNT = 3
+FLOATER_CHECK_MS = 4000
+FLOATER_DURATION_RANGE_S = (10, 18)
 
 LAYOUT_LABELS = {
     "dual": "Dual", "grid2x2": "2x2", "grid2x3": "2x3",
@@ -69,6 +74,7 @@ class MainShell(QMainWindow):
         self.tile_last_rated_at: dict[int, float] = {}
         self.due_aura_tile_index = -1
         self.mystery_tile_index = -1
+        self.binaural = audio_engine.BinauralPlayer()
 
         self.build_up_run_id = 0
         self.build_up_active = False
@@ -80,6 +86,12 @@ class MainShell(QMainWindow):
 
         self.bonus_tile_index = -1
         self.bonus_expire_at = 0.0
+
+        self.floating_fx_enabled = False
+        self.active_floaters: list[FloaterSprite] = []
+        self.floater_timer = QTimer(self)
+        self.floater_timer.timeout.connect(self._maybe_spawn_floater)
+        self.floater_timer.start(FLOATER_CHECK_MS)
 
         self.autopilot = AutoPilotState()
         self.autopilot_timer = QTimer(self)
@@ -148,6 +160,10 @@ class MainShell(QMainWindow):
         self.mosaic_action.triggered.connect(self._toggle_mosaic)
         bar.addAction(self.mosaic_action)
 
+        self.floater_action = QAction("Floating FX: OFF", self)
+        self.floater_action.triggered.connect(self._toggle_floater_fx)
+        bar.addAction(self.floater_action)
+
         bar.addSeparator()
         for name, label in LAYOUT_LABELS.items():
             action = QAction(label, self)
@@ -200,6 +216,12 @@ class MainShell(QMainWindow):
         # the validated Phase 0 spike used: show() then processEvents()
         # before embedding mpv into the widget).
         QApplication.processEvents()
+        self._raise_global_overlays()
+
+    def _raise_global_overlays(self) -> None:
+        # Floaters embed their own native mpv window the same way tiles
+        # do, which can land above these on creation - re-assert order
+        # whenever something new might have been added underneath.
         self.theater_glow.raise_()
         self.anticipation_meter.raise_()
         self.payoff_overlay.raise_()
@@ -226,6 +248,41 @@ class MainShell(QMainWindow):
         self.mosaic_action.setText(f"Mosaic Fit: {'ON' if self.mosaic_enabled else 'OFF'}")
         self._layout_tiles()
 
+    # ---- floating overlay fx ----
+    def _toggle_floater_fx(self) -> None:
+        self.floating_fx_enabled = not self.floating_fx_enabled
+        self.floater_action.setText(f"Floating FX: {'ON' if self.floating_fx_enabled else 'OFF'}")
+        if not self.floating_fx_enabled:
+            for floater in list(self.active_floaters):
+                floater.shutdown()
+            self.active_floaters = []
+
+    def _maybe_spawn_floater(self) -> None:
+        if not self.floating_fx_enabled or len(self.active_floaters) >= FLOATER_TARGET_COUNT:
+            return
+        items = self.controls.list_overlay_fx("dedicated") or self.controls.list_overlay_fx("library")
+        if not items:
+            return
+        item = random.choice(items)
+        url = f"{self.controls.base_url}{item['base']}{item['path']}"
+
+        central = self.centralWidget()
+        cw, ch = central.width(), central.height()
+        if cw <= 0 or ch <= 0:
+            return
+        size = max(80, int(min(cw, ch) * 0.22))
+        start = (random.randint(-size, cw), random.randint(-size, ch))
+        end = (random.randint(-size, cw), random.randint(-size, ch))
+        duration_ms = int(random.uniform(*FLOATER_DURATION_RANGE_S) * 1000)
+
+        sprite = FloaterSprite(url, size, start, end, duration_ms, self._on_floater_finished, central)
+        self.active_floaters.append(sprite)
+        self._raise_global_overlays()
+
+    def _on_floater_finished(self, sprite) -> None:
+        if sprite in self.active_floaters:
+            self.active_floaters.remove(sprite)
+
     def on_status(self, snapshot: dict) -> None:
         screens = snapshot.get("screens") or []
         if not screens:
@@ -243,6 +300,10 @@ class MainShell(QMainWindow):
             url = f"{self.controls.base_url}/media/{path}?tiles={len(screens)}"
             name = path.rsplit("/", 1)[-1]
             self.tiles[i].set_source(path, url, name)
+
+        synth = snapshot.get("synth") or {}
+        if synth:
+            self.binaural.update(synth.get("carrier_hz", 136.1), synth.get("beat_hz", 0.0), bool(synth.get("iso")))
 
         barrage = int(snapshot.get("barrage") or 0)
         jackpot = bool(snapshot.get("jackpot"))
@@ -267,6 +328,7 @@ class MainShell(QMainWindow):
         for tile in self.tiles:
             tile.glow.set_color(color)
         self._tease_next_theme()
+        audio_engine.play_riser(duration_s)
         self.build_up_timer.start(33)
 
     def _tease_next_theme(self) -> None:
@@ -398,6 +460,10 @@ class MainShell(QMainWindow):
         tier = result["tier"]
         flash_color = self.gamification.current_flash_color()
         self.payoff_overlay.flash(flash_color, min(0.75, 0.45 * tier["flash"]), int(650 * min(1.3, tier["flash"])))
+        audio_engine.play_chime(tier["flash"])
+        audio_engine.play_bass_drop(tier["flash"])
+        if result["was_at_risk"]:
+            audio_engine.play_clutch_sting()
 
         if result["milestone"]:
             label = f"\U0001F3C6 MILESTONE: {result['milestone']} JACKPOTS!"
@@ -507,5 +573,8 @@ class MainShell(QMainWindow):
     def closeEvent(self, event) -> None:
         for tile in self.tiles:
             tile.shutdown()
+        for floater in list(self.active_floaters):
+            floater.shutdown()
+        self.binaural.stop()
         self.client.stop()
         super().closeEvent(event)

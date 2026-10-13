@@ -27,6 +27,15 @@ class Controls:
             pass
         return []
 
+    def list_overlay_fx(self, source: str = "dedicated") -> list[dict]:
+        try:
+            r = self.session.get(f"{self.base_url}/api/overlay_fx/list", params={"source": source}, timeout=5)
+            if r.status_code == 200:
+                return r.json().get("items", [])
+        except requests.RequestException:
+            pass
+        return []
+
     def skip(self) -> None:
         self._get("/api/skip")
 

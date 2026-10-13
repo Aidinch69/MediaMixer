@@ -3,8 +3,9 @@ via its native window handle - the native equivalent of a browser's
 <video> element, but without Chromium's per-element overhead (this is
 the whole point of the native rewrite; see the Phase 0 spike result).
 
-Audio is muted here deliberately - the full audio layer (overlay tracks,
-binaural synth, SFX) is explicitly Phase 2, not part of this grid build.
+Each clip's own embedded audio plays unmuted, same as the browser's
+unmuted <video> tags - the synthesized binaural tone and one-shot SFX
+layer is separate (see mediamixer/native/audio_engine.py).
 """
 from __future__ import annotations
 
@@ -119,7 +120,7 @@ class VideoTile(QWidget):
     def ensure_player(self) -> None:
         if self._player is not None:
             return
-        self._player = mpv.MPV(wid=int(self.video_surface.winId()), vid="auto", hwdec="auto", mute=True, loop_file="no")
+        self._player = mpv.MPV(wid=int(self.video_surface.winId()), vid="auto", hwdec="auto", loop_file="no")
         self._raise_overlays()
 
         @self._player.property_observer("eof-reached")
