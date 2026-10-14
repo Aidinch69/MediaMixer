@@ -31,9 +31,46 @@ import threading
 import time
 
 import cv2
-from PySide6.QtCore import Qt, QEasingCurve, QPoint, QPropertyAnimation, Signal
-from PySide6.QtGui import QImage, QPainter
+from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRect, Qt, Signal
+from PySide6.QtGui import QColor, QImage, QPainter, QRadialGradient, QRegion
 from PySide6.QtWidgets import QWidget
+
+
+def _build_alpha_mask(size: int) -> QImage:
+    """A soft circular falloff, opaque core, transparent at and beyond
+    the inscribed circle - used as a DestinationIn mask so a floater's
+    corners are *genuinely* transparent (showing whatever's really
+    behind them) instead of painted over with a fake, mismatched
+    background color, which is what made floaters look like squares
+    with a round shadow in them rather than actual circles."""
+    mask = QImage(size, size, QImage.Format.Format_ARGB32_Premultiplied)
+    mask.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(mask)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    gradient = QRadialGradient(size / 2, size / 2, size / 2)
+    gradient.setColorAt(0.0, QColor(0, 0, 0, 255))
+    gradient.setColorAt(0.72, QColor(0, 0, 0, 255))
+    gradient.setColorAt(1.0, QColor(0, 0, 0, 0))
+    painter.fillRect(mask.rect(), gradient)
+    painter.end()
+    return mask
+
+
+def _build_vignette_tint(size: int, edge_alpha: int) -> QImage:
+    """A dark tint that strengthens toward the same circular edge,
+    for the moody look - pre-clipped to the identical falloff so it
+    can never extend past the mask into a visible square."""
+    tint = QImage(size, size, QImage.Format.Format_ARGB32_Premultiplied)
+    tint.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(tint)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    gradient = QRadialGradient(size / 2, size / 2, size / 2)
+    gradient.setColorAt(0.0, QColor(0, 0, 0, 0))
+    gradient.setColorAt(0.55, QColor(0, 0, 0, 0))
+    gradient.setColorAt(1.0, QColor(5, 2, 10, edge_alpha))
+    painter.fillRect(tint.rect(), gradient)
+    painter.end()
+    return tint
 
 
 class _FrameReader(threading.Thread):
@@ -82,18 +119,25 @@ class FloaterSprite(QWidget):
     ):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._on_finished = on_finished
         self.setFixedSize(size, size)
         self._size = size
+        # A region mask, not WA_TranslucentBackground - that attribute
+        # forces Qt to back this child with its own native per-pixel-
+        # alpha layered window, which threw "UpdateLayeredWindowIndirect
+        # failed" the moment a floater drifted to a negative offset
+        # (the same flavor of native-window fragility the rest of this
+        # file's docstring already describes). A plain region mask
+        # clips the widget's shape with no native window involved -
+        # exactly what's needed here since the point is just killing
+        # the square corners, not real cross-window alpha blending.
+        self.setMask(QRegion(QRect(0, 0, size, size), QRegion.RegionType.Ellipse))
 
         edge_alpha = max(40, min(255, int(opacity * 255)))
-        self.vignette = QWidget(self)
-        self.vignette.setGeometry(0, 0, size, size)
-        self.vignette.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.vignette.setStyleSheet(
-            "background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5,"
-            f" stop:0 rgba(0,0,0,0), stop:0.6 rgba(0,0,0,0), stop:1 rgba(5,2,10,{edge_alpha}));"
-        )
+        self._mask = _build_alpha_mask(size)
+        self._vignette_tint = _build_vignette_tint(size, edge_alpha)
 
         self._url = url
         self._duration_ms = duration_ms
@@ -107,7 +151,6 @@ class FloaterSprite(QWidget):
         self.move(*start)
         self.show()
         self.raise_()
-        self.vignette.raise_()
 
         self._reader = _FrameReader(url, self._emit_frame)
         self._reader.start()
@@ -129,7 +172,7 @@ class FloaterSprite(QWidget):
     def _on_frame_ready(self, frame) -> None:
         h, w = frame.shape[:2]
         # BGR (OpenCV) -> RGB888, center-cropped to a square so it
-        # fills the circular vignette without stretching.
+        # fills the circular mask without stretching.
         side = min(w, h)
         x0 = (w - side) // 2
         y0 = (h - side) // 2
@@ -141,15 +184,36 @@ class FloaterSprite(QWidget):
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
-        if self._image is not None:
-            scaled = self._image.scaled(
-                self._size, self._size,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            painter.drawImage(0, 0, scaled)
-        else:
-            painter.fillRect(self.rect(), Qt.GlobalColor.black)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        if self._image is None:
+            return
+
+        scaled = self._image.scaled(
+            self._size, self._size,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        if scaled.width() != self._size or scaled.height() != self._size:
+            x = (scaled.width() - self._size) // 2
+            y = (scaled.height() - self._size) // 2
+            scaled = scaled.copy(x, y, self._size, self._size)
+
+        # Composite video + tint, then clip the whole thing to a soft
+        # circle via DestinationIn - this makes the corners *actually*
+        # transparent (revealing whatever's really behind the floater)
+        # instead of painted over with an approximated color, which is
+        # what made floaters look like squares before.
+        frame = QImage(self._size, self._size, QImage.Format.Format_ARGB32_Premultiplied)
+        frame.fill(Qt.GlobalColor.transparent)
+        fp = QPainter(frame)
+        fp.drawImage(0, 0, scaled)
+        fp.drawImage(0, 0, self._vignette_tint)
+        fp.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+        fp.drawImage(0, 0, self._mask)
+        fp.end()
+
+        painter.drawImage(0, 0, frame)
 
     def _finish(self) -> None:
         self.shutdown()
