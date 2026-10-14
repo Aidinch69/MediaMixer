@@ -6,7 +6,8 @@ extends PanelContainer
 ## interactivity loop first.
 
 const LAYOUTS := [["dual", "Dual"], ["grid2x2", "2x2"], ["grid2x3", "2x3"],
-	["grid3x3", "3x3"], ["grid4x4", "4x4"], ["grid5x5", "5x5"]]
+	["grid3x3", "3x3"], ["grid4x4", "4x4"], ["grid5x5", "5x5"],
+	["grid6x6", "6x6"], ["grid8x8", "8x8"]]
 const SOURCES := ["dedicated", "library", "both"]
 
 var main: Node

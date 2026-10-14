@@ -63,6 +63,8 @@ class Config:
         LayoutPreset("grid3x3", 9, 3, "3x3 Grid"),
         LayoutPreset("grid4x4", 16, 4, "4x4 Grid"),
         LayoutPreset("grid5x5", 25, 5, "5x5 Grid"),
+        LayoutPreset("grid6x6", 36, 6, "6x6 Grid"),
+        LayoutPreset("grid8x8", 64, 8, "8x8 Grid"),
     )
     default_layout: str = "dual"
     default_preload_enabled: bool = True
