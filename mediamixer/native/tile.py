@@ -142,8 +142,6 @@ class VideoTile(QWidget):
         def _on_buffering(_name, value):
             if value:
                 print(f"[tile {self.index}] buffering (paused-for-cache) at {time.strftime('%H:%M:%S')}", flush=True)
-            else:
-                print(f"[tile {self.index}] resumed at {time.strftime('%H:%M:%S')}", flush=True)
 
     def set_volume(self, pct: float) -> None:
         self._volume_pct = pct

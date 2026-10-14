@@ -203,8 +203,7 @@ class MainShell(QMainWindow):
         self._raise_global_overlays()
 
     def _raise_global_overlays(self) -> None:
-        # Floaters embed their own native mpv window the same way tiles
-        # do, which can land above these on creation - re-assert order
+        # Floaters can land above these on creation - re-assert order
         # whenever something new might have been added underneath.
         self.theater_glow.raise_()
         self.anticipation_meter.raise_()
@@ -289,16 +288,13 @@ class MainShell(QMainWindow):
         if cw <= 0 or ch <= 0:
             return
         size = max(80, int(min(cw, ch) * 0.22))
-        # FloaterSprite is its own top-level window now (see floater.py's
-        # docstring for why), so its positions need to be in global
-        # screen coordinates, not central-relative ones.
-        origin = central.mapToGlobal(central.rect().topLeft())
-        start = (origin.x() + random.randint(-size, cw), origin.y() + random.randint(-size, ch))
-        end = (origin.x() + random.randint(-size, cw), origin.y() + random.randint(-size, ch))
+        start = (random.randint(-size, cw), random.randint(-size, ch))
+        end = (random.randint(-size, cw), random.randint(-size, ch))
         duration_ms = int(random.uniform(*FLOATER_DURATION_RANGE_S) * 1000)
 
         sprite = FloaterSprite(
-            url, size, start, end, duration_ms, self._on_floater_finished, parent=self, opacity=self.floater_opacity
+            url, size, start, end, duration_ms, self._on_floater_finished,
+            parent=central, opacity=self.floater_opacity,
         )
         self.active_floaters.append(sprite)
         self._raise_global_overlays()

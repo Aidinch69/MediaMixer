@@ -1,59 +1,91 @@
-"""A single Floating Overlay FX sprite: a small muted mpv-backed window
-that drifts across the grid, then destroys itself. Native port of
-dashboard.js's drifting video sprites.
+"""A single Floating Overlay FX sprite: a small muted video that drifts
+across the grid, then destroys itself. Native port of dashboard.js's
+drifting video sprites.
 
-A genuine top-level window, owned by the main shell - not a child
-widget of the grid. A nested native child window (mpv's embedded
-surface) stacked *above other native child windows* (the grid tiles
-underneath, which are native for the same reason) rendered solid black
-every time, confirmed via screenshot debugging: mpv itself reported
-fully healthy playback (correct dimensions, not idle, no EOF) the
-whole time, so the decode pipeline was never the problem - the frames
-just never reached the screen. VideoTile never hits this because tiles
-never overlap each other; a floater's whole purpose is to overlap them.
-An owned top-level window is just ordinary window-over-window
-compositing (stacks above its owner, not above unrelated applications),
-which Windows handles natively regardless of content.
+Deliberately NOT mpv-native-window-embedded like VideoTile. A floater
+must render stacked *above* the grid tiles' own native embedded mpv
+windows - and on this Qt/Windows combination, one native child window
+layered above another native child window renders solid black 100% of
+the time, confirmed repeatedly via isolated screenshot debugging across
+many variants (nested child, owned top-level, unowned+always-on-top
+top-level) and with mpv diagnostics proving the decode pipeline itself
+was always perfectly healthy (correct dimensions, not idle, no EOF, no
+warnings) even while zero pixels reached the screen. The frames
+decoded fine; they just never composited. VideoTile never hits this
+because grid tiles never overlap each other.
+
+So floaters use OpenCV to decode frames directly in a background
+thread and paint them as plain QImages via a normal QWidget paintEvent
+- ordinary Qt-rendered content, the same pipeline the vignette and the
+rest of the UI already use successfully, with no native window
+involved at all. Heavier on CPU per-floater than mpv, but there are
+only a handful of floaters on screen at once (unlike the full grid),
+and it sidesteps the compositing bug entirely instead of fighting it.
 
 Muted deliberately - floaters are a decorative layer; the grid tiles
 and binaural tone already carry the session's primary audio.
 """
 from __future__ import annotations
 
-import os
+import threading
+import time
 
-_NATIVE_DEPS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "native_deps")
-if os.path.isdir(_NATIVE_DEPS):
-    os.add_dll_directory(_NATIVE_DEPS)
-    os.environ["PATH"] = _NATIVE_DEPS + os.pathsep + os.environ["PATH"]
+import cv2
+from PySide6.QtCore import Qt, QEasingCurve, QPoint, QPropertyAnimation, Signal
+from PySide6.QtGui import QImage, QPainter
+from PySide6.QtWidgets import QWidget
 
-import mpv  # noqa: E402
-from PySide6.QtCore import Qt, QEasingCurve, QPoint, QPropertyAnimation, QTimer  # noqa: E402
-from PySide6.QtWidgets import QWidget  # noqa: E402
+
+class _FrameReader(threading.Thread):
+    """Background thread: decodes frames from `url`, loops forever,
+    paces itself to the source's own fps so it doesn't spin the CPU."""
+
+    def __init__(self, url: str, on_frame):
+        super().__init__(daemon=True)
+        self._url = url
+        self._on_frame = on_frame
+        self._stop = threading.Event()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def run(self) -> None:
+        cap = cv2.VideoCapture(self._url)
+        if not cap.isOpened():
+            return
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        if fps <= 1 or fps > 120:
+            fps = 30.0
+        frame_interval = 1.0 / fps
+        try:
+            while not self._stop.is_set():
+                start = time.monotonic()
+                ok, frame = cap.read()
+                if not ok:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    continue
+                self._on_frame(frame)
+                elapsed = time.monotonic() - start
+                remaining = frame_interval - elapsed
+                if remaining > 0:
+                    self._stop.wait(remaining)
+        finally:
+            cap.release()
 
 
 class FloaterSprite(QWidget):
+    _frame_ready = Signal(object)
+
     def __init__(
         self, url: str, size: int, start: tuple, end: tuple, duration_ms: int, on_finished,
         parent=None, opacity: float = 0.6,
     ):
-        # Owned top-level window (see module docstring for why) -
-        # start/end are expected in GLOBAL screen coordinates, not
-        # relative to any grid widget, since this is its own window now.
-        super().__init__(parent, Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
         self._on_finished = on_finished
         self.setFixedSize(size, size)
+        self._size = size
 
-        self.video_surface = QWidget(self)
-        self.video_surface.setGeometry(0, 0, size, size)
-        self.video_surface.setStyleSheet("background-color: black;")
-
-        # Vignette: a radial gradient fading from transparent at the
-        # center to the grid's background color at the edge - the
-        # native embedded window can't be alpha-masked directly (no
-        # equivalent of the browser's CSS mask-image), so this
-        # approximates the soft-edge look by blending into the
-        # background color instead.
         edge_alpha = max(40, min(255, int(opacity * 255)))
         self.vignette = QWidget(self)
         self.vignette.setGeometry(0, 0, size, size)
@@ -67,32 +99,57 @@ class FloaterSprite(QWidget):
         self._duration_ms = duration_ms
         self._start = start
         self._end = end
-        self._player = None
+        self._image: QImage | None = None
+        self._reader: _FrameReader | None = None
+
+        self._frame_ready.connect(self._on_frame_ready)
 
         self.move(*start)
         self.show()
         self.raise_()
+        self.vignette.raise_()
 
-        # Still deferred a tick, same reasoning as VideoTile embedding
-        # asynchronously rather than in the same call stack as show().
-        QTimer.singleShot(50, self._start_playback)
-
-    def _start_playback(self) -> None:
-        try:
-            self._player = mpv.MPV(wid=int(self.video_surface.winId()), vid="auto", hwdec="auto", mute=True, loop_file="inf")
-            self._player.play(self._url)
-            self.vignette.raise_()
-        except Exception as e:
-            print(f"[floater] mpv embed failed: {e}", flush=True)
-            self._player = None
+        self._reader = _FrameReader(url, self._emit_frame)
+        self._reader.start()
 
         self._pos_anim = QPropertyAnimation(self, b"pos")
-        self._pos_anim.setDuration(self._duration_ms)
-        self._pos_anim.setStartValue(QPoint(*self._start))
-        self._pos_anim.setEndValue(QPoint(*self._end))
+        self._pos_anim.setDuration(duration_ms)
+        self._pos_anim.setStartValue(QPoint(*start))
+        self._pos_anim.setEndValue(QPoint(*end))
         self._pos_anim.setEasingCurve(QEasingCurve.Type.InOutSine)
         self._pos_anim.finished.connect(self._finish)
         self._pos_anim.start()
+
+    def _emit_frame(self, frame) -> None:
+        # Runs on the reader thread - hand the raw ndarray to the Qt
+        # thread via the signal/slot queued-connection, don't touch
+        # any QWidget state here.
+        self._frame_ready.emit(frame)
+
+    def _on_frame_ready(self, frame) -> None:
+        h, w = frame.shape[:2]
+        # BGR (OpenCV) -> RGB888, center-cropped to a square so it
+        # fills the circular vignette without stretching.
+        side = min(w, h)
+        x0 = (w - side) // 2
+        y0 = (h - side) // 2
+        cropped = frame[y0:y0 + side, x0:x0 + side]
+        rgb = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
+        image = QImage(rgb.data, side, side, rgb.strides[0], QImage.Format.Format_RGB888).copy()
+        self._image = image
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        if self._image is not None:
+            scaled = self._image.scaled(
+                self._size, self._size,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            painter.drawImage(0, 0, scaled)
+        else:
+            painter.fillRect(self.rect(), Qt.GlobalColor.black)
 
     def _finish(self) -> None:
         self.shutdown()
@@ -100,11 +157,8 @@ class FloaterSprite(QWidget):
             self._on_finished(self)
 
     def shutdown(self) -> None:
-        if self._player is not None:
-            try:
-                self._player.terminate()
-            except Exception:
-                pass
-            self._player = None
+        if self._reader is not None:
+            self._reader.stop()
+            self._reader = None
         self.hide()
         self.deleteLater()
