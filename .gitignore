@@ -12,6 +12,7 @@ native_prefs.json
 # runtime logs
 engine_stdout.log
 engine_stderr.log
+cache_warmer.log
 
 # personal media library (large binaries, not source)
 media_assets/
