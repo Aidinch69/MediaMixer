@@ -149,6 +149,25 @@ class Database:
             )
         conn.commit()
 
+    # -- self-building favorites --
+    def has_favorites(self) -> bool:
+        return self._connect().execute("SELECT 1 FROM video_weights WHERE heart_count > 0 LIMIT 1").fetchone() is not None
+
+    def favorite_video_rewards(self) -> list:
+        """Every hearted video across every folder, shaped like video_rewards()
+        so pick_video's scoring can treat it as just another folder."""
+        return self._connect().execute(
+            "SELECT video_path, ema_reward, play_count, updated_at FROM video_weights WHERE heart_count > 0"
+        ).fetchall()
+
+    def favorite_top_videos(self, limit: int) -> list:
+        rows = self._connect().execute(
+            "SELECT video_path FROM video_weights WHERE heart_count > 0 "
+            "ORDER BY ema_reward DESC, video_path ASC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [r["video_path"] for r in rows]
+
     def bump_heart(self, path: str) -> Optional[dict]:
         """Record a heart (upvote) on a video: bump its count and track the
         earliest/latest heart timestamps, which Custom Loop Point and the

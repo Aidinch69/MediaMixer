@@ -14,6 +14,15 @@ from .db import Database
 # system still works without forcing the user to pre-sort their library.
 GENERAL_FOLDER = "General"
 
+# Self-Building Favorites: a pseudo-folder, not a real filesystem directory -
+# its contents are every video with at least one heart, across every real
+# folder, so "sorting into a favorites folder" happens automatically just by
+# hearting a clip rather than requiring any manual cataloging. Only ever
+# reachable by explicit selection (pick_folder's automatic weighted rotation
+# never picks it, since it has no row in folder_weights) and only listed at
+# all once at least one video qualifies.
+FAVORITES_FOLDER = "❤Favorites"
+
 
 def _loose_video_files(config: Config) -> List[str]:
     return [
@@ -49,6 +58,17 @@ def list_folders(config: Config) -> List[str]:
     )
     if GENERAL_FOLDER not in folders and _loose_video_files(config):
         folders.insert(0, GENERAL_FOLDER)
+    return folders
+
+
+def list_folders_with_favorites(db: Database, config: Config) -> List[str]:
+    """list_folders(), plus the Favorites pseudo-folder appended once at
+    least one video has been hearted. Kept separate from list_folders()
+    itself so every other caller (sync, filesystem scans) stays untouched
+    by a concept that only exists in the DB, not on disk."""
+    folders = list_folders(config)
+    if db.has_favorites():
+        folders.append(FAVORITES_FOLDER)
     return folders
 
 
@@ -97,7 +117,7 @@ def pick_video(
     """
     now = time.time()
     bonus = config.exploration_bonus_c if exploration_bonus is None else exploration_bonus
-    rows = db.video_rewards(folder)
+    rows = db.favorite_video_rewards() if folder == FAVORITES_FOLDER else db.video_rewards(folder)
     if not rows:
         return None
     if exclude:
@@ -130,7 +150,8 @@ def pick_video_jackpot(
 
     # Fetch extra headroom past `offset` so there's enough to skip past any
     # excluded videos and still land on a real pick.
-    rows = db.top_videos_by_reward(folder, limit=offset + 1 + len(exclude_norm))
+    limit = offset + 1 + len(exclude_norm)
+    rows = db.favorite_top_videos(limit) if folder == FAVORITES_FOLDER else db.top_videos_by_reward(folder, limit=limit)
     candidates = [r for r in rows if os.path.normpath(r).lower() not in exclude_norm]
     if offset < len(candidates):
         return candidates[offset]

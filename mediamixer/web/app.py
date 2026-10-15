@@ -164,7 +164,7 @@ def create_app(ctx: AppContext) -> Flask:
         phone_url = get_tailscale_https_url(config.port) or f"http://{get_lan_ip()}:{config.port}"
         return render_template(
             "dashboard.html",
-            folders=library.list_folders(config),
+            folders=library.list_folders_with_favorites(db, config),
             tone_hz=config.tone_modes[snap["tone_index"]],
             beat_knob=f"{snap['binaural_knob']:.2f}",
             pace_idx=pace_idx,
@@ -225,7 +225,7 @@ def create_app(ctx: AppContext) -> Flask:
         # dashboard.html gets category names baked into the server-rendered
         # template; a non-browser viewer (the native app) needs them as
         # JSON instead - read-only, additive, doesn't touch any existing route.
-        return jsonify(folders=library.list_folders(config))
+        return jsonify(folders=library.list_folders_with_favorites(db, config))
 
     @app.route("/api/overlay_fx/list")
     def api_overlay_fx_list():
@@ -315,7 +315,7 @@ def create_app(ctx: AppContext) -> Flask:
     @app.route("/api/folder")
     def api_folder():
         folder = request.args.get("folder", "")
-        if folder not in library.list_folders(config):
+        if folder not in library.list_folders_with_favorites(db, config):
             return jsonify(ok=False, error="unknown folder"), 400
         g.session.rotation.rotate(override_folder=folder, side="all")
         return jsonify(ok=True)
