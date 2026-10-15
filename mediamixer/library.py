@@ -141,3 +141,12 @@ def reward_video(db: Database, config: Config, path: Optional[str], reward: floa
     if not path:
         return
     db.apply_video_reward(path, reward, config.decay_halflife_s, config.reward_ema_alpha, played=played)
+
+
+def heart_video(db: Database, path: Optional[str]) -> Optional[dict]:
+    """Register a heart (upvote) on `path`, separate from the EMA reward
+    update - this tracks count/first/last timestamps for features that key
+    off heart history specifically (Heart Streak Badge, Custom Loop Point)."""
+    if not path:
+        return None
+    return db.bump_heart(path)

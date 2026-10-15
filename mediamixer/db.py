@@ -9,6 +9,7 @@ import logging
 import sqlite3
 import threading
 import time
+from typing import Optional
 
 from .bandit import decayed_value
 from .config import Config
@@ -26,7 +27,10 @@ CREATE TABLE IF NOT EXISTS video_weights (
     folder_name TEXT NOT NULL,
     ema_reward  REAL NOT NULL DEFAULT 0.0,
     play_count  INTEGER NOT NULL DEFAULT 0,
-    updated_at  REAL NOT NULL DEFAULT 0.0
+    updated_at  REAL NOT NULL DEFAULT 0.0,
+    heart_count    INTEGER NOT NULL DEFAULT 0,
+    first_heart_at REAL,
+    last_heart_at  REAL
 );
 CREATE INDEX IF NOT EXISTS idx_video_weights_folder ON video_weights(folder_name);
 CREATE TABLE IF NOT EXISTS audio_tracks (
@@ -43,6 +47,23 @@ class Database:
         self._tls = threading.local()
         with self._connect() as conn:
             conn.executescript(SCHEMA)
+            self._migrate(conn)
+
+    def _migrate(self, conn: sqlite3.Connection):
+        """CREATE TABLE IF NOT EXISTS only helps brand-new databases - an
+        existing system_memory.db (which every current install already has,
+        full of real reward history) keeps whatever columns it was created
+        with. Add any columns a prior version's schema is missing, each
+        guarded so re-running this on an already-migrated db is a no-op."""
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(video_weights)")}
+        for column, ddl in (
+            ("heart_count", "ALTER TABLE video_weights ADD COLUMN heart_count INTEGER NOT NULL DEFAULT 0"),
+            ("first_heart_at", "ALTER TABLE video_weights ADD COLUMN first_heart_at REAL"),
+            ("last_heart_at", "ALTER TABLE video_weights ADD COLUMN last_heart_at REAL"),
+        ):
+            if column not in existing:
+                conn.execute(ddl)
+        conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
         conn = getattr(self._tls, "conn", None)
@@ -127,3 +148,25 @@ class Database:
                 (folder_ema, now, row["folder_name"]),
             )
         conn.commit()
+
+    def bump_heart(self, path: str) -> Optional[dict]:
+        """Record a heart (upvote) on a video: bump its count and track the
+        earliest/latest heart timestamps, which Custom Loop Point and the
+        Heart Streak Badge both key off of."""
+        now = time.time()
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT heart_count, first_heart_at FROM video_weights WHERE video_path=?",
+            (path,),
+        ).fetchone()
+        if row is None:
+            return None
+
+        new_count = row["heart_count"] + 1
+        first_heart_at = row["first_heart_at"] if row["first_heart_at"] is not None else now
+        conn.execute(
+            "UPDATE video_weights SET heart_count=?, first_heart_at=?, last_heart_at=? WHERE video_path=?",
+            (new_count, first_heart_at, now, path),
+        )
+        conn.commit()
+        return {"heart_count": new_count, "first_heart_at": first_heart_at, "last_heart_at": now}

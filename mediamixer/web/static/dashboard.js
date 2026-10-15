@@ -2476,7 +2476,15 @@ function rateScreen(i, dir, btn) {
     void btn.offsetWidth;
     btn.classList.add('pop');
   }
-  fetch('/api/rate?screen=' + i + '&dir=' + dir).then(() => toast(dir === 'up' ? '❤️ Reinforced' : '👎 Penalized', dir !== 'up'));
+  fetch('/api/rate?screen=' + i + '&dir=' + dir)
+    .then((r) => r.json())
+    .then((data) => {
+      toast(dir === 'up' ? '❤️ Reinforced' : '👎 Penalized', dir !== 'up');
+      if (data && data.heart && data.heart.heart_count >= 2) {
+        showClaimRewardLabel(i, '💗 Heart Streak x' + data.heart.heart_count);
+      }
+    })
+    .catch(() => {});
 }
 
 // A quick border-glow flash on the tile that was just rated, scaling

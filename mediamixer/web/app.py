@@ -355,9 +355,12 @@ def create_app(ctx: AppContext) -> Flask:
             index = int(request.args.get("screen", ""))
         except (TypeError, ValueError):
             return jsonify(ok=False, error="invalid screen index"), 400
-        reward = config.rate_up_reward if request.args.get("dir") == "up" else config.rate_down_reward
-        library.reward_video(db, config, session.state.current_path(index), reward)
-        return jsonify(ok=True)
+        is_up = request.args.get("dir") == "up"
+        reward = config.rate_up_reward if is_up else config.rate_down_reward
+        path = session.state.current_path(index)
+        library.reward_video(db, config, path, reward)
+        heart = library.heart_video(db, path) if is_up else None
+        return jsonify(ok=True, heart=heart)
 
     @app.route("/api/rate_audio")
     def api_rate_audio():
