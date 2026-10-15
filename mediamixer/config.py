@@ -110,24 +110,31 @@ class Config:
     # guess at the same time.
     jackpot_tiers: Tuple[JackpotTier, ...] = (
         JackpotTier("small", weight=65, tile_count=(1, 2), jackpot_picks=1,
-                    speed_range=(1.05, 1.15), hype_ticks=(4, 6)),
+                    speed_range=(1.08, 1.22), hype_ticks=(4, 6)),
         JackpotTier("medium", weight=28, tile_count=(2, 3), jackpot_picks=2,
-                    speed_range=(1.12, 1.28), hype_ticks=(6, 9)),
+                    speed_range=(1.18, 1.38), hype_ticks=(6, 9)),
         JackpotTier("mega", weight=7, tile_count=(3, 4), jackpot_picks=4,
-                    speed_range=(1.22, 1.45), hype_ticks=(10, 14)),
+                    speed_range=(1.35, 1.65), hype_ticks=(10, 14)),
     )
     jackpot_probability: float = 0.12
     jackpot_hold_seconds: float = 60.0
 
     # -- tension / time-dilation curve --
     tension_window_s: float = 5.0
-    tension_max_drag: float = 0.20
+    tension_max_drag: float = 0.35
 
     # -- reward-weighted bandit --
     reward_ema_alpha: float = 0.30
-    softmax_temp: float = 0.45
+    # Raised from 0.45/0.15 - a handful of early-rated favorites were
+    # dominating selection against the much larger pool of never-rated
+    # clips (an unrated clip's score of just the exploration bonus vs. a
+    # favorite's ~0.8 reward was enough of a gap, at the old temperature,
+    # to make the favorite roughly 4x more likely to be picked every
+    # time - that's "the same ones keep coming up," working as designed
+    # but tuned too conservatively for a library this size).
+    softmax_temp: float = 0.60
     decay_halflife_s: float = 1800.0
-    exploration_bonus_c: float = 0.15  # UCB-style bonus so rarely-played clips stay in rotation
+    exploration_bonus_c: float = 0.35  # UCB-style bonus so rarely-played clips stay in rotation
 
     skip_penalty: float = -0.25
     lock_reward: float = 0.8

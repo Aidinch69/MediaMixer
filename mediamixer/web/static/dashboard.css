@@ -38,12 +38,18 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    of this file, so it's exactly as cheap as the radial version it
    replaces, just shaped differently. */
 .tile-glow-fx{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;will-change:opacity;border:3px solid rgba(var(--theme-glow,255,70,30),1);border-radius:inherit;box-sizing:border-box}
-.tile-ambient-fx{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;will-change:opacity}
+.tile-ambient-fx{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;will-change:opacity;display:flex;align-items:center;justify-content:center}
 /* Claimable directly by tapping the tile itself, not just the thumbs-up
    button - pointer-events only turned on while a bonus is actually live,
-   so it never intercepts normal clicks on an idle tile. */
-.tile-ambient-fx.bonus-window{opacity:1;background:radial-gradient(circle,rgba(255,212,59,.7),rgba(255,212,59,0) 70%);animation:bonus-pulse-opacity 1s ease-in-out infinite;pointer-events:auto;cursor:pointer}
-@keyframes bonus-pulse-opacity{0%,100%{opacity:.45}50%{opacity:.9}}
+   so it never intercepts normal clicks on an idle tile. A border ring
+   (same "lit boundary" language as the jackpot glow) plus an explicit
+   tap-icon badge, not just a color wash - a yellow tint alone didn't
+   read as "clickable" on its own. */
+.tile-ambient-fx.bonus-window{opacity:1;border:4px solid rgba(255,212,59,.9);border-radius:inherit;box-sizing:border-box;animation:bonus-pulse-opacity 1s ease-in-out infinite;pointer-events:auto;cursor:pointer}
+@keyframes bonus-pulse-opacity{0%,100%{opacity:.55}50%{opacity:1}}
+.tap-badge{display:none;background:rgba(10,5,0,.75);color:#ffd43b;font-weight:bold;font-size:.85rem;padding:6px 14px;border-radius:20px;border:1px solid rgba(255,212,59,.7);letter-spacing:.5px;animation:tap-badge-bounce 1s ease-in-out infinite}
+.tile-ambient-fx.bonus-window .tap-badge{display:inline-block}
+@keyframes tap-badge-bounce{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
 .tile-ambient-fx.due-aura{opacity:1;background:radial-gradient(circle,rgba(120,120,255,.6),rgba(120,120,255,0) 70%);animation:due-pulse-opacity 3s ease-in-out infinite}
 @keyframes due-pulse-opacity{0%,100%{opacity:.3}50%{opacity:.7}}
 /* Mega-tier only: dims everything except the screens that are really
@@ -54,16 +60,28 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .tile-dimmed::after{content:'';position:absolute;inset:0;background:#000;opacity:.5;pointer-events:none;z-index:1;transition:opacity .3s ease}
 .tile.mystery-tile video{filter:blur(14px)}
 .tile.mystery-reveal video{transition:filter .3s ease}
-.mystery-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:2.4rem;font-weight:bold;color:#fff;text-shadow:0 0 12px #000;pointer-events:none;z-index:2}
 #anticipation-meter{position:fixed;top:0;left:0;width:100%;height:4px;z-index:18;background:rgba(255,255,255,.05);pointer-events:none}
 #anticipation-meter-fill{height:100%;width:0%;background:linear-gradient(90deg,rgba(var(--theme-glow,255,70,30),.35),rgba(var(--theme-glow,255,70,30),1));transition:width 1s linear}
+/* A plain-language readout of whatever's currently active - answers
+   "why did the screen just shake" / "what does this purple glow mean"
+   in the moment instead of leaving it unexplained. Always visible
+   (not tucked in the collapsible panel), but only actually shown while
+   there's something worth saying - no generic idle message. */
+#status-bar{display:none;position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:19;align-items:center;gap:6px;background:rgba(10,5,20,.82);border:1px solid rgba(184,77,255,.5);border-radius:20px;padding:7px 18px;font-size:.78rem;font-weight:bold;color:#fff;white-space:nowrap;max-width:88vw;overflow:hidden;text-overflow:ellipsis;pointer-events:none;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+#status-bar.show{display:flex}
 .theater.theme-teaser::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,rgba(var(--theme-flash,255,220,120),0) 55%,rgba(var(--theme-flash,255,220,120),.28) 100%);animation:teaser-flash-anim .15s ease-out}
 @keyframes teaser-flash-anim{0%{opacity:1}100%{opacity:0}}
-#push-luck-prompt{display:none;position:fixed;top:58%;left:50%;transform:translate(-50%,0);z-index:21;align-items:center;gap:10px;background:#150a28;border:1px solid #b84dff;border-radius:8px;padding:10px 14px;box-shadow:0 0 20px rgba(184,77,255,.4);font-size:.82rem;font-weight:bold;color:#fff}
+/* Bottom-left, stacked above the existing #toast - not the center of
+   the viewport (both of these used to float directly over whatever was
+   playing in the middle of the screen), and not bottom-right either:
+   the settings panel is a fixed, opaque, z-index:25 sidebar that covers
+   that entire corner whenever it's open, which was hiding both of these
+   completely the moment the panel was visible (its default state). */
+#push-luck-prompt{display:none;position:fixed;bottom:160px;left:25px;z-index:21;align-items:center;gap:10px;background:linear-gradient(180deg,#1d0f38,#150a28);border:1px solid #b84dff;border-radius:12px;padding:12px 16px;box-shadow:0 4px 20px rgba(0,0,0,.5),0 0 16px rgba(184,77,255,.3);font-size:.82rem;font-weight:bold;color:#fff}
 /* Always on screen regardless of panel/settings visibility - a casino
    lever you can reach for any time, not a buried settings toggle. */
-#spin-btn{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:21;padding:12px 22px;font-size:.85rem;background:linear-gradient(180deg,#2a1540,#150a28);border:1px solid #b84dff;border-radius:24px;box-shadow:0 0 16px rgba(184,77,255,.35);transition:transform .1s,box-shadow .2s}
-#spin-btn:active{transform:translateX(-50%) scale(.95)}
+#spin-btn{position:fixed;bottom:90px;left:25px;z-index:21;padding:12px 22px;font-size:.85rem;background:linear-gradient(180deg,#2a1540,#150a28);border:1px solid #b84dff;border-radius:24px;box-shadow:0 4px 16px rgba(0,0,0,.5),0 0 16px rgba(184,77,255,.35);transition:transform .1s,box-shadow .2s;min-width:110px}
+#spin-btn:active{transform:scale(.95)}
 #spin-btn:disabled{opacity:.5;cursor:default;box-shadow:none}
 #spin-btn.spin-ready{animation:spin-ready-pulse 1.6s ease-in-out infinite}
 @keyframes spin-ready-pulse{0%,100%{box-shadow:0 0 16px rgba(184,77,255,.35)}50%{box-shadow:0 0 26px rgba(184,77,255,.65)}}

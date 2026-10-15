@@ -103,6 +103,12 @@ function computeMosaicRows(aspects, containerWidth, containerHeight) {
   for (let rows = 1; rows <= n; rows++) {
     const sizes = splitEvenly(n, rows);
     if (sizes.some(s => s === 0)) continue;
+    // A single row holding every tile (or the opposite - one tall column,
+    // rows===n) occasionally wins this search on pure height-matching
+    // arithmetic for some aspect-ratio mixes, but it reads as everything
+    // squished flat into one sliver - skip both extremes whenever there's
+    // a real alternative.
+    if (n > 2 && (rows === 1 || rows === n)) continue;
 
     let idx = 0;
     const groups = sizes.map(size => aspects.slice(idx, (idx += size)));
@@ -349,12 +355,18 @@ function activateFxSprite(sprite) {
     el.style.height = (sizePx * 9 / 16) + 'px'; // corrected above once real metadata loads
 
     const vw = window.innerWidth, vh = window.innerHeight;
-    const startX = Math.random() * Math.max(0, vw - sizePx);
-    const startY = Math.random() * Math.max(0, vh - sizePx * 9 / 16);
+    const maxX = Math.max(0, vw - sizePx);
+    const maxY = Math.max(0, vh - sizePx * 9 / 16);
+    const startX = Math.random() * maxX;
+    const startY = Math.random() * maxY;
     const angle = Math.random() * Math.PI * 2;
     const distance = Math.max(vw, vh) * (0.3 + Math.random() * 0.4);
-    const endX = startX + Math.cos(angle) * distance;
-    const endY = startY + Math.sin(angle) * distance;
+    // Clamped to the same bounds as the start point - an unclamped
+    // endpoint could send a floater well past the edge of the viewport,
+    // so for however much of its lifetime remained after that it was
+    // just gone, off-screen, before it could actually be enjoyed.
+    const endX = Math.max(0, Math.min(maxX, startX + Math.cos(angle) * distance));
+    const endY = Math.max(0, Math.min(maxY, startY + Math.sin(angle) * distance));
     const lifetime = sprite.burst
       ? 3 + Math.random() * 3
       : FX_MIN_LIFETIME_S + Math.random() * (FX_MAX_LIFETIME_S - FX_MIN_LIFETIME_S);
@@ -961,6 +973,8 @@ function tickAnticipationMeter() {
 const DUE_AURA_THRESHOLD_MS = 45000;
 let tileLastRatedAt = {};
 
+let dueAuraTileIndex = -1;
+
 function tickDueAura() {
   // Only ever the single most-idle tile, not every tile past the threshold -
   // an infinite box-shadow animation on every tile in the grid at once was
@@ -976,10 +990,42 @@ function tickDueAura() {
       mostIdleTile = i;
     }
   });
+  dueAuraTileIndex = mostIdleTile;
   tileAmbientEls.forEach((el, i) => {
     if (el) el.classList.toggle('due-aura', i === mostIdleTile);
   });
 }
+
+// Plain-language readout of whatever's currently active, in priority
+// order (most specific/time-limited first) - see #status-bar's CSS
+// comment for why this exists. Polled rather than purely event-driven
+// so it self-corrects if a state ends without an explicit "clear" path
+// ever running (e.g. a tab backgrounded through a setTimeout).
+function updateStatusBar() {
+  const bar = document.getElementById('status-bar');
+  if (!bar) return;
+  let text = null;
+  if (anticipationActive) {
+    text = '🔥 Something\'s building...';
+  } else if (bonusWindowTileIndex >= 0) {
+    text = '✨ Bonus tile glowing - tap it before it fades!';
+  } else if (mysteryTileIndex >= 0) {
+    text = '🔮 Mystery tile - just a curiosity, nothing behind it';
+  } else if (isSurgeActive()) {
+    text = '⚡ Surge - odds boosted for a bit';
+  } else if (isGoldenHourActive()) {
+    text = '✨ Golden Hour - better odds while it lasts';
+  } else if (dueAuraTileIndex >= 0) {
+    text = '💤 A tile hasn\'t been rated in a while - give it a 👍 or 👎';
+  }
+  if (text) {
+    bar.innerText = text;
+    bar.classList.add('show');
+  } else {
+    bar.classList.remove('show');
+  }
+}
+setInterval(updateStatusBar, 1000);
 
 // Leveling/XP: a persistent long-horizon progress bar across sessions,
 // separate from any single jackpot - the point is a number that only ever
@@ -1755,7 +1801,7 @@ function ensureTiles(count) {
       '<video id="screen-' + i + '" autoplay controls></video>' +
       '<video id="preload-' + i + '" class="preload" preload="auto" muted></video>' +
       '<div class="tile-glow-fx"></div>' +
-      '<div class="tile-ambient-fx"></div>' +
+      '<div class="tile-ambient-fx"><span class="tap-badge">👆 TAP</span></div>' +
       '<div class="tile-overlay">' +
       '<div class="src-label" id="label-' + i + '"></div>' +
       '<div class="tile-actions">' +
@@ -1946,6 +1992,14 @@ function maybeTriggerBonusWindow() {
 // Shared by the passive random roll above and the manual Spin action -
 // either way, a bonus tile works the same once it's lit.
 function activateBonusWindow(idx) {
+  // If one's already glowing on a different tile (e.g. Spin rolled
+  // "bonus" while a passive one was still active elsewhere), clear it
+  // properly first - overwriting bonusWindowTileIndex without this left
+  // the old tile's class on permanently, since nothing else ever
+  // pointed back at it to clean it up.
+  if (bonusWindowTileIndex >= 0 && bonusWindowTileIndex !== idx) {
+    clearBonusWindow(bonusWindowTileIndex);
+  }
   bonusWindowTileIndex = idx;
   bonusWindowExpireAt = Date.now() + BONUS_WINDOW_DURATION_MS;
   const el = tileAmbientEls[idx];
@@ -1988,20 +2042,15 @@ function maybeTriggerMysteryTile() {
   if (!tile) return;
   mysteryTileIndex = idx;
   tile.classList.add('mystery-tile');
-  const overlay = document.createElement('div');
-  overlay.className = 'mystery-overlay';
-  overlay.innerText = '?';
-  tile.appendChild(overlay);
-  setTimeout(() => clearMysteryTile(idx, overlay), MYSTERY_TILE_DURATION_MS);
+  setTimeout(() => clearMysteryTile(idx), MYSTERY_TILE_DURATION_MS);
 }
 
-function clearMysteryTile(idx, overlay) {
+function clearMysteryTile(idx) {
   const tile = tileElements[idx];
   if (tile) {
     tile.classList.remove('mystery-tile');
     tile.classList.add('mystery-reveal');
     setTimeout(() => tile.classList.remove('mystery-reveal'), 300);
-    if (overlay && overlay.parentNode === tile) tile.removeChild(overlay);
   }
   if (mysteryTileIndex === idx) mysteryTileIndex = -1;
 }
@@ -2026,6 +2075,21 @@ function nextAudio() { fetch('/api/next_audio').then(() => toast('⏭️ Audio S
 const SPIN_COOLDOWN_MS = 45000;
 let spinReadyAt = 0;
 
+// Shows the outcome directly on the button itself for a couple seconds -
+// a toast elsewhere on screen was easy to miss entirely, especially
+// since the button sits apart from wherever attention happens to be.
+// Held via spinResultUntil so the 1s countdown tick (updateSpinButton)
+// doesn't immediately stomp over it.
+let spinResultUntil = 0;
+
+function showSpinResult(text) {
+  const btn = document.getElementById('spin-btn');
+  if (!btn) return;
+  spinResultUntil = Date.now() + 2200;
+  btn.classList.remove('spin-ready');
+  btn.innerText = text;
+}
+
 function spin() {
   const now = Date.now();
   if (now < spinReadyAt) {
@@ -2033,24 +2097,25 @@ function spin() {
     return;
   }
   spinReadyAt = now + SPIN_COOLDOWN_MS;
-  updateSpinButton();
   const theater = document.getElementById('theater-box');
   teaseNextTheme(theater); // quick visual "tick" regardless of outcome
 
   const roll = Math.random();
   if (roll < 0.08 && !anticipationActive) {
+    showSpinResult('🎉 JACKPOT!');
     runPayoff(); // full jackpot-tier celebration - the rare big pull
-  } else if (roll < 0.40) {
-    if (tileElements.length) {
-      activateBonusWindow(Math.floor(Math.random() * tileElements.length));
-      toast('✨ A tile just lit up - tap it!');
-    }
+  } else if (roll < 0.40 && tileElements.length) {
+    activateBonusWindow(Math.floor(Math.random() * tileElements.length));
+    showSpinResult('✨ Tap the tile!');
+    toast('✨ A tile just lit up - tap it!');
   } else if (roll < 0.75) {
     const amount = Math.round(8 + Math.random() * 12);
     playChimeSound(0.6);
     awardXp(amount);
+    showSpinResult('🎉 +' + amount + 'xp');
     toast('🎉 +' + amount + 'xp!');
   } else {
+    showSpinResult('💨 Nothing');
     toast('💨 Nothing this time...', true);
   }
 }
@@ -2058,6 +2123,7 @@ function spin() {
 function updateSpinButton() {
   const btn = document.getElementById('spin-btn');
   if (!btn) return;
+  if (Date.now() < spinResultUntil) return;
   const remaining = Math.ceil((spinReadyAt - Date.now()) / 1000);
   if (remaining > 0) {
     btn.disabled = true;
