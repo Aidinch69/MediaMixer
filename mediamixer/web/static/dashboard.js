@@ -2290,6 +2290,12 @@ function stopAutopilot() {
   autopilotAmbientBoost = 0;
   autopilotZone = null;
   updateAutopilotZoneUi();
+  // Auto-Pilot's arc drives novelty/exploration on its own curve while
+  // running (see the ARC table's `novelty` column) - handing it back to
+  // whatever the viewer had manually set on the Vibe Dial before turning
+  // Auto-Pilot on, instead of just leaving the backend wherever the arc's
+  // last tick happened to leave it.
+  applyVibeDial(vibeDialValue);
 }
 
 function toggleAutopilot() {
@@ -2303,6 +2309,46 @@ function setAutopilotMinutes(v) {
   autopilotCycleMinutes = parseFloat(v);
   document.getElementById('l-autopilot-minutes').innerText = autopilotCycleMinutes + ' min';
   try { localStorage.setItem('mm_autopilot_minutes', autopilotCycleMinutes); } catch (e) {}
+}
+
+// ---- Discovery/Favorites Vibe Dial ----
+// A direct manual control over the exact same exploration_bonus the
+// backend's bandit selection already uses (see pick_video/exploration_score
+// server-side): low = stick close to what already scores well (familiar),
+// high = give lightly-played clips a real shot even against established
+// favorites (discovery). Auto-Pilot's arc already blends this
+// automatically on its own curve while running (the ARC table's `novelty`
+// column, sent via the same /api/novelty endpoint) - that's the
+// "functions could auto-blend this" half of the idea. This dial is the
+// *manual* half: your own resting preference, which Auto-Pilot temporarily
+// overrides while active and hands back to on stop (see stopAutopilot).
+const VIBE_DIAL_KEY = 'mm_vibe_dial';
+const VIBE_DIAL_DEFAULT = 0.35; // matches config.exploration_bonus_c's shipped default
+let vibeDialValue = VIBE_DIAL_DEFAULT;
+
+function applyVibeDial(value) {
+  fetch('/api/novelty?bonus=' + value.toFixed(3));
+}
+
+function setVibeDial(v) {
+  vibeDialValue = parseFloat(v);
+  const el = document.getElementById('l-vibe-dial');
+  if (el) el.innerText = vibeDialValue < 0.5 ? 'Familiar' : (vibeDialValue > 1.3 ? 'Discovery' : 'Balanced');
+  try { localStorage.setItem(VIBE_DIAL_KEY, vibeDialValue); } catch (e) {}
+  if (!autopilotEnabled) applyVibeDial(vibeDialValue);
+}
+
+function loadVibeDialPref() {
+  let saved = VIBE_DIAL_DEFAULT;
+  try {
+    const raw = localStorage.getItem(VIBE_DIAL_KEY);
+    if (raw !== null) saved = parseFloat(raw);
+  } catch (e) {}
+  if (!Number.isFinite(saved)) saved = VIBE_DIAL_DEFAULT;
+  vibeDialValue = saved;
+  const input = document.getElementById('vibe-dial-input');
+  if (input) input.value = saved;
+  setVibeDial(saved);
 }
 
 // ---- Session timer (opt-in, off by default) ----
@@ -3581,6 +3627,7 @@ window.onload = () => {
   loadFxPrefs();
   loadAnticipationPrefs();
   loadAutopilotPrefs();
+  loadVibeDialPref();
   loadSessionTimerPref();
   applyColorTheme(0);
   loadXpState();

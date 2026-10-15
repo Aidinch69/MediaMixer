@@ -123,6 +123,9 @@
     <button class="badge" id="prestige-btn" onclick="prestige()" style="display:none">⭐ Prestige (reset level for a rank)</button>
     <div class="trophy-case" id="trophy-case"></div>
     <details class="hint-details"><summary>What does this do?</summary><p class="hint">Lifetime bests and two daily quests that re-roll each day and auto-claim XP on completion - all stored on this device, nothing leaves it. The trophy case below unlocks permanent badges as those lifetime stats cross thresholds (hearts given, jackpots, chase chains, prestige) - once earned, a trophy stays forever.</p></details>
+    <h3>🧭 Discovery Vibe</h3>
+    <div class="slider"><label>Familiar ↔ Discovery: <b><span id="l-vibe-dial">Balanced</span></b></label><input type="range" id="vibe-dial-input" min="0" max="2" step="0.05" value="0.35" oninput="setVibeDial(this.value)"></div>
+    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Low = selection sticks closer to clips that already score well (familiar). High = lightly-played clips get a real shot even against established favorites (discovery). Auto-Pilot's own arc blends this automatically while it's running and hands control back to this dial the moment you turn it off.</p></details>
     <h3>🎬 Auto-Pilot<span class="experimental-pill">Experimental</span></h3>
     <div class="slider">
       <label>Enabled</label>
