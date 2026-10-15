@@ -72,10 +72,20 @@ def _generate(ffmpeg: str, source_path: str, proxy_path: str, config) -> None:
         # Run the transcode at below-normal OS scheduling priority so it
         # never wins CPU time away from the Flask server or the browser's
         # own video decode - it's background cache-warming, not something
-        # anything else should ever be waiting on.
+        # anything else should ever be waiting on. CREATE_NO_WINDOW matters
+        # specifically for cache_warmer.py, which runs under pythonw.exe
+        # (no console of its own) - without it, Windows pops up a brand
+        # new, visible console for every single ffmpeg invocation, since a
+        # console-subsystem child process spawned from a console-less
+        # parent gets allocated one automatically.
         popen_kwargs = {}
+        creationflags = 0
         if hasattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS"):
-            popen_kwargs["creationflags"] = subprocess.BELOW_NORMAL_PRIORITY_CLASS
+            creationflags |= subprocess.BELOW_NORMAL_PRIORITY_CLASS
+        if hasattr(subprocess, "CREATE_NO_WINDOW"):
+            creationflags |= subprocess.CREATE_NO_WINDOW
+        if creationflags:
+            popen_kwargs["creationflags"] = creationflags
         try:
             subprocess.run(cmd, check=True, capture_output=True, timeout=180, **popen_kwargs)
             os.replace(tmp_path, proxy_path)
