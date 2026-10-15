@@ -64,6 +64,8 @@ const TUNING_DEFAULTS = {
   PATIENCE_XP: 15,
   HOLD_TO_HEART_MS: 550,
   HOLD_TO_HEART_STRENGTH: 3,
+  PACE_REWARD_XP: 5,
+  PACE_REWARD_COOLDOWN_MS: 15000,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -158,6 +160,7 @@ const TUNING_GROUPS = [
   { label: 'Spin & Spawning', keys: ['SPIN_COOLDOWN_MS', 'AMBIENT_SPAWN_SEPARATION_MS'] },
   { label: 'Patience Hold', keys: ['PATIENCE_CHECK_MS', 'PATIENCE_HOLD_MS', 'PATIENCE_XP'] },
   { label: 'Hold-to-Heart', keys: ['HOLD_TO_HEART_MS', 'HOLD_TO_HEART_STRENGTH'] },
+  { label: 'Pace-as-Reward', keys: ['PACE_REWARD_XP', 'PACE_REWARD_COOLDOWN_MS'] },
   { label: 'Multipliers & XP', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
 ];
 const TUNING_META = {
@@ -205,6 +208,8 @@ const TUNING_META = {
   PATIENCE_XP: { label: 'Patience bonus XP', unit: 'n', min: 5, max: 60, step: 1 },
   HOLD_TO_HEART_MS: { label: 'Hold-to-Heart press duration', unit: 's', min: 200, max: 2000, step: 50 },
   HOLD_TO_HEART_STRENGTH: { label: 'Hold-to-Heart strength', unit: 'n', min: 2, max: 5, step: 1 },
+  PACE_REWARD_XP: { label: 'Pace-change bonus XP', unit: 'n', min: 1, max: 30, step: 1 },
+  PACE_REWARD_COOLDOWN_MS: { label: 'Pace-change reward cooldown', unit: 's', min: 5000, max: 60000, step: 5000 },
   JACKPOT_HEAT_DECAY_PER_TICK: { label: 'Jackpot-heat decay (per 5s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   HEART_MULT_DECAY_PER_TICK: { label: 'Heart-multiplier decay (per 6s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   GOLDEN_HOUR_MULTIPLIER: { label: 'Golden Hour odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
@@ -2701,11 +2706,27 @@ function togglePreload() {
   const next = !preloadEnabled;
   fetch('/api/preload?enabled=' + next).then(() => toast('Preload: ' + (next ? 'ON' : 'OFF')));
 }
+// Pace-as-Reward: deliberately dialing in your own pace is itself worth
+// a small reward, not just a background control with no feedback of its
+// own. Gated to real manual changes only - `quiet` is what Auto-Pilot's
+// own arc passes when it drives pace automatically (see autopilotTick),
+// and a flat per-change cooldown stops the reward being farmable by just
+// dragging the slider back and forth rapidly.
+let paceRewardReadyAt = 0;
+
 function pace(v, quiet) {
   const labels = ['10s Hard Switching', '5s - 30s (Rapid)', '30s - 120s (Balanced)', 'Full Video (Continuous)'];
   document.getElementById('l-pace').innerText = labels[v];
   document.getElementById('pace-input').value = v;
   fetch('/api/pace?mode=' + v).then(() => { if (!quiet) toast('Pace updated'); });
+  if (!quiet) {
+    markInteraction();
+    const now = Date.now();
+    if (now >= paceRewardReadyAt) {
+      paceRewardReadyAt = now + TUNING.PACE_REWARD_COOLDOWN_MS;
+      awardXp(TUNING.PACE_REWARD_XP);
+    }
+  }
 }
 function vec(k, v) { fetch('/api/vector?key=' + k + '&val=' + v); }
 function rateScreen(i, dir, btn, strength) {
