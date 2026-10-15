@@ -1052,6 +1052,8 @@ function updateStatusBar() {
     // near-misses have no server tier at all, so they stay vague on
     // purpose - revealing "this one's fake" would spoil the point of them.
     text = pendingServerTier ? ('🔥 Building... (' + pendingServerTier + ' incoming)') : '🔥 Something\'s building...';
+  } else if (sealedTileIndex >= 0) {
+    text = '🔒 Sealed tile - open it to see what\'s inside!';
   } else if (bonusWindowTileIndex >= 0) {
     text = '✨ Bonus tile glowing - tap it before it fades!';
   } else if (chaseFlashTileIndex >= 0) {
@@ -1373,6 +1375,32 @@ function pickJackpotTier() {
     r -= weighted[i];
   }
   return JACKPOT_TIERS[0];
+}
+
+// ---- Hidden multiplier window ----
+// A rare, genuinely silent window where bonus/catch/sealed-tile rewards
+// are secretly worth more - no badge, no toast, nothing when it starts.
+// The suspense is retroactive: you only find out a particular reward
+// was doubled from the extra "(hidden x2!)" tacked onto that reward's
+// own toast/label after the fact, instead of a countdown you'd just sit
+// and wait out. Deliberately separate from jackpotHeat/heartMultiplier,
+// which are both always visible - this one only works because it isn't.
+const HIDDEN_MULT_CHECK_MS = 50000;
+const HIDDEN_MULT_PROBABILITY = 0.05;
+const HIDDEN_MULT_DURATION_MS = 18000;
+const HIDDEN_MULT_VALUE = 2;
+let hiddenMultExpireAt = 0;
+
+function maybeTriggerHiddenMultiplier() {
+  if (!anticipationFxEnabled || Date.now() < hiddenMultExpireAt) return;
+  if (Math.random() < HIDDEN_MULT_PROBABILITY * oddsMultiplier()) {
+    hiddenMultExpireAt = Date.now() + HIDDEN_MULT_DURATION_MS;
+  }
+}
+setInterval(maybeTriggerHiddenMultiplier, HIDDEN_MULT_CHECK_MS);
+
+function hiddenMultiplierFactor() {
+  return Date.now() < hiddenMultExpireAt ? HIDDEN_MULT_VALUE : 1;
 }
 
 // Prefers the tier the server actually used for the content that just
@@ -1709,7 +1737,8 @@ function oddsMultiplier() {
     * (isSurgeActive() ? SURGE_MULTIPLIER : 1)
     * comboMultiplier()
     * (1 + jackpotHeat * 0.15) // catch streaks/bonus taps nudge this up too, see bumpJackpotHeat
-    * (1 + heartMultiplier * 0.08); // hearts nudge it too, see bumpHeartMultiplier
+    * (1 + heartMultiplier * 0.08) // hearts nudge it too, see bumpHeartMultiplier
+    * (1 + autopilotAmbientBoost); // Auto-Pilot's climax phase nudges it too, see autopilotTick
   return Math.min(3, raw);
 }
 
@@ -1734,15 +1763,22 @@ function maybeTriggerFakeNearMiss() {
 // per-session controls (pace(), /api/intensity, toggleMosaic/setFxCount),
 // so it has no server-side component of its own.
 const AUTOPILOT_TICK_MS = 4000;
+// "ambient" ramps every client-only passive-spawn system added since this
+// arc was first written (bonus window, chase flash, near-miss, spiral-
+// from-hearts) via autopilotAmbientBoost below - previously those all sat
+// at their own constant background rate no matter what phase the arc was
+// in, so a "climax" only ever meant more barrages/floaters, never more of
+// these. Shaped like the existing barrage/jackpot curve.
 const AUTOPILOT_KEYFRAMES = [
-  { t: 0.00, pace: 3, barrage: 0.01, jackpot: 0.02, mosaic: false, fx: 1, novelty: 0.10 },
-  { t: 0.35, pace: 2, barrage: 0.03, jackpot: 0.06, mosaic: false, fx: 2, novelty: 0.15 },
-  { t: 0.60, pace: 1, barrage: 0.10, jackpot: 0.18, mosaic: true, fx: 4, novelty: 0.30 },
-  { t: 0.75, pace: 0, barrage: 0.22, jackpot: 0.35, mosaic: true, fx: 6, novelty: 0.50 },
-  { t: 0.85, pace: 1, barrage: 0.08, jackpot: 0.15, mosaic: true, fx: 3, novelty: 0.30 },
-  { t: 1.00, pace: 3, barrage: 0.01, jackpot: 0.02, mosaic: false, fx: 1, novelty: 0.10 },
+  { t: 0.00, pace: 3, barrage: 0.01, jackpot: 0.02, mosaic: false, fx: 1, novelty: 0.10, ambient: 0.0 },
+  { t: 0.35, pace: 2, barrage: 0.03, jackpot: 0.06, mosaic: false, fx: 2, novelty: 0.15, ambient: 0.2 },
+  { t: 0.60, pace: 1, barrage: 0.10, jackpot: 0.18, mosaic: true, fx: 4, novelty: 0.30, ambient: 0.5 },
+  { t: 0.75, pace: 0, barrage: 0.22, jackpot: 0.35, mosaic: true, fx: 6, novelty: 0.50, ambient: 0.9 },
+  { t: 0.85, pace: 1, barrage: 0.08, jackpot: 0.15, mosaic: true, fx: 3, novelty: 0.30, ambient: 0.4 },
+  { t: 1.00, pace: 3, barrage: 0.01, jackpot: 0.02, mosaic: false, fx: 1, novelty: 0.10, ambient: 0.0 },
 ];
 
+let autopilotAmbientBoost = 0;
 let autopilotEnabled = false;
 let autopilotCycleMinutes = 6;
 let autopilotStartTime = 0;
@@ -1788,6 +1824,7 @@ function autopilotTick() {
   const fxTarget = Math.round(lerp(a.fx, b.fx, lf));
   const targetPace = lf < 0.5 ? a.pace : b.pace;
   const targetMosaic = lf < 0.5 ? a.mosaic : b.mosaic;
+  autopilotAmbientBoost = lerp(a.ambient, b.ambient, lf);
 
   fetch('/api/intensity?barrage=' + barrageP.toFixed(3) + '&jackpot=' + jackpotP.toFixed(3));
   fetch('/api/novelty?bonus=' + noveltyBonus.toFixed(3));
@@ -1811,6 +1848,7 @@ function startAutopilot() {
 function stopAutopilot() {
   clearInterval(autopilotTimer);
   autopilotTimer = null;
+  autopilotAmbientBoost = 0;
 }
 
 function toggleAutopilot() {
@@ -1886,6 +1924,21 @@ function restorePanelState() {
   document.getElementById('panel-toggle').innerText = collapsed ? '☰' : '✕';
 }
 
+const PANEL_TAB_NAMES = ['display', 'engagement', 'audio', 'more'];
+
+function switchPanelTab(name) {
+  if (!PANEL_TAB_NAMES.includes(name)) name = PANEL_TAB_NAMES[0];
+  document.querySelectorAll('.panel-tab').forEach(el => el.classList.toggle('active', el.dataset.tab === name));
+  document.querySelectorAll('.panel-tab-btn').forEach(el => el.classList.toggle('active', el.dataset.tab === name));
+  try { localStorage.setItem('mm_panel_tab', name); } catch (e) {}
+}
+
+function restorePanelTab() {
+  let name = PANEL_TAB_NAMES[0];
+  try { name = localStorage.getItem('mm_panel_tab') || name; } catch (e) {}
+  switchPanelTab(name);
+}
+
 let toastHideTimer = null;
 
 function toast(msg, neg) {
@@ -1948,6 +2001,8 @@ function ensureTiles(count) {
   lastFilterStr = new Array(count).fill('');
   clearTimeout(bonusWindowTimer);
   bonusWindowTileIndex = -1; // old tile references are about to be discarded
+  clearTimeout(sealedTimer);
+  sealedTileIndex = -1;
   for (let i = 0; i < count; i++) {
     const tile = document.createElement('div');
     tile.className = 'tile';
@@ -1955,7 +2010,7 @@ function ensureTiles(count) {
       '<video id="screen-' + i + '" autoplay></video>' +
       '<video id="preload-' + i + '" class="preload" preload="auto" muted></video>' +
       '<div class="tile-glow-fx"></div>' +
-      '<div class="tile-ambient-fx"><span class="tap-badge">👆 TAP</span><span class="chase-badge">⚡ CATCH</span></div>' +
+      '<div class="tile-ambient-fx"><span class="tap-badge">👆 TAP</span><span class="chase-badge">⚡ CATCH</span><span class="sealed-badge">🔒 OPEN</span></div>' +
       '<div class="tile-claim-fx"><span class="claim-reward-label"></span></div>' +
       '<div class="tile-overlay">' +
       '<div class="src-label" id="label-' + i + '"></div>' +
@@ -1970,7 +2025,12 @@ function ensureTiles(count) {
     ambientEl.addEventListener('click', () => {
       if (i === bonusWindowTileIndex) claimBonusTile(i);
       else if (i === chaseFlashTileIndex) catchChaseFlash(i);
+      else if (i === sealedTileIndex) openSealedTile(i);
       else if (i === dueAuraTileIndex) dismissDueAura(i);
+      else if (i === lastChaseMissIdx && Date.now() - lastChaseMissAt < CHASE_NEAR_MISS_GRACE_MS) {
+        lastChaseMissIdx = -1;
+        toast('😤 So close! Missed it by a hair', true);
+      }
     });
     tileElements.push(tile);
     tileGlowEls.push(tile.querySelector('.tile-glow-fx'));
@@ -2182,7 +2242,7 @@ function maybeTriggerBonusWindow() {
   if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
   if (Math.random() < BONUS_WINDOW_PROBABILITY * oddsMultiplier()) {
     lastAmbientSpawnAt = Date.now();
-    activateBonusWindow(Math.floor(Math.random() * tileElements.length));
+    activateBonusWindow(pickAmbientTarget());
   }
 }
 
@@ -2253,6 +2313,94 @@ function burstTileSpeed(idx, durationMs, minMult, maxMult) {
   tileSpeedBurstUntil[idx] = Date.now() + durationMs;
 }
 
+// ---- Sealed tile ----
+// Distinct from the bonus window: there, the *trigger* is the gamble
+// but tapping it in time always pays the same flat reward. Here, the
+// reward itself is the gamble - the tile just glows "locked," and
+// what's actually inside (XP, a speed kick, a heat bump, a bigger
+// jackpot-flavored haul, or nothing at all) is only decided the moment
+// you open it. Rarer and holds longer than the bonus window so it
+// reads as a different, weightier kind of pull.
+const SEALED_CHECK_MS = 35000;
+const SEALED_PROBABILITY = 0.10;
+const SEALED_DURATION_MS = 6000;
+let sealedTileIndex = -1;
+let sealedExpireAt = 0;
+let sealedTimer = null;
+
+function maybeTriggerSealedTile() {
+  if (!anticipationFxEnabled) return;
+  if (sealedTileIndex >= 0 || !tileElements.length) return;
+  if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
+  if (Math.random() < SEALED_PROBABILITY * oddsMultiplier()) {
+    lastAmbientSpawnAt = Date.now();
+    activateSealedTile(pickAmbientTarget());
+  }
+}
+
+function activateSealedTile(idx) {
+  sealedTileIndex = idx;
+  sealedExpireAt = Date.now() + SEALED_DURATION_MS;
+  const el = tileAmbientEls[idx];
+  if (el) el.classList.add('sealed-tile');
+  clearTimeout(sealedTimer);
+  sealedTimer = setTimeout(() => missSealedTile(idx), SEALED_DURATION_MS);
+}
+
+function missSealedTile(idx) {
+  if (idx !== sealedTileIndex) return;
+  const el = tileAmbientEls[idx];
+  if (el) el.classList.remove('sealed-tile');
+  sealedTileIndex = -1;
+}
+
+// The actual roll: each outcome names its own odds, xp, speed range (or
+// null) and heat bump (or 0) so the table itself is the whole design -
+// no separate branches to keep in sync with it.
+const SEALED_OUTCOMES = [
+  { chance: 0.10, label: '📦 Empty...', xp: 0, speed: null, heat: 0, negative: true },
+  { chance: 0.35, label: null, xp: [10, 20], speed: null, heat: 0 },
+  { chance: 0.30, label: null, xp: [25, 40], speed: [1.10, 1.25], heat: 0.3 },
+  { chance: 0.20, label: null, xp: [15, 25], speed: [1.20, 1.45], heat: 0.8 },
+  { chance: 0.05, label: '🎰 Jackpot inside!', xp: [50, 80], speed: [1.30, 1.60], heat: 1.6 },
+];
+
+function rollSealedOutcome() {
+  let r = Math.random();
+  for (const o of SEALED_OUTCOMES) {
+    if (r < o.chance) return o;
+    r -= o.chance;
+  }
+  return SEALED_OUTCOMES[1];
+}
+
+function openSealedTile(idx) {
+  if (idx !== sealedTileIndex || Date.now() >= sealedExpireAt) return;
+  const ambientEl = tileAmbientEls[idx];
+  if (ambientEl) ambientEl.classList.remove('sealed-tile');
+  clearTimeout(sealedTimer);
+  sealedTileIndex = -1;
+
+  const outcome = rollSealedOutcome();
+  const mult = outcome.negative ? 1 : hiddenMultiplierFactor(); // nothing to double on an empty pull
+  const xpAmount = (Array.isArray(outcome.xp) ? Math.round(outcome.xp[0] + Math.random() * (outcome.xp[1] - outcome.xp[0])) : outcome.xp) * mult;
+  const claimEl = tileClaimEls[idx];
+  if (claimEl) {
+    claimEl.classList.add('sealed-opened');
+    setTimeout(() => claimEl.classList.remove('sealed-opened'), 1200);
+  }
+  if (xpAmount > 0) awardXp(xpAmount);
+  if (outcome.speed) burstTileSpeed(idx, 1800, outcome.speed[0], outcome.speed[1]);
+  if (outcome.heat > 0) bumpJackpotHeat(outcome.heat);
+  playChimeSound(outcome.negative ? 0.4 : 0.7 + outcome.heat * 0.2);
+  incrementQuestMetric('bonuses', 1);
+  const tag = mult > 1 ? ' (hidden x' + mult + '!)' : '';
+  const label = outcome.label || ('+' + xpAmount + 'xp' + (outcome.speed ? ' ⚡' : '') + tag);
+  showClaimRewardLabel(idx, label);
+  toast((outcome.negative ? '📦 Sealed tile was empty' : '🔓 Sealed tile: ' + label), outcome.negative);
+}
+setInterval(maybeTriggerSealedTile, SEALED_CHECK_MS);
+
 // ---- Chase flash ----
 // A fast, hopping glow you have to actually chase around the grid - tap
 // it before it moves on and it immediately jumps to a new random tile
@@ -2273,6 +2421,15 @@ let chaseFlashTileIndex = -1;
 let chaseFlashExpireAt = 0;
 let chaseFlashTimer = null;
 let chaseChain = 0;
+// Set right as a flash is missed, read by the shared ambient click
+// listener in ensureTiles - a tap landing on the same tile shortly
+// after it closed used to do nothing at all (the shared click handler
+// found no matching active state and silently gave up), so a near-miss
+// here never actually registered as "you almost had it." Short grace
+// window only, not a real extended catch window.
+let lastChaseMissIdx = -1;
+let lastChaseMissAt = 0;
+const CHASE_NEAR_MISS_GRACE_MS = 700;
 
 function maybeTriggerChase() {
   if (!anticipationFxEnabled) return;
@@ -2280,21 +2437,29 @@ function maybeTriggerChase() {
   if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
   if (Math.random() < CHASE_PROBABILITY * oddsMultiplier()) {
     lastAmbientSpawnAt = Date.now();
-    activateChaseFlash(pickChaseTarget());
+    activateChaseFlash(pickAmbientTarget());
   }
 }
 
-// Avoids landing on a tile that's already doing something else (bonus
-// window / due-aura) so the shared ambient element and its click handler
+// Shared by every passive ambient spawn (bonus window, chase flash,
+// sealed tile) - avoids landing on a tile that's already doing
+// something else, so the shared ambient element and its click handler
 // never has to guess which mechanic a tap was meant for.
-function pickChaseTarget(exclude) {
+function pickAmbientTarget(exclude) {
   const n = tileElements.length;
   if (n <= 1) return 0;
-  let idx;
-  do {
-    idx = Math.floor(Math.random() * n);
-  } while (n > 1 && (idx === exclude || idx === bonusWindowTileIndex || idx === dueAuraTileIndex));
-  return idx;
+  // Bounded, not an unconditional do-while - with few tiles (e.g. a 2-tile
+  // dual-screen layout) and several ambient states active at once, every
+  // index can legitimately be excluded at the same time, which hung the
+  // whole tab (an infinite loop on the main thread, caught live as a
+  // "Page Unresponsive" dialog). After a bounded number of misses, just
+  // settle for a random tile rather than guaranteeing a valid one - a
+  // rare visual overlap is a far smaller problem than freezing the page.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const idx = Math.floor(Math.random() * n);
+    if (idx !== exclude && idx !== bonusWindowTileIndex && idx !== dueAuraTileIndex && idx !== sealedTileIndex) return idx;
+  }
+  return Math.floor(Math.random() * n);
 }
 
 function chaseFlashDurationForChain() {
@@ -2321,6 +2486,18 @@ function missChaseFlash(idx) {
   if (idx !== chaseFlashTileIndex) return;
   clearChaseFlashVisual(idx);
   chaseFlashTileIndex = -1;
+  lastChaseMissIdx = idx;
+  lastChaseMissAt = Date.now();
+  // clearChaseFlashVisual already dropped pointer-events back to none
+  // with the 'chase-flash' class - this keeps the tile tappable for
+  // just the grace window above so a beat-late tap can still reach the
+  // click handler and register as a near-miss instead of passing
+  // straight through to whatever's underneath.
+  const el = tileAmbientEls[idx];
+  if (el) {
+    el.classList.add('near-miss-grace');
+    setTimeout(() => el.classList.remove('near-miss-grace'), CHASE_NEAR_MISS_GRACE_MS);
+  }
   if (chaseChain > 0) toast('💨 Chain broken (was x' + chaseChain + ')', true);
   chaseChain = 0;
 }
@@ -2364,13 +2541,14 @@ function catchChaseFlash(idx) {
   const chainForSpeed = Math.min(chaseChain, 8);
   const chainSpeedExtra = chainForSpeed * (0.05 + Math.random() * 0.05);
   burstTileSpeed(idx, CHASE_CAUGHT_CELEBRATION_MS * pulses, 1.05 + chainSpeedExtra, 1.15 + chainSpeedExtra);
-  awardXp(5 + chaseChain * 2);
+  const catchMult = hiddenMultiplierFactor();
+  awardXp((5 + chaseChain * 2) * catchMult);
   incrementQuestMetric('bonuses', 1);
   bumpJackpotHeat(chaseChain * 0.4); // longer chains nudge the odds toward bigger jackpots - see bumpJackpotHeat
-  toast('🏃 Caught! Chain x' + chaseChain);
+  toast('🏃 Caught! Chain x' + chaseChain + (catchMult > 1 ? ' (hidden x' + catchMult + '!)' : ''));
   setTimeout(() => {
     if (!tileElements.length) { chaseChain = 0; return; }
-    activateChaseFlash(pickChaseTarget(idx));
+    activateChaseFlash(pickAmbientTarget(idx));
   }, CHASE_HOP_DELAY_MS);
 }
 
@@ -2471,9 +2649,95 @@ const HEART_SPIRAL_CHECK_MS = 20000;
 
 function maybeTriggerSpiralFromHearts() {
   if (heartMultiplier <= 0 || spiralActive) return;
-  if (Math.random() < 0.04 * heartMultiplier) maybeTriggerSpiralOverlay();
+  if (Math.random() < 0.04 * heartMultiplier * (1 + autopilotAmbientBoost)) maybeTriggerSpiralOverlay();
 }
 setInterval(maybeTriggerSpiralFromHearts, HEART_SPIRAL_CHECK_MS);
+
+// ---- Color Rush ----
+// A rare, short multi-color event combining several pieces at once:
+// falling color streaks, a hue-cycling glow around the screen's edge,
+// every tile's own glow pulsing on its own independent beat (not
+// synced - a real disco floor, not a wash), a subtle whole-screen
+// heartbeat pulse, and a confetti burst. Deliberately the heaviest
+// visual effect in this file (several concurrent CSS animations plus
+// DOM-spawned confetti) - accepted on purpose rather than the usual
+// opacity/transform-only restraint elsewhere, since it's rare and
+// short-lived rather than ambient/constant.
+const COLOR_RUSH_CHECK_MS = 45000;
+const COLOR_RUSH_PROBABILITY = 0.06;
+const COLOR_RUSH_DURATION_MS = 12000;
+const COLOR_RUSH_STREAK_COUNT = 28;
+const COLOR_RUSH_HUES = [340, 280, 220, 160, 90, 40]; // pink, purple, blue, green, lime, gold
+let colorRushActive = false;
+
+function maybeTriggerColorRush() {
+  if (!anticipationFxEnabled || colorRushActive) return;
+  if (Math.random() < COLOR_RUSH_PROBABILITY * oddsMultiplier()) triggerColorRush();
+}
+
+function triggerColorRush() {
+  if (colorRushActive || !tileElements.length) return;
+  colorRushActive = true;
+  toast('🌈 Color Rush!');
+
+  const rain = document.getElementById('disco-rain');
+  if (rain) {
+    rain.innerHTML = '';
+    for (let i = 0; i < COLOR_RUSH_STREAK_COUNT; i++) {
+      const s = document.createElement('div');
+      s.className = 'disco-streak';
+      const hue = COLOR_RUSH_HUES[Math.floor(Math.random() * COLOR_RUSH_HUES.length)];
+      s.style.left = (Math.random() * 100).toFixed(1) + '%';
+      s.style.background = 'linear-gradient(180deg,transparent,hsla(' + hue + ',90%,65%,.9),transparent)';
+      s.style.animationDuration = (1.1 + Math.random() * 1.3).toFixed(2) + 's';
+      s.style.animationDelay = (-Math.random() * 2).toFixed(2) + 's'; // staggered, not all falling in sync
+      rain.appendChild(s);
+    }
+    rain.classList.add('show');
+  }
+
+  const border = document.getElementById('disco-border');
+  if (border) border.classList.add('show');
+
+  const theater = document.getElementById('theater-box');
+  if (theater) theater.classList.add('disco-beat');
+
+  tileGlowEls.forEach(el => {
+    if (!el) return;
+    el.style.animationDelay = (-Math.random() * 1.6).toFixed(2) + 's,' + (-Math.random() * 0.7).toFixed(2) + 's';
+    el.classList.add('disco-pulse');
+  });
+
+  burstConfetti(50);
+  const midBurst = setTimeout(() => burstConfetti(30), COLOR_RUSH_DURATION_MS / 2);
+
+  setTimeout(() => {
+    clearTimeout(midBurst);
+    if (rain) rain.classList.remove('show');
+    if (border) border.classList.remove('show');
+    if (theater) theater.classList.remove('disco-beat');
+    tileGlowEls.forEach(el => { if (el) { el.classList.remove('disco-pulse'); el.style.animationDelay = ''; } });
+    setTimeout(() => { if (rain) rain.innerHTML = ''; colorRushActive = false; }, 1000); // matches disco-rain's own fade-out transition
+  }, COLOR_RUSH_DURATION_MS);
+}
+
+function burstConfetti(count) {
+  const layer = document.getElementById('fx-layer');
+  if (!layer) return;
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement('div');
+    p.className = 'confetti-piece';
+    const hue = COLOR_RUSH_HUES[Math.floor(Math.random() * COLOR_RUSH_HUES.length)];
+    p.style.left = (Math.random() * 100).toFixed(1) + '%';
+    p.style.background = 'hsl(' + hue + ',85%,62%)';
+    const durationS = 1.8 + Math.random() * 1.6;
+    p.style.animationDuration = durationS.toFixed(2) + 's';
+    p.style.animationDelay = (Math.random() * 0.4).toFixed(2) + 's';
+    p.addEventListener('animationend', () => p.remove());
+    layer.appendChild(p);
+  }
+}
+setInterval(maybeTriggerColorRush, COLOR_RUSH_CHECK_MS);
 
 // Mystery tile: a pure curiosity-gap hit, distinct from the loss-aversion
 // and reward mechanics above - a tile briefly blurs under a "?" overlay
@@ -2527,14 +2791,17 @@ function clearMysteryTile(idx) {
 function triggerMiniPayoff(idx) {
   playChimeSound(0.7);
   burstExtraFloaters(0.5);
-  awardXp(XP_PER_BONUS_CLAIM);
+  const mult = hiddenMultiplierFactor();
+  const xp = XP_PER_BONUS_CLAIM * mult;
+  const tag = mult > 1 ? ' (hidden x' + mult + '!)' : '';
+  awardXp(xp);
   incrementQuestMetric('bonuses', 1);
-  toast('✨ Bonus! +' + XP_PER_BONUS_CLAIM + 'xp'); // was already awarded, just wasn't shown
+  toast('✨ Bonus! +' + xp + 'xp' + tag); // was already awarded, just wasn't shown
   // The toast says the same thing, but it's off in a corner - a label
   // right on the tile that was actually tapped shows what was won where
   // attention already is, rather than relying on the viewer to glance
   // elsewhere to find out if (and what) they were rewarded.
-  if (idx != null) showClaimRewardLabel(idx, '+' + XP_PER_BONUS_CLAIM + 'xp');
+  if (idx != null) showClaimRewardLabel(idx, '+' + xp + 'xp' + tag);
 }
 
 const CLAIM_REWARD_LABEL_MS = 1400;
@@ -2610,11 +2877,19 @@ function spin() {
     if (roll < 0.08 && !anticipationActive) {
       showSpinResult('🎉 JACKPOT!');
       runPayoff(); // full jackpot-tier celebration - the rare big pull
-    } else if (roll < 0.40 && tileElements.length) {
-      activateBonusWindow(Math.floor(Math.random() * tileElements.length));
+    } else if (roll < 0.12) {
+      // A genuine near-miss slice right past the jackpot cutoff - nothing
+      // behind it (same philosophy as the fake build-up near-misses), but
+      // naming how close the roll actually was is the whole point: Spin's
+      // outcome used to be totally invisible, so a near-miss here never
+      // registered as "almost" anything, just as "nothing."
+      showSpinResult('😤 SO CLOSE!');
+      toast('😤 So close to a JACKPOT! (rolled ' + (roll * 100).toFixed(1) + '%, needed under 8%)', true);
+    } else if (roll < 0.44 && tileElements.length) {
+      activateBonusWindow(pickAmbientTarget());
       showSpinResult('✨ Tap the tile!');
       toast('✨ A tile just lit up - tap it!');
-    } else if (roll < 0.75) {
+    } else if (roll < 0.79) {
       const amount = Math.round(8 + Math.random() * 12);
       playChimeSound(0.6);
       awardXp(amount);
@@ -2670,6 +2945,7 @@ function runSessionPrimer() {
 
 window.onload = () => {
   restorePanelState();
+  restorePanelTab();
   loadMosaicPref();
   loadFxPrefs();
   loadAnticipationPrefs();

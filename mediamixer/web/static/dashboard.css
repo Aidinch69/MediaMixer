@@ -28,6 +28,31 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 /* transition-duration is set inline per activation (5-8.5s, randomized) by
    maybeTriggerSpiralOverlay - this is just a sane fallback. */
 #spiral-overlay{position:fixed;inset:0;z-index:22;width:100%;height:100%;object-fit:cover;opacity:0;pointer-events:none;transition:opacity 5s ease-in-out;mix-blend-mode:screen}
+
+/* ---- Color Rush ---- */
+/* A rare, short multi-color event layering several pieces at once:
+   falling color streaks, a glowing hue-cycling border/vignette, each
+   tile's own glow pulsing a different random color on its own beat
+   (disco floor, not a synced wash), a subtle whole-screen heartbeat
+   scale pulse, and a confetti burst. All built from the same
+   opacity/transform/typed-custom-property techniques already used
+   elsewhere in this file for exactly this kind of smooth color
+   animation - the GPU cost is real (this is the one deliberately
+   heavier effect in the file) but accepted on purpose. */
+#disco-rain{position:fixed;inset:0;z-index:16;overflow:hidden;pointer-events:none;opacity:0;transition:opacity 1s ease}
+#disco-rain.show{opacity:1}
+.disco-streak{position:absolute;top:-20%;width:3px;height:22%;border-radius:2px;will-change:transform;animation:disco-streak-fall linear infinite}
+@keyframes disco-streak-fall{0%{transform:translateY(0)}100%{transform:translateY(560%)}}
+@property --disco-hue{syntax:'<number>';inherits:false;initial-value:0}
+#disco-border{position:fixed;inset:0;z-index:17;pointer-events:none;opacity:0;transition:opacity 1s ease;--disco-hue:0;box-shadow:inset 0 0 70px 10px hsla(var(--disco-hue),90%,60%,.65);animation:disco-border-hue 2.4s linear infinite}
+#disco-border.show{opacity:1}
+@keyframes disco-border-hue{0%{--disco-hue:0}100%{--disco-hue:360}}
+.tile-glow-fx.disco-pulse{--disco-hue:0;opacity:.85;border-width:4px;border-color:hsla(var(--disco-hue),90%,65%,1);box-sizing:border-box;animation:disco-border-hue 1.6s linear infinite,disco-tile-pulse .7s ease-in-out infinite}
+@keyframes disco-tile-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+.theater.disco-beat{animation:disco-beat-anim 1.1s ease-in-out infinite}
+@keyframes disco-beat-anim{0%,100%{transform:scale(1)}50%{transform:scale(1.006)}}
+.confetti-piece{position:absolute;top:-24px;width:8px;height:14px;opacity:0;will-change:transform,opacity;animation:confetti-fall linear forwards}
+@keyframes confetti-fall{0%{opacity:1;transform:translateY(0) rotate(0deg)}100%{opacity:0;transform:translateY(105vh) rotate(540deg)}}
 #tier-reveal.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
 #tier-reveal.tier-small{color:#d6a3ff}
 #tier-reveal.tier-medium{color:#ffa94d}
@@ -57,6 +82,13 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
   100%{opacity:0;border-color:rgba(110,255,170,.55)}
 }
 .tile-ambient-fx{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;will-change:opacity;display:flex;align-items:center;justify-content:center}
+/* Invisible - just keeps pointer-events on for a short grace window
+   right after a chase flash is missed, so a tap landing a beat late
+   still reaches the click handler to register as a near-miss instead
+   of silently passing through to whatever's underneath (every other
+   state here turns pointer-events off the instant its own visible
+   class is removed). */
+.tile-ambient-fx.near-miss-grace{pointer-events:auto}
 /* Claimable directly by tapping the tile itself, not just the thumbs-up
    button - pointer-events only turned on while a bonus is actually live,
    so it never intercepts normal clicks on an idle tile. A border ring
@@ -74,6 +106,15 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .chase-badge{display:none;background:rgba(0,10,20,.75);color:#4dd4ff;font-weight:bold;font-size:.85rem;padding:6px 14px;border-radius:20px;border:1px solid rgba(77,212,255,.7);letter-spacing:.5px;animation:tap-badge-bounce .5s ease-in-out infinite}
 .tile-ambient-fx.chase-flash .chase-badge{display:inline-block}
 @keyframes chase-pulse-opacity{0%,100%{opacity:.55}50%{opacity:1}}
+/* Sealed tile: a slower bronze/copper glow with a diagonal glint sweep
+   (same transform-only shimmer trick as #spin-btn) instead of a plain
+   pulse - reads as "there's something inside, go find out" rather than
+   bonus-window's "tap this for the usual payout." */
+.tile-ambient-fx.sealed-tile{opacity:1;border:4px solid rgba(205,140,60,.9);border-radius:inherit;box-sizing:border-box;overflow:hidden;animation:sealed-pulse-opacity 1.8s ease-in-out infinite;pointer-events:auto;cursor:pointer}
+.tile-ambient-fx.sealed-tile::after{content:'';position:absolute;top:0;left:0;width:35%;height:100%;background:linear-gradient(115deg,transparent,rgba(255,220,160,.5),transparent);transform:translateX(-200%);animation:spin-shimmer 2.8s ease-in-out infinite}
+@keyframes sealed-pulse-opacity{0%,100%{opacity:.6}50%{opacity:1}}
+.sealed-badge{display:none;background:rgba(20,12,0,.75);color:#e0a868;font-weight:bold;font-size:.85rem;padding:6px 14px;border-radius:20px;border:1px solid rgba(205,140,60,.7);letter-spacing:.5px;animation:tap-badge-bounce 1.2s ease-in-out infinite}
+.tile-ambient-fx.sealed-tile .sealed-badge{display:inline-block}
 /* One-off claim/catch celebrations live on their own element
    (.tile-claim-fx), separate from .tile-ambient-fx's continuous states
    (bonus-window, chase-flash, due-aura). They used to share the ambient
@@ -122,6 +163,17 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
   45%{opacity:.7;border-color:rgba(255,212,59,.9);transform:scale(1.04)}
   70%{opacity:0;border-color:rgba(255,212,59,.3);transform:scale(1)}
   100%{opacity:0;border-color:rgba(255,212,59,.3);transform:scale(1)}
+}
+/* The unlock: a quick bright "crack open" pop with a slight twist,
+   distinct from both the bonus tap's slow rainbow and chase's fast
+   cyan-gold blink - bronze/white/gold instead of either of those. */
+.tile-claim-fx.sealed-opened{opacity:1;border:5px solid rgba(255,255,255,1);animation:sealed-opened-flash 1.2s ease-out forwards}
+@keyframes sealed-opened-flash{
+  0%{opacity:1;border-color:rgba(255,255,255,1);transform:scale(1.15) rotate(0deg)}
+  20%{opacity:1;border-color:rgba(255,200,120,1);transform:scale(.97) rotate(-3deg)}
+  45%{opacity:1;border-color:rgba(255,212,59,1);transform:scale(1.04) rotate(2deg)}
+  75%{opacity:.6;border-color:rgba(205,140,60,.8);transform:scale(1) rotate(0deg)}
+  100%{opacity:0;border-color:rgba(205,140,60,.4);transform:scale(1) rotate(0deg)}
 }
 /* Registering --due-hue as a typed (<number>) custom property is what
    actually makes this fade smoothly - animating the "background" shorthand
@@ -231,7 +283,18 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .tile-actions .thumb.pop{animation:thumb-pop .35s ease-out}
 @keyframes thumb-pop{0%{transform:scale(1)}40%{transform:scale(1.4)}100%{transform:scale(1)}}
 .hint{font-size:11px;color:#8e8e93;margin:0}
-.panel{position:fixed;top:0;right:0;width:min(400px,92vw);height:100vh;height:100dvh;background:#0a0515;border-left:1px solid #1a0f26;box-shadow:-10px 0 30px rgba(0,0,0,.5);padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;overflow-y:auto;z-index:25;transform:translateX(0);transition:transform .25s ease}
+.panel{position:fixed;top:0;right:0;width:min(400px,92vw);height:100vh;height:100dvh;background:linear-gradient(180deg,#0e0720,#0a0515 40%);border-left:1px solid #2a1540;box-shadow:-10px 0 30px rgba(0,0,0,.5);padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;overflow-y:auto;z-index:25;transform:translateX(0);transition:transform .25s ease}
+/* Tabs group what used to be one long scroll into a handful of pages -
+   Display / Engagement / Audio / More - so finding a given option means
+   picking the right page instead of scrolling past everything else to
+   find it. Current tab persists in localStorage, same as every other
+   panel preference here. */
+.panel-tabs{display:flex;gap:6px;position:sticky;top:0;z-index:1;background:inherit;padding-bottom:2px}
+.panel-tab-btn{flex:1;background:linear-gradient(180deg,#1a0f2b,#140a22);border:1px solid #361e52;color:#9a7ab8;padding:9px 4px;border-radius:8px;cursor:pointer;font-weight:bold;text-transform:uppercase;font-size:.68rem;transition:.15s}
+.panel-tab-btn:hover{border-color:#b84dff;color:#d6a3ff}
+.panel-tab-btn.active{background:linear-gradient(180deg,#3a1d5c,#241038);border-color:#d699ff;color:#fff;box-shadow:0 0 10px rgba(184,77,255,.35)}
+.panel-tab{display:none;flex-direction:column;gap:14px}
+.panel-tab.active{display:flex}
 .panel.collapsed{transform:translateX(100%)}
 .panel-toggle{position:fixed;top:16px;right:16px;z-index:30;width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;background:#150a28;color:#fff;border:1px solid #2d163f;border-radius:8px;cursor:pointer;font-size:14px}
 .panel-toggle:hover{background:#251538;border-color:#b84dff;box-shadow:0 0 10px rgba(184,77,255,.3)}
