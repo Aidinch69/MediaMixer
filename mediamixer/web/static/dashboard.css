@@ -342,6 +342,7 @@ h2{font-size:1.25rem;border-bottom:none;padding-bottom:0;display:flex;justify-co
 .panel-tab[data-tab="engagement"] h3{color:#ffd43b}
 .panel-tab[data-tab="audio"] h3{color:#ff8fc7}
 .panel-tab[data-tab="more"] h3{color:#b399ff}
+.panel-tab[data-tab="tuning"] h3{color:#8fffb3}
 .metric{background:#0e081f;padding:10px;border-radius:8px;border:1px solid #221435;font-size:.82rem;display:flex;flex-direction:column;gap:4px}
 .slider{display:flex;flex-direction:column;gap:6px;background:#0e081f;padding:10px;border-radius:8px;border:1px solid #221435}
 label{font-size:.75rem;color:#8e8e93;text-transform:uppercase;font-weight:bold}

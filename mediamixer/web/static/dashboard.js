@@ -1,3 +1,215 @@
+// ---- Tuning (backdoor master controls) ----
+// A scoped set of constants - just the ones actually iterated on this
+// session (spiral opacity/timing, sealed/chase/bonus/color-rush odds,
+// the various multipliers, bonus xp) - exposed as live sliders in the
+// panel's Tuning tab, instead of editing source + restarting the
+// server to feel out a number. Deliberately not every constant in this
+// file. Every other usage site below reads TUNING.KEY instead of a
+// bare constant, so a slider drag takes effect on the very next check/
+// roll - no reload needed.
+//
+// Overrides persist in localStorage (mm_tuning_overrides) so they
+// survive a reload instead of resetting to shipped defaults every
+// time. A separate manual snapshot (mm_tuning_backup) lets you save a
+// point you're happy with and get back to it later - independent of
+// "reset to shipped defaults," which is always available below via
+// TUNING_DEFAULTS.
+const TUNING_DEFAULTS = {
+  XP_PER_BONUS_CLAIM: 15,
+  JACKPOT_HEAT_MAX: 3,
+  HEART_MULT_MAX: 5,
+  HIDDEN_MULT_PROBABILITY: 0.05,
+  HIDDEN_MULT_DURATION_MS: 18000,
+  HIDDEN_MULT_VALUE: 2,
+  BONUS_WINDOW_CHECK_MS: 25000,
+  BONUS_WINDOW_PROBABILITY: 0.25,
+  BONUS_WINDOW_DURATION_MS: 5000,
+  SEALED_CHECK_MS: 35000,
+  SEALED_PROBABILITY: 0.10,
+  SEALED_DURATION_MS: 6000,
+  CHASE_CHECK_MS: 20000,
+  CHASE_PROBABILITY: 0.22,
+  CHASE_FLASH_START_MS: 1800,
+  CHASE_FLASH_MIN_MS: 900,
+  SPIRAL_OPACITY_MIN: 0.15,
+  SPIRAL_OPACITY_RANGE: 0.15,
+  SPIRAL_HOLD_MIN_MS: 30000,
+  SPIRAL_HOLD_RANGE_MS: 30000,
+  SPIRAL_FADE_MIN_MS: 6000,
+  SPIRAL_FADE_RANGE_MS: 4000,
+  SPIRAL_BREATHE_PROBABILITY: 0.5,
+  SPIRAL_BREATHE_INTERVAL_MS: 10000,
+  COLOR_RUSH_CHECK_MS: 45000,
+  COLOR_RUSH_PROBABILITY: 0.06,
+  COLOR_SPLASH_CHECK_MS: 25000,
+  COLOR_SPLASH_PROBABILITY: 0.12,
+};
+const TUNING = Object.assign({}, TUNING_DEFAULTS);
+const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
+const TUNING_BACKUP_KEY = 'mm_tuning_backup';
+
+function loadTuningOverrides() {
+  try {
+    const raw = localStorage.getItem(TUNING_STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    Object.keys(TUNING_DEFAULTS).forEach(k => { if (typeof saved[k] === 'number') TUNING[k] = saved[k]; });
+  } catch (e) {}
+}
+// Runs immediately (not deferred to window.onload) - the five *_CHECK_MS
+// keys below each drive a setInterval registered at top-level script
+// execution, before onload ever fires. If a saved override weren't
+// applied until onload, those intervals would already be locked in at
+// the shipped-default cadence by then, changeable only through this
+// same restart machinery (see startTunableInterval) rather than a
+// reload ever actually restoring a changed interval on its own.
+loadTuningOverrides();
+
+function saveTuningOverrides() {
+  try { localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify(TUNING)); } catch (e) {}
+}
+
+// Each of these five keys has a persistent setInterval tied to its
+// value - unlike every other tunable here (read fresh at call time by
+// whatever function checks it next), an interval's own delay is fixed
+// the moment it's created. Changing one of these needs to tear down and
+// recreate that specific interval, not just update the TUNING value.
+const TUNING_INTERVAL_HANDLES = {};
+function startTunableInterval(key, fn) {
+  clearInterval(TUNING_INTERVAL_HANDLES[key]);
+  TUNING_INTERVAL_HANDLES[key] = setInterval(fn, TUNING[key]);
+}
+function restartAllTunableIntervals() {
+  startTunableInterval('BONUS_WINDOW_CHECK_MS', maybeTriggerBonusWindow);
+  startTunableInterval('SEALED_CHECK_MS', maybeTriggerSealedTile);
+  startTunableInterval('CHASE_CHECK_MS', maybeTriggerChase);
+  startTunableInterval('COLOR_RUSH_CHECK_MS', maybeTriggerColorRush);
+  startTunableInterval('COLOR_SPLASH_CHECK_MS', maybeTriggerColorSplashPiece);
+}
+
+const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS'];
+
+function setTuning(key, value) {
+  TUNING[key] = value;
+  saveTuningOverrides();
+  updateTuningUi(key);
+  if (TUNING_INTERVAL_KEYS.includes(key)) restartAllTunableIntervals();
+}
+
+function resetTuningToDefaults() {
+  Object.assign(TUNING, TUNING_DEFAULTS);
+  saveTuningOverrides();
+  restartAllTunableIntervals();
+  buildTuningUi();
+  toast('🔧 Tuning reset to shipped defaults');
+}
+
+function backupTuningNow() {
+  try { localStorage.setItem(TUNING_BACKUP_KEY, JSON.stringify(TUNING)); } catch (e) {}
+  toast('🔧 Current tuning saved as your backup');
+}
+
+function restoreTuningBackup() {
+  let saved = null;
+  try {
+    const raw = localStorage.getItem(TUNING_BACKUP_KEY);
+    if (raw) saved = JSON.parse(raw);
+  } catch (e) {}
+  if (!saved) { toast('🔧 No backup saved yet', true); return; }
+  Object.keys(TUNING_DEFAULTS).forEach(k => { if (typeof saved[k] === 'number') TUNING[k] = saved[k]; });
+  saveTuningOverrides();
+  restartAllTunableIntervals();
+  buildTuningUi();
+  toast('🔧 Restored your saved backup');
+}
+
+// unit: 'pct' (stored 0-1, shown as %), 's' (stored ms, shown as seconds),
+// 'x' (multiplier), 'n' (plain number) - purely a display/slider-step
+// concern, TUNING itself always stores the raw value a usage site reads.
+const TUNING_GROUPS = [
+  { label: 'Spiral', keys: ['SPIRAL_OPACITY_MIN', 'SPIRAL_OPACITY_RANGE', 'SPIRAL_HOLD_MIN_MS', 'SPIRAL_HOLD_RANGE_MS', 'SPIRAL_FADE_MIN_MS', 'SPIRAL_FADE_RANGE_MS', 'SPIRAL_BREATHE_PROBABILITY', 'SPIRAL_BREATHE_INTERVAL_MS'] },
+  { label: 'Sealed Tile', keys: ['SEALED_PROBABILITY', 'SEALED_CHECK_MS', 'SEALED_DURATION_MS'] },
+  { label: 'Chase', keys: ['CHASE_PROBABILITY', 'CHASE_CHECK_MS', 'CHASE_FLASH_START_MS', 'CHASE_FLASH_MIN_MS'] },
+  { label: 'Bonus Window', keys: ['BONUS_WINDOW_PROBABILITY', 'BONUS_WINDOW_CHECK_MS', 'BONUS_WINDOW_DURATION_MS'] },
+  { label: 'Color Rush / Splash', keys: ['COLOR_RUSH_PROBABILITY', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_PROBABILITY', 'COLOR_SPLASH_CHECK_MS'] },
+  { label: 'Multipliers & XP', keys: ['JACKPOT_HEAT_MAX', 'HEART_MULT_MAX', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'XP_PER_BONUS_CLAIM'] },
+];
+const TUNING_META = {
+  XP_PER_BONUS_CLAIM: { label: 'Bonus-tap XP', unit: 'n', min: 5, max: 50, step: 1 },
+  JACKPOT_HEAT_MAX: { label: 'Jackpot-heat cap', unit: 'x', min: 0.5, max: 6, step: 0.5 },
+  HEART_MULT_MAX: { label: 'Heart-multiplier cap', unit: 'x', min: 1, max: 10, step: 1 },
+  HIDDEN_MULT_PROBABILITY: { label: 'Hidden-window odds', unit: 'pct', min: 0, max: 0.3, step: 0.01 },
+  HIDDEN_MULT_DURATION_MS: { label: 'Hidden-window duration', unit: 's', min: 5000, max: 60000, step: 1000 },
+  HIDDEN_MULT_VALUE: { label: 'Hidden-window multiplier', unit: 'x', min: 1.2, max: 4, step: 0.1 },
+  BONUS_WINDOW_CHECK_MS: { label: 'Bonus-window check interval', unit: 's', min: 5000, max: 60000, step: 1000 },
+  BONUS_WINDOW_PROBABILITY: { label: 'Bonus-window odds', unit: 'pct', min: 0, max: 0.6, step: 0.01 },
+  BONUS_WINDOW_DURATION_MS: { label: 'Bonus-window duration', unit: 's', min: 1000, max: 15000, step: 500 },
+  SEALED_CHECK_MS: { label: 'Sealed-tile check interval', unit: 's', min: 5000, max: 90000, step: 1000 },
+  SEALED_PROBABILITY: { label: 'Sealed-tile odds', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
+  SEALED_DURATION_MS: { label: 'Sealed-tile duration', unit: 's', min: 2000, max: 20000, step: 500 },
+  CHASE_CHECK_MS: { label: 'Chase check interval', unit: 's', min: 5000, max: 60000, step: 1000 },
+  CHASE_PROBABILITY: { label: 'Chase odds', unit: 'pct', min: 0, max: 0.6, step: 0.01 },
+  CHASE_FLASH_START_MS: { label: 'Chase window (start)', unit: 's', min: 500, max: 4000, step: 100 },
+  CHASE_FLASH_MIN_MS: { label: 'Chase window (floor)', unit: 's', min: 200, max: 3000, step: 100 },
+  SPIRAL_OPACITY_MIN: { label: 'Spiral opacity (min)', unit: 'pct', min: 0.05, max: 0.6, step: 0.01 },
+  SPIRAL_OPACITY_RANGE: { label: 'Spiral opacity (added range)', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
+  SPIRAL_HOLD_MIN_MS: { label: 'Spiral hold (min)', unit: 's', min: 5000, max: 90000, step: 1000 },
+  SPIRAL_HOLD_RANGE_MS: { label: 'Spiral hold (added range)', unit: 's', min: 0, max: 90000, step: 1000 },
+  SPIRAL_FADE_MIN_MS: { label: 'Spiral fade (min)', unit: 's', min: 1000, max: 20000, step: 500 },
+  SPIRAL_FADE_RANGE_MS: { label: 'Spiral fade (added range)', unit: 's', min: 0, max: 20000, step: 500 },
+  SPIRAL_BREATHE_PROBABILITY: { label: 'Spiral breathing odds', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  SPIRAL_BREATHE_INTERVAL_MS: { label: 'Spiral breathing interval', unit: 's', min: 3000, max: 30000, step: 1000 },
+  COLOR_RUSH_CHECK_MS: { label: 'Color Rush check interval', unit: 's', min: 10000, max: 120000, step: 5000 },
+  COLOR_RUSH_PROBABILITY: { label: 'Color Rush odds', unit: 'pct', min: 0, max: 0.3, step: 0.01 },
+  COLOR_SPLASH_CHECK_MS: { label: 'Color splash check interval', unit: 's', min: 5000, max: 60000, step: 1000 },
+  COLOR_SPLASH_PROBABILITY: { label: 'Color splash odds', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
+};
+
+function formatTuningValue(key, value) {
+  const meta = TUNING_META[key];
+  if (meta.unit === 'pct') return Math.round(value * 100) + '%';
+  if (meta.unit === 's') return (value / 1000).toFixed(1) + 's';
+  if (meta.unit === 'x') return 'x' + (Math.round(value * 10) / 10);
+  return String(value);
+}
+
+// Builds the whole tab from TUNING_GROUPS/TUNING_META rather than hand-
+// written HTML per slider - 27 near-identical rows would otherwise be a
+// lot of markup to keep in sync with this file's own constants.
+function buildTuningUi() {
+  const container = document.getElementById('tuning-groups');
+  if (!container) return;
+  container.innerHTML = '';
+  TUNING_GROUPS.forEach(group => {
+    const h = document.createElement('h3');
+    h.innerText = group.label;
+    container.appendChild(h);
+    group.keys.forEach(key => {
+      const meta = TUNING_META[key];
+      const row = document.createElement('div');
+      row.className = 'slider';
+      row.innerHTML = '<label>' + meta.label + ': <b><span id="tune-val-' + key + '"></span></b></label>' +
+        '<input type="range" id="tune-input-' + key + '" min="' + meta.min + '" max="' + meta.max + '" step="' + meta.step + '">';
+      container.appendChild(row);
+    });
+  });
+  Object.keys(TUNING_META).forEach(key => {
+    const input = document.getElementById('tune-input-' + key);
+    const val = document.getElementById('tune-val-' + key);
+    if (!input || !val) return;
+    input.value = TUNING[key];
+    val.innerText = formatTuningValue(key, TUNING[key]);
+    input.addEventListener('input', () => setTuning(key, parseFloat(input.value)));
+  });
+}
+
+function updateTuningUi(key) {
+  const val = document.getElementById('tune-val-' + key);
+  const input = document.getElementById('tune-input-' + key);
+  if (val) val.innerText = formatTuningValue(key, TUNING[key]);
+  if (input) input.value = TUNING[key];
+}
+
 const RANDOM_START_MAX_FRACTION = 0.5; // clips start somewhere in their first 0-50%
 const BINAURAL_BASE_GAIN = 0.15;
 
@@ -1118,7 +1330,6 @@ setInterval(updateModeBadge, 1000);
 // goes up, so coming back later always has somewhere to pick up from.
 const XP_STORAGE_KEY = 'mm_xp_state';
 const XP_PER_TIER = { small: 10, medium: 20, mega: 40, milestone: 60 };
-const XP_PER_BONUS_CLAIM = 15;
 const RATE_XP_BASE = 2;
 const PRESTIGE_LEVEL_CAP = 20;
 let xpTotal = 0;
@@ -1338,12 +1549,11 @@ let totalJackpotCount = 0;
 // near-misses - in general) and pickJackpotTier() below (shifts the
 // weighted pick away from "small" and toward "medium"/"mega" while hot).
 let jackpotHeat = 0;
-const JACKPOT_HEAT_MAX = 3;
 const JACKPOT_HEAT_DECAY_MS = 5000;
 const JACKPOT_HEAT_DECAY_PER_TICK = 0.08;
 
 function bumpJackpotHeat(amount) {
-  jackpotHeat = Math.min(JACKPOT_HEAT_MAX, jackpotHeat + amount);
+  jackpotHeat = Math.min(TUNING.JACKPOT_HEAT_MAX, jackpotHeat + amount);
 }
 setInterval(() => { jackpotHeat = Math.max(0, jackpotHeat - JACKPOT_HEAT_DECAY_PER_TICK); }, JACKPOT_HEAT_DECAY_MS);
 
@@ -1359,12 +1569,11 @@ setInterval(() => { jackpotHeat = Math.max(0, jackpotHeat - JACKPOT_HEAT_DECAY_P
 // tile that was just hearted - see rateScreen and
 // maybeTriggerSpiralFromHearts below.
 let heartMultiplier = 0;
-const HEART_MULT_MAX = 5;
 const HEART_MULT_DECAY_MS = 6000;
 const HEART_MULT_DECAY_PER_TICK = 0.1;
 
 function bumpHeartMultiplier() {
-  heartMultiplier = Math.min(HEART_MULT_MAX, heartMultiplier + 1);
+  heartMultiplier = Math.min(TUNING.HEART_MULT_MAX, heartMultiplier + 1);
 }
 setInterval(() => { heartMultiplier = Math.max(0, heartMultiplier - HEART_MULT_DECAY_PER_TICK); }, HEART_MULT_DECAY_MS);
 
@@ -1391,21 +1600,18 @@ function pickJackpotTier() {
 // and wait out. Deliberately separate from jackpotHeat/heartMultiplier,
 // which are both always visible - this one only works because it isn't.
 const HIDDEN_MULT_CHECK_MS = 50000;
-const HIDDEN_MULT_PROBABILITY = 0.05;
-const HIDDEN_MULT_DURATION_MS = 18000;
-const HIDDEN_MULT_VALUE = 2;
 let hiddenMultExpireAt = 0;
 
 function maybeTriggerHiddenMultiplier() {
   if (!anticipationFxEnabled || Date.now() < hiddenMultExpireAt) return;
-  if (Math.random() < HIDDEN_MULT_PROBABILITY * oddsMultiplier()) {
-    hiddenMultExpireAt = Date.now() + HIDDEN_MULT_DURATION_MS;
+  if (Math.random() < TUNING.HIDDEN_MULT_PROBABILITY * oddsMultiplier()) {
+    hiddenMultExpireAt = Date.now() + TUNING.HIDDEN_MULT_DURATION_MS;
   }
 }
 setInterval(maybeTriggerHiddenMultiplier, HIDDEN_MULT_CHECK_MS);
 
 function hiddenMultiplierFactor() {
-  return Date.now() < hiddenMultExpireAt ? HIDDEN_MULT_VALUE : 1;
+  return Date.now() < hiddenMultExpireAt ? TUNING.HIDDEN_MULT_VALUE : 1;
 }
 
 // Prefers the tier the server actually used for the content that just
@@ -1977,7 +2183,7 @@ function restorePanelState() {
   document.getElementById('panel-toggle').innerText = collapsed ? '☰' : '✕';
 }
 
-const PANEL_TAB_NAMES = ['display', 'engagement', 'audio', 'more'];
+const PANEL_TAB_NAMES = ['display', 'engagement', 'audio', 'more', 'tuning'];
 
 function switchPanelTab(name) {
   if (!PANEL_TAB_NAMES.includes(name)) name = PANEL_TAB_NAMES[0];
@@ -2273,9 +2479,6 @@ function pulseTileGlow(idx, multiplier, negative) {
 // triggers a small payoff. Acting on it is what pays off, not passively
 // waiting - a distinct ("operant") reward trigger from the purely passive
 // jackpot/near-miss system above.
-const BONUS_WINDOW_CHECK_MS = 25000;
-const BONUS_WINDOW_PROBABILITY = 0.25;
-const BONUS_WINDOW_DURATION_MS = 5000;
 let bonusWindowTileIndex = -1;
 let bonusWindowExpireAt = 0;
 let bonusWindowTimer = null;
@@ -2294,7 +2497,7 @@ function maybeTriggerBonusWindow() {
   if (!anticipationFxEnabled) return;
   if (bonusWindowTileIndex >= 0 || !tileElements.length) return;
   if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
-  if (Math.random() < BONUS_WINDOW_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('bonus')) {
+  if (Math.random() < TUNING.BONUS_WINDOW_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('bonus')) {
     lastAmbientSpawnAt = Date.now();
     activateBonusWindow(pickAmbientTarget());
   }
@@ -2312,11 +2515,11 @@ function activateBonusWindow(idx) {
     clearBonusWindow(bonusWindowTileIndex);
   }
   bonusWindowTileIndex = idx;
-  bonusWindowExpireAt = Date.now() + BONUS_WINDOW_DURATION_MS;
+  bonusWindowExpireAt = Date.now() + TUNING.BONUS_WINDOW_DURATION_MS;
   const el = tileAmbientEls[idx];
   if (el) el.classList.add('bonus-window');
   clearTimeout(bonusWindowTimer);
-  bonusWindowTimer = setTimeout(() => clearBonusWindow(idx), BONUS_WINDOW_DURATION_MS);
+  bonusWindowTimer = setTimeout(() => clearBonusWindow(idx), TUNING.BONUS_WINDOW_DURATION_MS);
 }
 
 function clearBonusWindow(idx) {
@@ -2375,9 +2578,6 @@ function burstTileSpeed(idx, durationMs, minMult, maxMult) {
 // jackpot-flavored haul, or nothing at all) is only decided the moment
 // you open it. Rarer and holds longer than the bonus window so it
 // reads as a different, weightier kind of pull.
-const SEALED_CHECK_MS = 35000;
-const SEALED_PROBABILITY = 0.10;
-const SEALED_DURATION_MS = 6000;
 let sealedTileIndex = -1;
 let sealedExpireAt = 0;
 let sealedTimer = null;
@@ -2386,7 +2586,7 @@ function maybeTriggerSealedTile() {
   if (!anticipationFxEnabled) return;
   if (sealedTileIndex >= 0 || !tileElements.length) return;
   if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
-  if (Math.random() < SEALED_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('sealed')) {
+  if (Math.random() < TUNING.SEALED_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('sealed')) {
     lastAmbientSpawnAt = Date.now();
     activateSealedTile(pickAmbientTarget());
   }
@@ -2394,7 +2594,7 @@ function maybeTriggerSealedTile() {
 
 function activateSealedTile(idx) {
   sealedTileIndex = idx;
-  sealedExpireAt = Date.now() + SEALED_DURATION_MS;
+  sealedExpireAt = Date.now() + TUNING.SEALED_DURATION_MS;
   const el = tileAmbientEls[idx];
   if (el) el.classList.add('sealed-tile');
   // Looks actually locked, not just bordered: a dim overlay on the tile
@@ -2404,9 +2604,9 @@ function activateSealedTile(idx) {
   // since min/max are both 0.75.
   const tile = tileElements[idx];
   if (tile) tile.classList.add('tile-sealed-dim');
-  burstTileSpeed(idx, SEALED_DURATION_MS, 0.75, 0.75);
+  burstTileSpeed(idx, TUNING.SEALED_DURATION_MS, 0.75, 0.75);
   clearTimeout(sealedTimer);
-  sealedTimer = setTimeout(() => missSealedTile(idx), SEALED_DURATION_MS);
+  sealedTimer = setTimeout(() => missSealedTile(idx), TUNING.SEALED_DURATION_MS);
 }
 
 function missSealedTile(idx) {
@@ -2472,7 +2672,7 @@ function openSealedTile(idx) {
   toast((outcome.negative ? '📦 Sealed tile was empty' : '🔓 Sealed tile: ' + label), outcome.negative);
   if (!outcome.negative && Math.random() < 0.3) fireColorSplashPiece(null, idx);
 }
-setInterval(maybeTriggerSealedTile, SEALED_CHECK_MS);
+startTunableInterval('SEALED_CHECK_MS', maybeTriggerSealedTile);
 
 // ---- Chase flash ----
 // A fast, hopping glow you have to actually chase around the grid - tap
@@ -2483,10 +2683,6 @@ setInterval(maybeTriggerSealedTile, SEALED_CHECK_MS);
 // static glow) and the due-aura (idle-driven, no time pressure) - this
 // one is pure reflexes/chase, asked for as "another way to interact...
 // makes them want to chase something."
-const CHASE_CHECK_MS = 20000;
-const CHASE_PROBABILITY = 0.22;
-const CHASE_FLASH_START_MS = 1800;
-const CHASE_FLASH_MIN_MS = 900;
 const CHASE_HOP_DELAY_MS = 450;
 const CHASE_CAUGHT_CELEBRATION_MS = 320; // matches .chase-caught-flash's CSS duration
 const CHASE_CAUGHT_MAX_PULSES = 3; // capped lower - at 5 pulses it was still visibly going a few seconds after a fast streak
@@ -2508,7 +2704,7 @@ function maybeTriggerChase() {
   if (!anticipationFxEnabled) return;
   if (chaseFlashTileIndex >= 0 || !tileElements.length) return;
   if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
-  if (Math.random() < CHASE_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('chase')) {
+  if (Math.random() < TUNING.CHASE_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('chase')) {
     lastAmbientSpawnAt = Date.now();
     activateChaseFlash(pickAmbientTarget());
   }
@@ -2536,7 +2732,7 @@ function pickAmbientTarget(exclude) {
 }
 
 function chaseFlashDurationForChain() {
-  return Math.max(CHASE_FLASH_MIN_MS, CHASE_FLASH_START_MS - chaseChain * 120);
+  return Math.max(TUNING.CHASE_FLASH_MIN_MS, TUNING.CHASE_FLASH_START_MS - chaseChain * 120);
 }
 
 function activateChaseFlash(idx) {
@@ -2639,12 +2835,6 @@ function catchChaseFlash(idx) {
 let spiralList = null;
 let spiralListPromise = null;
 let spiralActive = false;
-const SPIRAL_HOLD_MIN_MS = 30000; // 30s - 60s total hold
-const SPIRAL_HOLD_RANGE_MS = 30000;
-const SPIRAL_FADE_MIN_MS = 6000; // 6s - 10s fade (~8s typical), same duration in and out
-const SPIRAL_FADE_RANGE_MS = 4000;
-const SPIRAL_BREATHE_INTERVAL_MS = 10000;
-
 function fetchSpiralList() {
   if (spiralList) return Promise.resolve(spiralList);
   if (spiralListPromise) return spiralListPromise;
@@ -2675,14 +2865,14 @@ function maybeTriggerSpiralOverlay() {
     // any reason the spiral would just freeze on its last frame for the
     // rest of the hold instead of looping for as long as it's up.
     el.onended = () => { el.currentTime = 0; el.play().catch(() => {}); };
-    const targetOpacity = (0.15 + Math.random() * 0.15).toFixed(2); // 15% - 30%
-    const fadeMs = SPIRAL_FADE_MIN_MS + Math.random() * SPIRAL_FADE_RANGE_MS; // same fade both ways
-    // Not every time - about half of activations also get a slow
-    // "breathing" wave once the fade-in settles: nudges opacity +-5%
-    // every 10s. Started only after the fade-in completes (see the
-    // canplay handler) and explicitly stopped before the real fade-out
-    // begins, so it never fights that transition.
-    const shouldBreathe = Math.random() < 0.5;
+    const targetOpacity = (TUNING.SPIRAL_OPACITY_MIN + Math.random() * TUNING.SPIRAL_OPACITY_RANGE).toFixed(2);
+    const fadeMs = TUNING.SPIRAL_FADE_MIN_MS + Math.random() * TUNING.SPIRAL_FADE_RANGE_MS; // same fade both ways
+    // Not every time - some activations also get a slow "breathing" wave
+    // once the fade-in settles: nudges opacity +-5% every 10s. Started
+    // only after the fade-in completes (see the canplay handler) and
+    // explicitly stopped before the real fade-out begins, so it never
+    // fights that transition.
+    const shouldBreathe = Math.random() < TUNING.SPIRAL_BREATHE_PROBABILITY;
     let breatheTimer = null;
     // Don't start the fade until the video actually has a decodable
     // frame - starting it right on src assignment meant the CSS
@@ -2701,7 +2891,7 @@ function maybeTriggerSpiralOverlay() {
           el.style.transition = 'opacity 3s ease-in-out';
           el.style.opacity = t.toFixed(2);
           dir *= -1;
-        }, SPIRAL_BREATHE_INTERVAL_MS);
+        }, TUNING.SPIRAL_BREATHE_INTERVAL_MS);
       }
     }, { once: true });
     el.src = pick.base + pick.path;
@@ -2721,7 +2911,7 @@ function maybeTriggerSpiralOverlay() {
       }
       spiralLastCurrentTime = el.currentTime;
     }, SPIRAL_STALL_CHECK_MS);
-    const holdMs = SPIRAL_HOLD_MIN_MS + Math.random() * SPIRAL_HOLD_RANGE_MS;
+    const holdMs = TUNING.SPIRAL_HOLD_MIN_MS + Math.random() * TUNING.SPIRAL_HOLD_RANGE_MS;
     setTimeout(() => {
       clearInterval(breatheTimer);
       el.style.transition = 'opacity ' + (fadeMs / 1000).toFixed(2) + 's ease-in-out';
@@ -2760,8 +2950,6 @@ setInterval(maybeTriggerSpiralFromHearts, HEART_SPIRAL_CHECK_MS);
 // DOM-spawned confetti) - accepted on purpose rather than the usual
 // opacity/transform-only restraint elsewhere, since it's rare and
 // short-lived rather than ambient/constant.
-const COLOR_RUSH_CHECK_MS = 45000;
-const COLOR_RUSH_PROBABILITY = 0.06;
 const COLOR_RUSH_DURATION_MS = 12000;
 const COLOR_RUSH_STREAK_COUNT = 28;
 const COLOR_RUSH_HUES = [340, 280, 220, 160, 90, 40]; // pink, purple, blue, green, lime, gold
@@ -2769,7 +2957,7 @@ let colorRushActive = false;
 
 function maybeTriggerColorRush() {
   if (!anticipationFxEnabled || colorRushActive) return;
-  if (Math.random() < COLOR_RUSH_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('colorRush')) triggerColorRush();
+  if (Math.random() < TUNING.COLOR_RUSH_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('colorRush')) triggerColorRush();
 }
 
 // The full event is just these pieces fired together - each one also
@@ -2859,7 +3047,7 @@ function triggerColorRush() {
     colorRushActive = false;
   }, COLOR_RUSH_DURATION_MS + 1000); // +1000 covers disco-rain's own fade-out tail above
 }
-setInterval(maybeTriggerColorRush, COLOR_RUSH_CHECK_MS);
+startTunableInterval('COLOR_RUSH_CHECK_MS', maybeTriggerColorRush);
 
 // ---- Color splash pieces (standalone) ----
 // The same pieces Color Rush combines, but fired one at a time as a
@@ -2867,15 +3055,13 @@ setInterval(maybeTriggerColorRush, COLOR_RUSH_CHECK_MS);
 // bonus claim, a sealed-tile open, a jackpot payoff) - "sometimes it
 // can just go with the disco tiles, sometimes just the confetti,"
 // instead of every reward moment reaching for the full intense combo.
-const COLOR_SPLASH_CHECK_MS = 25000;
-const COLOR_SPLASH_PROBABILITY = 0.12;
 const COLOR_SPLASH_PIECES = ['confetti', 'tiles', 'border', 'rain'];
 
 function maybeTriggerColorSplashPiece() {
   if (!anticipationFxEnabled || colorRushActive) return;
-  if (Math.random() < COLOR_SPLASH_PROBABILITY * oddsMultiplier()) fireColorSplashPiece();
+  if (Math.random() < TUNING.COLOR_SPLASH_PROBABILITY * oddsMultiplier()) fireColorSplashPiece();
 }
-setInterval(maybeTriggerColorSplashPiece, COLOR_SPLASH_CHECK_MS);
+startTunableInterval('COLOR_SPLASH_CHECK_MS', maybeTriggerColorSplashPiece);
 
 // tileIdx (optional) confines a 'tiles' piece to just that one tile -
 // used when a splash is tied to a specific tile's own moment (a catch,
@@ -2943,7 +3129,7 @@ function triggerMiniPayoff(idx) {
   playChimeSound(0.7);
   burstExtraFloaters(0.5);
   const mult = hiddenMultiplierFactor();
-  const xp = XP_PER_BONUS_CLAIM * mult;
+  const xp = TUNING.XP_PER_BONUS_CLAIM * mult;
   const tag = mult > 1 ? ' (hidden x' + mult + '!)' : '';
   awardXp(xp);
   incrementQuestMetric('bonuses', 1);
@@ -3086,8 +3272,8 @@ setInterval(updateSpinButton, 1000);
 window.addEventListener('resize', () => { if (mosaicEnabled) layoutMosaic(); });
 setInterval(() => { if (mosaicEnabled) layoutMosaic(); }, MOSAIC_REFLOW_INTERVAL_MS);
 setInterval(maybeTriggerFakeNearMiss, FAKE_NEAR_MISS_CHECK_MS);
-setInterval(maybeTriggerBonusWindow, BONUS_WINDOW_CHECK_MS);
-setInterval(maybeTriggerChase, CHASE_CHECK_MS);
+startTunableInterval('BONUS_WINDOW_CHECK_MS', maybeTriggerBonusWindow);
+startTunableInterval('CHASE_CHECK_MS', maybeTriggerChase);
 setInterval(tickSessionTimer, 1000);
 setInterval(tickStreakWarning, 1000);
 setInterval(tickGoldenHour, 5000);
@@ -3110,6 +3296,7 @@ function runSessionPrimer() {
 window.onload = () => {
   restorePanelState();
   restorePanelTab();
+  buildTuningUi();
   loadMosaicPref();
   loadFxPrefs();
   loadAnticipationPrefs();

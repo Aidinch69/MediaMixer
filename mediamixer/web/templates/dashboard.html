@@ -68,6 +68,7 @@
     <button class="panel-tab-btn" data-tab="engagement" onclick="switchPanelTab('engagement')">🎰 Engagement</button>
     <button class="panel-tab-btn" data-tab="audio" onclick="switchPanelTab('audio')">🎵 Audio</button>
     <button class="panel-tab-btn" data-tab="more" onclick="switchPanelTab('more')">⚙️ More</button>
+    <button class="panel-tab-btn" data-tab="tuning" onclick="switchPanelTab('tuning')">🔧 Tuning</button>
   </div>
 
   <div class="panel-tab" data-tab="display">
@@ -168,6 +169,17 @@
     <details class="hint-details"><summary>What does this do?</summary><p class="hint">Hover any tile for 👍/👎 rating controls.</p></details>
     <h3>🕹️ Overrides</h3>
     <div class="grid"><button class="lock" onclick="lock(); uiFlare();">⬆️ Lock 60s</button><button class="skip" onclick="skip()">⬇️ Skip All</button></div>
+  </div>
+
+  <div class="panel-tab" data-tab="tuning">
+    <h3>🔧 Tuning<span class="experimental-pill">Backdoor</span></h3>
+    <div class="grid">
+      <button class="badge" onclick="backupTuningNow()">💾 Save Backup</button>
+      <button class="badge" onclick="restoreTuningBackup()">↩️ Restore Backup</button>
+    </div>
+    <button onclick="resetTuningToDefaults()">⟲ Reset All to Shipped Defaults</button>
+    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Live sliders for the constants we've actually been iterating on this session (spiral opacity/timing, sealed/chase/bonus/color-rush odds, the various multipliers, bonus xp) - not everything in the file, just the parts worth fine-tuning in real time instead of editing source and restarting. Changes persist across reloads on this device. "Save Backup" snapshots your current settings so you can experiment further and get back to them later; "Reset All to Shipped Defaults" always goes back to the values this shipped with, independent of any backup.</p></details>
+    <div id="tuning-groups"></div>
   </div>
 </div>
 <audio id="overlay-audio" loop></audio>
