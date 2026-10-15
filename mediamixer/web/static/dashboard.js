@@ -1956,7 +1956,7 @@ function ensureTiles(count) {
       '<video id="preload-' + i + '" class="preload" preload="auto" muted></video>' +
       '<div class="tile-glow-fx"></div>' +
       '<div class="tile-ambient-fx"><span class="tap-badge">👆 TAP</span><span class="chase-badge">⚡ CATCH</span></div>' +
-      '<div class="tile-claim-fx"></div>' +
+      '<div class="tile-claim-fx"><span class="claim-reward-label"></span></div>' +
       '<div class="tile-overlay">' +
       '<div class="src-label" id="label-' + i + '"></div>' +
       '<div class="tile-actions">' +
@@ -2160,16 +2160,28 @@ function pulseTileGlow(idx, multiplier, negative) {
 // waiting - a distinct ("operant") reward trigger from the purely passive
 // jackpot/near-miss system above.
 const BONUS_WINDOW_CHECK_MS = 25000;
-const BONUS_WINDOW_PROBABILITY = 0.3;
+const BONUS_WINDOW_PROBABILITY = 0.25;
 const BONUS_WINDOW_DURATION_MS = 5000;
 let bonusWindowTileIndex = -1;
 let bonusWindowExpireAt = 0;
 let bonusWindowTimer = null;
 
+// Shared between the bonus window and chase flash below (both passive,
+// ambient spawns) so they don't land at the same moment - "lets keep
+// them slightly separate." Only gates a *fresh* spawn of either; doesn't
+// touch chase's own hop-to-a-new-tile-after-a-catch, which is a
+// continuation of an already-running chase, not a second thing starting
+// at once. Spin's own activateBonusWindow call is deliberate/manual and
+// bypasses this too - only the passive rolls below check it.
+let lastAmbientSpawnAt = 0;
+const AMBIENT_SPAWN_SEPARATION_MS = 2500;
+
 function maybeTriggerBonusWindow() {
   if (!anticipationFxEnabled) return;
   if (bonusWindowTileIndex >= 0 || !tileElements.length) return;
+  if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
   if (Math.random() < BONUS_WINDOW_PROBABILITY * oddsMultiplier()) {
+    lastAmbientSpawnAt = Date.now();
     activateBonusWindow(Math.floor(Math.random() * tileElements.length));
   }
 }
@@ -2222,9 +2234,9 @@ function claimBonusTile(idx) {
     el.classList.add('bonus-claimed');
     setTimeout(() => el.classList.remove('bonus-claimed'), BONUS_CLAIM_CELEBRATION_MS);
   }
-  burstTileSpeed(idx, BONUS_CLAIM_CELEBRATION_MS);
+  burstTileSpeed(idx, BONUS_CLAIM_CELEBRATION_MS, 1.20, 1.95); // trimmed 5pts off both ends (was 1.25-2.0)
   bumpJackpotHeat(0.5); // a smaller, flat nudge than a chase catch's - see bumpJackpotHeat
-  triggerMiniPayoff();
+  triggerMiniPayoff(idx);
 }
 
 // Random speed-up on the claimed tile, synced with the claim's visual
@@ -2255,8 +2267,8 @@ const CHASE_PROBABILITY = 0.22;
 const CHASE_FLASH_START_MS = 1800;
 const CHASE_FLASH_MIN_MS = 900;
 const CHASE_HOP_DELAY_MS = 450;
-const CHASE_CAUGHT_CELEBRATION_MS = 500; // matches .chase-caught-flash's CSS duration
-const CHASE_CAUGHT_MAX_PULSES = 5;
+const CHASE_CAUGHT_CELEBRATION_MS = 320; // matches .chase-caught-flash's CSS duration
+const CHASE_CAUGHT_MAX_PULSES = 3; // capped lower - at 5 pulses it was still visibly going a few seconds after a fast streak
 let chaseFlashTileIndex = -1;
 let chaseFlashExpireAt = 0;
 let chaseFlashTimer = null;
@@ -2265,7 +2277,9 @@ let chaseChain = 0;
 function maybeTriggerChase() {
   if (!anticipationFxEnabled) return;
   if (chaseFlashTileIndex >= 0 || !tileElements.length) return;
+  if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
   if (Math.random() < CHASE_PROBABILITY * oddsMultiplier()) {
+    lastAmbientSpawnAt = Date.now();
     activateChaseFlash(pickChaseTarget());
   }
 }
@@ -2344,11 +2358,12 @@ function catchChaseFlash(idx) {
   // momentum building rather than the same sound on repeat.
   playChimeSound(0.5 + Math.min(chaseChain, 5) * 0.08, 1 + Math.min(chaseChain, 10) * 0.015);
   // A speed burst on the caught tile too, same idea as the bonus tap's -
-  // base 10%-20%, plus another 10%-15% stacked on for every catch in the
-  // current chain (capped at 8 catches' worth so it can't run away).
+  // base 5%-15% (trimmed 5pts off both ends), plus another 5%-10%
+  // (also trimmed 5pts) stacked on for every catch in the current chain
+  // (capped at 8 catches' worth so it can't run away).
   const chainForSpeed = Math.min(chaseChain, 8);
-  const chainSpeedExtra = chainForSpeed * (0.10 + Math.random() * 0.05);
-  burstTileSpeed(idx, CHASE_CAUGHT_CELEBRATION_MS * pulses, 1.10 + chainSpeedExtra, 1.20 + chainSpeedExtra);
+  const chainSpeedExtra = chainForSpeed * (0.05 + Math.random() * 0.05);
+  burstTileSpeed(idx, CHASE_CAUGHT_CELEBRATION_MS * pulses, 1.05 + chainSpeedExtra, 1.15 + chainSpeedExtra);
   awardXp(5 + chaseChain * 2);
   incrementQuestMetric('bonuses', 1);
   bumpJackpotHeat(chaseChain * 0.4); // longer chains nudge the odds toward bigger jackpots - see bumpJackpotHeat
@@ -2383,6 +2398,10 @@ function fetchSpiralList() {
   return spiralListPromise;
 }
 
+const SPIRAL_STALL_CHECK_MS = 2000;
+let spiralStallTimer = null;
+let spiralLastCurrentTime = -1;
+
 function maybeTriggerSpiralOverlay() {
   if (!anticipationFxEnabled || spiralActive) return;
   fetchSpiralList().then(items => {
@@ -2399,17 +2418,45 @@ function maybeTriggerSpiralOverlay() {
     // any reason the spiral would just freeze on its last frame for the
     // rest of the hold instead of looping for as long as it's up.
     el.onended = () => { el.currentTime = 0; el.play().catch(() => {}); };
+    const targetOpacity = (0.15 + Math.random() * 0.20).toFixed(2); // 15% - 35%
+    const fadeMs = SPIRAL_FADE_MIN_MS + Math.random() * SPIRAL_FADE_RANGE_MS; // same fade both ways
+    // Don't start the fade until the video actually has a decodable
+    // frame - starting it right on src assignment meant the CSS
+    // transition ran on schedule regardless of buffering, so by the
+    // time anything was actually visible the fade had often already
+    // silently finished (or was most of the way there), reading as a
+    // sudden pop-in instead of a visible fade.
+    el.addEventListener('canplay', () => {
+      el.style.transition = 'opacity ' + (fadeMs / 1000).toFixed(2) + 's ease-in-out';
+      void el.offsetWidth; // force a reflow so the transition reliably engages
+      requestAnimationFrame(() => { el.style.opacity = targetOpacity; });
+    }, { once: true });
     el.src = pick.base + pick.path;
     el.currentTime = 0;
     el.play().catch(() => {});
-    const targetOpacity = (0.15 + Math.random() * 0.25).toFixed(2); // 15% - 40%
-    const fadeMs = SPIRAL_FADE_MIN_MS + Math.random() * SPIRAL_FADE_RANGE_MS; // same fade both ways
-    el.style.transition = 'opacity ' + (fadeMs / 1000).toFixed(2) + 's ease-in-out';
-    requestAnimationFrame(() => { el.style.opacity = targetOpacity; });
+    // Stall watchdog: if currentTime hasn't moved in 2s (buffering stuck,
+    // a failed loop restart, or anything else) force a hard restart from
+    // the top - covers "holds the last frame for the rest of the window"
+    // regardless of which of those it actually was.
+    spiralLastCurrentTime = -1;
+    clearInterval(spiralStallTimer);
+    spiralStallTimer = setInterval(() => {
+      if (!spiralActive || el.paused) return;
+      if (el.currentTime === spiralLastCurrentTime) {
+        el.currentTime = 0;
+        el.play().catch(() => {});
+      }
+      spiralLastCurrentTime = el.currentTime;
+    }, SPIRAL_STALL_CHECK_MS);
     const holdMs = SPIRAL_HOLD_MIN_MS + Math.random() * SPIRAL_HOLD_RANGE_MS;
     setTimeout(() => {
       el.style.opacity = '0';
-      setTimeout(() => { el.pause(); el.onended = null; spiralActive = false; }, fadeMs);
+      setTimeout(() => {
+        el.pause();
+        el.onended = null;
+        clearInterval(spiralStallTimer);
+        spiralActive = false;
+      }, fadeMs);
     }, holdMs);
   });
 }
@@ -2477,12 +2524,30 @@ function clearMysteryTile(idx) {
   if (mysteryTileIndex === idx) mysteryTileIndex = -1;
 }
 
-function triggerMiniPayoff() {
+function triggerMiniPayoff(idx) {
   playChimeSound(0.7);
   burstExtraFloaters(0.5);
   awardXp(XP_PER_BONUS_CLAIM);
   incrementQuestMetric('bonuses', 1);
   toast('✨ Bonus! +' + XP_PER_BONUS_CLAIM + 'xp'); // was already awarded, just wasn't shown
+  // The toast says the same thing, but it's off in a corner - a label
+  // right on the tile that was actually tapped shows what was won where
+  // attention already is, rather than relying on the viewer to glance
+  // elsewhere to find out if (and what) they were rewarded.
+  if (idx != null) showClaimRewardLabel(idx, '+' + XP_PER_BONUS_CLAIM + 'xp');
+}
+
+const CLAIM_REWARD_LABEL_MS = 1400;
+
+function showClaimRewardLabel(idx, text) {
+  const el = tileClaimEls[idx];
+  const label = el && el.querySelector('.claim-reward-label');
+  if (!label) return;
+  label.textContent = text;
+  label.classList.remove('show');
+  void label.offsetWidth; // restart the rise/fade if one's already mid-flight
+  label.classList.add('show');
+  setTimeout(() => label.classList.remove('show'), CLAIM_REWARD_LABEL_MS);
 }
 function rateAudio(d) { fetch('/api/rate_audio?dir=' + d).then(() => toast(d === 'up' ? '🔊 Audio rated up' : '🔇 Audio penalized', d !== 'up')); }
 function nextAudio() { fetch('/api/next_audio').then(() => toast('⏭️ Audio Skipped')); }

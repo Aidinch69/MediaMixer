@@ -85,6 +85,11 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    "sometimes it just goes white." A dedicated element sidesteps the
    whole class of bug instead of trying to exclude every combination. */
 .tile-claim-fx{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;will-change:opacity,transform;border-radius:inherit;box-sizing:border-box}
+/* A small "what you actually won" label right on the tile that was
+   tapped, alongside the existing corner toast - the toast says the
+   same thing, but attention is already on the tile itself. */
+.claim-reward-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) translateY(10px);opacity:0;background:rgba(10,5,20,.8);color:#ffd43b;font-weight:bold;font-size:1rem;padding:6px 16px;border-radius:20px;border:1px solid rgba(255,212,59,.6);white-space:nowrap;transition:opacity .3s ease,transform .3s ease}
+.claim-reward-label.show{opacity:1;transform:translate(-50%,-50%) translateY(-10px)}
 /* The actual hit, right as a bonus tile is tapped - a bright pop that
    cycles through a full rainbow over a genuine ~2s instead of vanishing
    almost as fast as it appeared. A real couple seconds of "that felt
@@ -103,13 +108,14 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 /* The catch, distinct from the bonus claim's slow rainbow - chase is a
    fast reflex game, so its payoff is a quick, punchy cyan-to-gold pop
    instead of a lingering multi-color fade. */
-/* Faster (.5s, was .9s) with a held-zero tail (70%-100%) before each
-   repeat snaps back to the bright 0% keyframe - at multiple streak
-   pulses in a row, the previous .9s version faded out slowly enough
-   that consecutive pulses blurred together and the new one landing was
-   hard to spot; the visible "off" gap plus the hard reset now reads as
-   a distinct blink each time instead of one continuous wave. */
-.tile-claim-fx.chase-caught{opacity:1;border:5px solid rgba(255,255,255,1);animation:chase-caught-flash .5s ease-out forwards}
+/* Faster still (.32s, was .5s then .9s) with a held-zero tail
+   (70%-100%) before each repeat snaps back to the bright 0% keyframe -
+   even at .5s, a fast multi-catch streak had pulses still visibly
+   going a few seconds after the streak itself stopped; capped at 3
+   pulses too (was 5) rather than chasing the duration down further to
+   cover a 5+ streak - a quick, clear ripple of up to 3 beats building
+   excitement, not a long light show. */
+.tile-claim-fx.chase-caught{opacity:1;border:5px solid rgba(255,255,255,1);animation:chase-caught-flash .32s ease-out forwards}
 @keyframes chase-caught-flash{
   0%{opacity:1;border-color:rgba(255,255,255,1);transform:scale(1.12)}
   25%{opacity:1;border-color:rgba(77,212,255,1);transform:scale(.96)}
