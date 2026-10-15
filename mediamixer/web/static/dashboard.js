@@ -737,10 +737,11 @@ function playFizzleSound() {
   osc.stop(now + 0.6);
 }
 
-function playChimeSound(scale) {
+function playChimeSound(scale, pitch) {
   const bus = ensureSfxBus();
   if (!bus) return;
   scale = scale || 1.0;
+  pitch = pitch || 1.0; // slight upward creep for chase-catch streaks - see catchChaseFlash
   const now = audioCtx.currentTime;
   const notes = scale >= 1.3
     ? [523.25, 659.25, 783.99, 1046.5, 1318.5] // mega gets a fifth, higher note
@@ -753,7 +754,7 @@ function playChimeSound(scale) {
     osc.connect(g); g.connect(bus);
     if (reverbSend) g.connect(reverbSend);
     const t0 = now + i * 0.09;
-    osc.frequency.setValueAtTime(freq, t0);
+    osc.frequency.setValueAtTime(freq * pitch, t0);
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(Math.min(0.45, 0.255 * scale), t0 + 0.02); // base is already 15% quieter
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
@@ -1088,6 +1089,11 @@ function updateModeBadge() {
     text = pendingServerTier ? ('🎰 ' + pendingServerTier.toUpperCase() + ' building...') : '🎰 Building...';
   } else if (jackpotStreak > 1 && Date.now() - lastJackpotAt < STREAK_RESET_MS) {
     text = '🔥 Jackpot streak x' + jackpotStreak;
+  } else if (jackpotHeat > 1.2) {
+    // Otherwise bumpJackpotHeat's whole effect (catch streaks/bonus taps
+    // nudging odds toward bigger jackpots) would be invisible - nothing
+    // to notice means nothing to feel rewarded by.
+    text = '🔥 Odds heating up';
   }
   if (text) {
     el.innerText = text;
@@ -1313,12 +1319,35 @@ let jackpotStreak = 0;
 let lastJackpotAt = 0;
 let totalJackpotCount = 0;
 
+// ---- Jackpot heat ----
+// A temporary, decaying boost earned from chase-catch streaks and bonus
+// taps ("higher catch streaks add a higher ability for good jackpots" /
+// "bonus taps add slight increase to jackpots") - bumped in
+// catchChaseFlash and claimBonusTile, decays on its own tick so it's
+// momentum, not a permanent ratchet. Feeds two places: oddsMultiplier()
+// (more probability-gated events - bonus windows, chase flashes,
+// near-misses - in general) and pickJackpotTier() below (shifts the
+// weighted pick away from "small" and toward "medium"/"mega" while hot).
+let jackpotHeat = 0;
+const JACKPOT_HEAT_MAX = 3;
+const JACKPOT_HEAT_DECAY_MS = 5000;
+const JACKPOT_HEAT_DECAY_PER_TICK = 0.08;
+
+function bumpJackpotHeat(amount) {
+  jackpotHeat = Math.min(JACKPOT_HEAT_MAX, jackpotHeat + amount);
+}
+setInterval(() => { jackpotHeat = Math.max(0, jackpotHeat - JACKPOT_HEAT_DECAY_PER_TICK); }, JACKPOT_HEAT_DECAY_MS);
+
 function pickJackpotTier() {
-  const total = JACKPOT_TIERS.reduce((sum, t) => sum + t.weight, 0);
+  const heat = jackpotHeat;
+  const weighted = JACKPOT_TIERS.map(t => heat <= 0 ? t.weight
+    : t.name === 'small' ? t.weight / (1 + heat * 0.5)
+    : t.weight * (1 + heat * 0.5));
+  const total = weighted.reduce((sum, w) => sum + w, 0);
   let r = Math.random() * total;
-  for (const tier of JACKPOT_TIERS) {
-    if (r < tier.weight) return tier;
-    r -= tier.weight;
+  for (let i = 0; i < JACKPOT_TIERS.length; i++) {
+    if (r < weighted[i]) return JACKPOT_TIERS[i];
+    r -= weighted[i];
   }
   return JACKPOT_TIERS[0];
 }
@@ -1655,7 +1684,8 @@ function oddsMultiplier() {
   const raw = engagementMultiplier()
     * (isGoldenHourActive() ? GOLDEN_HOUR_MULTIPLIER : 1)
     * (isSurgeActive() ? SURGE_MULTIPLIER : 1)
-    * comboMultiplier();
+    * comboMultiplier()
+    * (1 + jackpotHeat * 0.15); // catch streaks/bonus taps nudge this up too, see bumpJackpotHeat
   return Math.min(3, raw);
 }
 
@@ -1832,12 +1862,20 @@ function restorePanelState() {
   document.getElementById('panel-toggle').innerText = collapsed ? '☰' : '✕';
 }
 
+let toastHideTimer = null;
+
 function toast(msg, neg) {
   const box = document.getElementById('toast');
   box.innerText = msg;
   box.style.borderColor = neg ? '#ff4d4d' : '#b84dff';
   box.style.display = 'block';
-  setTimeout(() => box.style.display = 'none', 1800);
+  // A second toast fired while an earlier one was still mid-countdown
+  // (e.g. a jackpot's own toast, then Bank/Push clicked a second later)
+  // left that first toast's hide timer running - it would still fire on
+  // schedule and yank the SECOND toast's text away early, well short of
+  // the intended 1.8s, reported as "the result text quickly disappears."
+  clearTimeout(toastHideTimer);
+  toastHideTimer = setTimeout(() => box.style.display = 'none', 1800);
 }
 
 function uiFlare() {
@@ -2150,6 +2188,7 @@ function claimBonusTile(idx) {
     setTimeout(() => el.classList.remove('bonus-claimed'), BONUS_CLAIM_CELEBRATION_MS);
   }
   burstTileSpeed(idx, BONUS_CLAIM_CELEBRATION_MS);
+  bumpJackpotHeat(0.5); // a smaller, flat nudge than a chase catch's - see bumpJackpotHeat
   triggerMiniPayoff();
 }
 
@@ -2158,10 +2197,12 @@ function claimBonusTile(idx) {
 // just a border glow. See the tileSpeedBurstUntil guard in render() -
 // without it, the next status poll (every ~0.3s) would immediately
 // overwrite this with the server-driven speed again.
-function burstTileSpeed(idx, durationMs) {
+function burstTileSpeed(idx, durationMs, minMult, maxMult) {
   const vid = tileElements[idx] && tileElements[idx].querySelector('#screen-' + idx);
   if (!vid) return;
-  vid.playbackRate = 1.25 + Math.random() * 0.75; // 1.25x - 2.0x
+  minMult = minMult == null ? 1.25 : minMult;
+  maxMult = maxMult == null ? 2.0 : maxMult;
+  vid.playbackRate = minMult + Math.random() * (maxMult - minMult);
   tileSpeedBurstUntil[idx] = Date.now() + durationMs;
 }
 
@@ -2180,6 +2221,7 @@ const CHASE_FLASH_START_MS = 1800;
 const CHASE_FLASH_MIN_MS = 900;
 const CHASE_HOP_DELAY_MS = 450;
 const CHASE_CAUGHT_CELEBRATION_MS = 900;
+const CHASE_CAUGHT_MAX_PULSES = 5;
 let chaseFlashTileIndex = -1;
 let chaseFlashExpireAt = 0;
 let chaseFlashTimer = null;
@@ -2248,14 +2290,33 @@ function catchChaseFlash(idx) {
   // a little with the chain (5, 7, 9, ...) same as the catch window
   // shrinks - both already scale with chaseChain, just needed a visible
   // payoff to actually register as the chain climbing.
+  // One pulse per catch in the current streak (capped so a long chain
+  // doesn't turn into an absurdly long animation) - 1 catch is a single
+  // pop, a chain of 3 is three quick pops in a row, building visually
+  // the same way the chain count itself builds.
+  const pulses = Math.min(chaseChain, CHASE_CAUGHT_MAX_PULSES);
   const el = tileClaimEls[idx];
   if (el) {
+    el.style.animationIterationCount = pulses;
     el.classList.add('chase-caught');
-    setTimeout(() => el.classList.remove('chase-caught'), CHASE_CAUGHT_CELEBRATION_MS);
+    setTimeout(() => {
+      el.classList.remove('chase-caught');
+      el.style.animationIterationCount = '';
+    }, CHASE_CAUGHT_CELEBRATION_MS * pulses);
   }
-  playChimeSound(0.5 + Math.min(chaseChain, 5) * 0.08);
+  // Pitch creeps up very slightly with the streak too, on top of the
+  // existing volume scaling - a small rising note each catch, like
+  // momentum building rather than the same sound on repeat.
+  playChimeSound(0.5 + Math.min(chaseChain, 5) * 0.08, 1 + Math.min(chaseChain, 10) * 0.015);
+  // A speed burst on the caught tile too, same idea as the bonus tap's -
+  // base 10%-20%, plus another 10%-15% stacked on for every catch in the
+  // current chain (capped at 8 catches' worth so it can't run away).
+  const chainForSpeed = Math.min(chaseChain, 8);
+  const chainSpeedExtra = chainForSpeed * (0.10 + Math.random() * 0.05);
+  burstTileSpeed(idx, CHASE_CAUGHT_CELEBRATION_MS * pulses, 1.10 + chainSpeedExtra, 1.20 + chainSpeedExtra);
   awardXp(5 + chaseChain * 2);
   incrementQuestMetric('bonuses', 1);
+  bumpJackpotHeat(chaseChain * 0.4); // longer chains nudge the odds toward bigger jackpots - see bumpJackpotHeat
   toast('🏃 Caught! Chain x' + chaseChain);
   setTimeout(() => {
     if (!tileElements.length) { chaseChain = 0; return; }
@@ -2272,9 +2333,10 @@ function catchChaseFlash(idx) {
 let spiralList = null;
 let spiralListPromise = null;
 let spiralActive = false;
-const SPIRAL_HOLD_MIN_MS = 7000;
-const SPIRAL_HOLD_MAX_MS = 6000;
-const SPIRAL_FADE_MS = 3000; // matches #spiral-overlay's CSS opacity transition
+const SPIRAL_HOLD_MIN_MS = 30000; // 30s - 60s total hold
+const SPIRAL_HOLD_RANGE_MS = 30000;
+const SPIRAL_FADE_MIN_MS = 5000; // 5s - 8.5s fade, same duration in and out
+const SPIRAL_FADE_RANGE_MS = 3500;
 
 function fetchSpiralList() {
   if (spiralList) return Promise.resolve(spiralList);
@@ -2306,11 +2368,13 @@ function maybeTriggerSpiralOverlay() {
     el.currentTime = 0;
     el.play().catch(() => {});
     const targetOpacity = (0.15 + Math.random() * 0.30).toFixed(2); // 15% - 45%
+    const fadeMs = SPIRAL_FADE_MIN_MS + Math.random() * SPIRAL_FADE_RANGE_MS; // same fade both ways
+    el.style.transition = 'opacity ' + (fadeMs / 1000).toFixed(2) + 's ease-in-out';
     requestAnimationFrame(() => { el.style.opacity = targetOpacity; });
-    const holdMs = SPIRAL_HOLD_MIN_MS + Math.random() * SPIRAL_HOLD_MAX_MS;
+    const holdMs = SPIRAL_HOLD_MIN_MS + Math.random() * SPIRAL_HOLD_RANGE_MS;
     setTimeout(() => {
       el.style.opacity = '0';
-      setTimeout(() => { el.pause(); el.onended = null; spiralActive = false; }, SPIRAL_FADE_MS);
+      setTimeout(() => { el.pause(); el.onended = null; spiralActive = false; }, fadeMs);
     }, holdMs);
   });
 }
@@ -2369,7 +2433,7 @@ function triggerMiniPayoff() {
   burstExtraFloaters(0.5);
   awardXp(XP_PER_BONUS_CLAIM);
   incrementQuestMetric('bonuses', 1);
-  toast('✨ Bonus!');
+  toast('✨ Bonus! +' + XP_PER_BONUS_CLAIM + 'xp'); // was already awarded, just wasn't shown
 }
 function rateAudio(d) { fetch('/api/rate_audio?dir=' + d).then(() => toast(d === 'up' ? '🔊 Audio rated up' : '🔇 Audio penalized', d !== 'up')); }
 function nextAudio() { fetch('/api/next_audio').then(() => toast('⏭️ Audio Skipped')); }

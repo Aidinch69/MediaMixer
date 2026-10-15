@@ -25,7 +25,9 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 /* Full-screen spiral layer: sits above every tile, floater and FX
    overlay (fx-layer is z15, tier-reveal z20) but below the settings
    panel (z25) and toast (z40) so those stay usable while it's up. */
-#spiral-overlay{position:fixed;inset:0;z-index:22;width:100%;height:100%;object-fit:cover;opacity:0;pointer-events:none;transition:opacity 3s ease-in-out;mix-blend-mode:screen}
+/* transition-duration is set inline per activation (5-8.5s, randomized) by
+   maybeTriggerSpiralOverlay - this is just a sane fallback. */
+#spiral-overlay{position:fixed;inset:0;z-index:22;width:100%;height:100%;object-fit:cover;opacity:0;pointer-events:none;transition:opacity 5s ease-in-out;mix-blend-mode:screen}
 #tier-reveal.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
 #tier-reveal.tier-small{color:#d6a3ff}
 #tier-reveal.tier-medium{color:#ffa94d}
