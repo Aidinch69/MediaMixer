@@ -164,6 +164,22 @@ def reward_video(db: Database, config: Config, path: Optional[str], reward: floa
     db.apply_video_reward(path, reward, config.decay_halflife_s, config.reward_ema_alpha, played=played)
 
 
+def bump_loop_anchor(db: Database, path: Optional[str], position: Optional[float]) -> Optional[dict]:
+    """Widen `path`'s hearted-position range to include `position`
+    (seconds into the clip) - feeds Custom Loop Point, which computes
+    the actual loop window client-side (it's the only side that knows
+    the clip's duration) from whatever range this has accumulated."""
+    if not path or position is None or position < 0:
+        return None
+    return db.bump_loop_anchor(path, position)
+
+
+def get_loop_anchor(db: Database, path: Optional[str]) -> Optional[dict]:
+    if not path:
+        return None
+    return db.get_loop_anchor(path)
+
+
 def heart_video(db: Database, path: Optional[str], amount: int = 1) -> Optional[dict]:
     """Register a heart (upvote) on `path`, separate from the EMA reward
     update - this tracks count/first/last timestamps for features that key

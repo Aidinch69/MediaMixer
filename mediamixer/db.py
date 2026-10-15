@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS video_weights (
     updated_at  REAL NOT NULL DEFAULT 0.0,
     heart_count    INTEGER NOT NULL DEFAULT 0,
     first_heart_at REAL,
-    last_heart_at  REAL
+    last_heart_at  REAL,
+    loop_anchor_min REAL,
+    loop_anchor_max REAL
 );
 CREATE INDEX IF NOT EXISTS idx_video_weights_folder ON video_weights(folder_name);
 CREATE TABLE IF NOT EXISTS audio_tracks (
@@ -60,6 +62,8 @@ class Database:
             ("heart_count", "ALTER TABLE video_weights ADD COLUMN heart_count INTEGER NOT NULL DEFAULT 0"),
             ("first_heart_at", "ALTER TABLE video_weights ADD COLUMN first_heart_at REAL"),
             ("last_heart_at", "ALTER TABLE video_weights ADD COLUMN last_heart_at REAL"),
+            ("loop_anchor_min", "ALTER TABLE video_weights ADD COLUMN loop_anchor_min REAL"),
+            ("loop_anchor_max", "ALTER TABLE video_weights ADD COLUMN loop_anchor_max REAL"),
         ):
             if column not in existing:
                 conn.execute(ddl)
@@ -167,6 +171,38 @@ class Database:
             (limit,),
         ).fetchall()
         return [r["video_path"] for r in rows]
+
+    # -- custom loop point --
+    def get_loop_anchor(self, path: str) -> Optional[dict]:
+        row = self._connect().execute(
+            "SELECT loop_anchor_min, loop_anchor_max FROM video_weights WHERE video_path=?", (path,)
+        ).fetchone()
+        if row is None or row["loop_anchor_min"] is None or row["loop_anchor_max"] is None:
+            return None
+        return {"min": row["loop_anchor_min"], "max": row["loop_anchor_max"]}
+
+    def bump_loop_anchor(self, path: str, position: float) -> Optional[dict]:
+        """Widen (never narrow) this video's hearted-position range to
+        include `position` - the raw playback-position counterpart to
+        bump_heart's wall-clock timestamps. loop_anchor_min only ever
+        decreases and loop_anchor_max only ever increases, so the window
+        Custom Loop Point reads from this can only grow toward covering
+        more of what's been hearted, never shrink away from a moment
+        once it's been included."""
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT loop_anchor_min, loop_anchor_max FROM video_weights WHERE video_path=?", (path,)
+        ).fetchone()
+        if row is None:
+            return None
+        new_min = position if row["loop_anchor_min"] is None else min(row["loop_anchor_min"], position)
+        new_max = position if row["loop_anchor_max"] is None else max(row["loop_anchor_max"], position)
+        conn.execute(
+            "UPDATE video_weights SET loop_anchor_min=?, loop_anchor_max=? WHERE video_path=?",
+            (new_min, new_max, path),
+        )
+        conn.commit()
+        return {"min": new_min, "max": new_max}
 
     def bump_heart(self, path: str, amount: int = 1) -> Optional[dict]:
         """Record a heart (upvote) on a video: bump its count and track the

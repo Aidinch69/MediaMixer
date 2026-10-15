@@ -35,6 +35,20 @@ def _relative_media_path(config, path: str) -> str:
     return os.path.relpath(path, config.media_dir).replace("\\", "/")
 
 
+def _absolute_media_path(config, relative_path: str) -> str:
+    """Inverse of _relative_media_path - rebuilds the same absolute string
+    sync_library originally stored as video_path (a literal TEXT primary
+    key, so this has to reconstruct it exactly, not just resolve to the
+    same file on disk). Joins segment-by-segment rather than passing the
+    slash-joined relative path straight to os.path.join, so a subfolder
+    video's rebuilt path uses the OS's own separator throughout instead of
+    a forward slash in the middle that wouldn't string-match what's
+    actually stored."""
+    if not relative_path:
+        return ""
+    return os.path.join(config.media_dir, *relative_path.split("/"))
+
+
 def _relative_audio_path(config, path) -> str:
     if not path:
         return ""
@@ -364,7 +378,26 @@ def create_app(ctx: AppContext) -> Flask:
         except (TypeError, ValueError):
             strength = 1
         heart = library.heart_video(db, path, amount=strength) if is_up else None
-        return jsonify(ok=True, heart=heart)
+        loop_anchor = None
+        if is_up:
+            try:
+                position = float(request.args.get("pos", ""))
+            except (TypeError, ValueError):
+                position = None
+            loop_anchor = library.bump_loop_anchor(db, path, position)
+        return jsonify(ok=True, heart=heart, loop_anchor=loop_anchor)
+
+    @app.route("/api/loop_anchor")
+    def api_loop_anchor():
+        # Called once per clip load (not on the hot /api/stream snapshot -
+        # most videos never have one, and this only needs to be known
+        # right as a tile's video actually loads, not on every 0.3s poll).
+        # The client only ever sees the relativized path (see
+        # _relative_media_path in build_status) - video_path in the DB is
+        # absolute, so this has to convert back before looking it up.
+        rel_path = request.args.get("path", "")
+        abs_path = _absolute_media_path(config, rel_path)
+        return jsonify(ok=True, loop_anchor=library.get_loop_anchor(db, abs_path))
 
     @app.route("/api/rate_audio")
     def api_rate_audio():

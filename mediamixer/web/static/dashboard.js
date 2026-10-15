@@ -313,6 +313,63 @@ let tileAmbientEls = [];
 let tileClaimEls = [];
 let lastFilterStr = [];
 
+// ---- Custom Loop Point ----
+// Normally a clip plays through and 'ended' hands rotation to the server
+// (see the tile's own 'ended' listener below). Once a video has a stored
+// hearted-position range (loop_anchor_min/max, widened server-side by
+// every heart's playback position - see rateScreen's &pos= param), it
+// instead loops within [anchor.min - lead-in, anchor.max + trail-in]
+// forever, clamped to the clip's real duration, with a minimum-duration
+// floor so a single heart near either edge can't collapse it to a
+// jarring few-second snippet. Directly answers two concerns raised while
+// designing this: anchoring only to the LAST heart would lose content
+// that's great *before* that point (hence lead-in, and the window only
+// ever widening, never relocating) - and never trimming the tail would
+// loop forever through a clip that degrades toward the end (hence
+// trail-in instead of always playing to the natural end).
+const LOOP_LEAD_IN_S = 3;
+const LOOP_TRAIL_IN_S = 4;
+const LOOP_MIN_DURATION_S = 15;
+const loopAnchorCache = {}; // video_path -> {min,max} | null (null = confirmed none)
+let tileLoopBounds = []; // per-tile index -> {start,end} | null
+
+function computeLoopBounds(anchor, duration) {
+  if (!anchor || !duration || !isFinite(duration)) return null;
+  let start = Math.max(0, anchor.min - LOOP_LEAD_IN_S);
+  let end = Math.min(duration, anchor.max + LOOP_TRAIL_IN_S);
+  if (end - start < LOOP_MIN_DURATION_S) {
+    const deficit = LOOP_MIN_DURATION_S - (end - start);
+    start = Math.max(0, start - deficit / 2);
+    end = Math.min(duration, end + deficit / 2);
+  }
+  return end > start ? { start, end } : null;
+}
+
+// Only acts if the tile is still actually showing the path this lookup
+// was for - by the time an async fetch resolves, fast rotation could
+// already have moved it on to something else.
+function applyLoopAnchorIfReady(i, path) {
+  if (currentPaths[i] !== path) return;
+  const vid = tileElements[i] && tileElements[i].querySelector('#screen-' + i);
+  if (!vid) return;
+  const anchor = loopAnchorCache[path];
+  tileLoopBounds[i] = (anchor && vid.duration) ? computeLoopBounds(anchor, vid.duration) : null;
+}
+
+function fetchLoopAnchorFor(i, path) {
+  if (Object.prototype.hasOwnProperty.call(loopAnchorCache, path)) {
+    applyLoopAnchorIfReady(i, path);
+    return;
+  }
+  fetch('/api/loop_anchor?path=' + encodeURIComponent(path))
+    .then((r) => r.json())
+    .then((data) => {
+      loopAnchorCache[path] = (data && data.loop_anchor) || null;
+      applyLoopAnchorIfReady(i, path);
+    })
+    .catch(() => { loopAnchorCache[path] = null; });
+}
+
 // ---- Mosaic Fit (experimental) ----
 // Instead of a uniform grid, size each tile by its clip's own aspect ratio -
 // pack tiles into justified rows (same idea as a Flickr/Google-Photos photo
@@ -2584,6 +2641,7 @@ function ensureTiles(count) {
   aspectRatios = new Array(count).fill(DEFAULT_ASPECT);
   tileSpeedBurstUntil = new Array(count).fill(0);
   aspectKnown = new Array(count).fill(false);
+  tileLoopBounds = new Array(count).fill(null);
   tileElements = [];
   tileGlowEls = [];
   tileAmbientEls = [];
@@ -2610,7 +2668,17 @@ function ensureTiles(count) {
       '</div></div>';
     const vid = tile.querySelector('#screen-' + i);
     vid.addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
-    vid.addEventListener('loadedmetadata', () => onAspectKnown(i));
+    vid.addEventListener('loadedmetadata', () => {
+      onAspectKnown(i);
+      applyLoopAnchorIfReady(i, currentPaths[i]); // duration is only known from here on
+    });
+    // Custom Loop Point's actual seek-back - a no-op whenever this tile
+    // has no loop bounds set (the normal case, for any clip that's never
+    // been hearted), so this doesn't change behavior for ordinary playback.
+    vid.addEventListener('timeupdate', () => {
+      const bounds = tileLoopBounds[i];
+      if (bounds && vid.currentTime >= bounds.end) vid.currentTime = bounds.start;
+    });
     // Hold-to-Heart: holding the heart button past a threshold fires one
     // amplified heart instead of waiting for a plain tap - a deliberate,
     // heavier gesture for "I really mean this one," distinct from a quick
@@ -2714,6 +2782,8 @@ function render(d) {
     if (!vid) return;
     if (s.path && s.path !== currentPaths[i]) {
       currentPaths[i] = s.path;
+      tileLoopBounds[i] = null; // the old tile's bounds don't apply to whatever's loading now
+      fetchLoopAnchorFor(i, s.path);
       // Tells the server how many tiles are active, so dense layouts
       // (4x4/5x5) get a cached low-res proxy instead of the full-size
       // source - matches PRELOAD_MAX_TILES: same grids that skip preload
@@ -2839,13 +2909,22 @@ function rateScreen(i, dir, btn, strength) {
     btn.classList.add('pop');
   }
   const strengthParam = dir === 'up' && strength > 1 ? '&strength=' + strength : '';
-  fetch('/api/rate?screen=' + i + '&dir=' + dir + strengthParam)
+  // Custom Loop Point needs WHERE in the clip this heart landed, not just
+  // that it happened - the server tracks it separately from the wall-clock
+  // first/last_heart_at timestamps above (see loop_anchor_min/max in db.py).
+  const vidEl = tileElements[i] && tileElements[i].querySelector('#screen-' + i);
+  const posParam = dir === 'up' && vidEl && isFinite(vidEl.currentTime) ? '&pos=' + vidEl.currentTime.toFixed(2) : '';
+  fetch('/api/rate?screen=' + i + '&dir=' + dir + strengthParam + posParam)
     .then((r) => r.json())
     .then((data) => {
       toast(dir === 'up' ? (strength > 1 ? '💞 Deep Heart!' : '❤️ Reinforced') : '👎 Penalized', dir !== 'up');
       if (data && data.heart && data.heart.heart_count >= 2) {
         showClaimRewardLabel(i, (strength > 1 ? '💞 Deep Heart x' : '💗 Heart Streak x') + data.heart.heart_count);
         pulseWarmGlow(i, data.heart.heart_count);
+      }
+      if (data && data.loop_anchor && vidEl) {
+        loopAnchorCache[currentPaths[i]] = data.loop_anchor;
+        applyLoopAnchorIfReady(i, currentPaths[i]);
       }
     })
     .catch(() => {});
