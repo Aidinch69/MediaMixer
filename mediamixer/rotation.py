@@ -214,6 +214,17 @@ class RotationEngine:
         if random.random() < barrage_probability:
             self._start_barrage(now)
 
+    def _pick_tier(self):
+        cfg = self._config
+        total = sum(t.weight for t in cfg.jackpot_tiers)
+        roll = random.uniform(0, total)
+        upto = 0.0
+        for tier in cfg.jackpot_tiers:
+            upto += tier.weight
+            if roll <= upto:
+                return tier
+        return cfg.jackpot_tiers[-1]
+
     def _start_barrage(self, now: float):
         cfg = self._config
         with self._rotate_lock:
@@ -222,16 +233,22 @@ class RotationEngine:
             if not target:
                 return
 
-            count = min(random.randint(*cfg.barrage_tile_count), len(current_paths))
+            tier = self._pick_tier()
+            count = min(random.randint(*tier.tile_count), len(current_paths))
             if count <= 0:
                 return
             indexes = random.sample(range(len(current_paths)), count)
-            jackpot_index = random.choice(indexes)
+            # Bigger tiers don't just look bigger - more of the screens
+            # they touch land a genuine top-ranked favorite instead of a
+            # normal explore pick, so a mega jackpot is a different grid,
+            # not just a louder one.
+            jackpot_count = min(tier.jackpot_picks, count)
+            jackpot_indexes = set(random.sample(indexes, jackpot_count))
             in_use = {p for p in current_paths if p}
             lo, hi, _label = cfg.pace_presets[pace_idx]
 
             for index in indexes:
-                is_jackpot_pick = index == jackpot_index
+                is_jackpot_pick = index in jackpot_indexes
                 expires_in = cfg.jackpot_hold_seconds if is_jackpot_pick else random.randint(lo, hi)
                 preferred = next_paths[index] if index < len(next_paths) else None
                 picked = self._swap_screen(
@@ -242,8 +259,8 @@ class RotationEngine:
                     in_use.add(picked)
 
             self._state.finish_rotation(folder=target, played=played)
-            ticks = random.randint(*cfg.barrage_hype_ticks)
-            self._state.start_barrage_hype(ticks, cfg.barrage_speed_range, indexes)
+            ticks = random.randint(*tier.hype_ticks)
+            self._state.start_barrage_hype(ticks, tier.speed_range, indexes, tier.name)
 
     def _tick_tension(self, now: float):
         cfg = self._config

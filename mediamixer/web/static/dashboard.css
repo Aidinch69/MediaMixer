@@ -46,6 +46,12 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 @keyframes bonus-pulse-opacity{0%,100%{opacity:.45}50%{opacity:.9}}
 .tile-ambient-fx.due-aura{opacity:1;background:radial-gradient(circle,rgba(120,120,255,.6),rgba(120,120,255,0) 70%);animation:due-pulse-opacity 3s ease-in-out infinite}
 @keyframes due-pulse-opacity{0%,100%{opacity:.3}50%{opacity:.7}}
+/* Mega-tier only: dims everything except the screens that are really
+   changing, via a plain opacity overlay (never filter/brightness on the
+   tile or video itself - same reasoning as every other glow effect in
+   this file: opacity-only stays compositor-only and never forces a
+   repaint of the video underneath). */
+.tile-dimmed::after{content:'';position:absolute;inset:0;background:#000;opacity:.5;pointer-events:none;z-index:1;transition:opacity .3s ease}
 .tile.mystery-tile video{filter:blur(14px)}
 .tile.mystery-reveal video{transition:filter .3s ease}
 .mystery-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:2.4rem;font-weight:bold;color:#fff;text-shadow:0 0 12px #000;pointer-events:none;z-index:2}

@@ -24,6 +24,15 @@ class LayoutPreset(NamedTuple):
     label: str
 
 
+class JackpotTier(NamedTuple):
+    name: str
+    weight: int  # relative weight, picked out of the sum of all tiers' weights
+    tile_count: Tuple[int, int]  # how many screens swap when this tier lands
+    jackpot_picks: int  # how many of those screens get a top-ranked ("favorite") pick instead of a normal explore pick - capped to tile_count
+    speed_range: Tuple[float, float]  # per-screen randomized hype speed-up target
+    hype_ticks: Tuple[int, int]  # 0.5s ticks the hype window runs before the reveal
+
+
 def _env_path(name: str, default: str) -> str:
     return os.path.abspath(os.environ.get(name, default))
 
@@ -88,9 +97,24 @@ class Config:
     # see RotationEngine._start_barrage/_tick_barrage.
     barrage_probability: float = 0.05
     barrage_check_every_ticks: int = 6  # how often (in 0.5s ticks) to roll for a new barrage - every ~3s
-    barrage_tile_count: Tuple[int, int] = (2, 4)  # screens that get a fresh clip when a barrage fires
-    barrage_hype_ticks: Tuple[int, int] = (6, 12)  # 0.5s ticks the speed-up window runs before the reveal (3-6s)
-    barrage_speed_range: Tuple[float, float] = (1.08, 1.35)  # per-screen randomized speed-up target during that window
+
+    # Each barrage rolls one of these tiers, weighted - the tier isn't just
+    # a bigger flash on the same effect, it changes what actually happens:
+    # how many screens change, how many of those land a top-ranked
+    # "favorite" pick (library.pick_video_jackpot) instead of a normal
+    # explore pick, how hard playback speeds up, and how long the build-up
+    # runs. The client mirrors this tier name for the matching visual/audio
+    # celebration (see dashboard.js's JACKPOT_TIERS) so what you see always
+    # matches what actually happened, instead of an independent random
+    # guess at the same time.
+    jackpot_tiers: Tuple[JackpotTier, ...] = (
+        JackpotTier("small", weight=65, tile_count=(1, 2), jackpot_picks=1,
+                    speed_range=(1.05, 1.15), hype_ticks=(4, 6)),
+        JackpotTier("medium", weight=28, tile_count=(2, 3), jackpot_picks=2,
+                    speed_range=(1.12, 1.28), hype_ticks=(6, 9)),
+        JackpotTier("mega", weight=7, tile_count=(3, 4), jackpot_picks=4,
+                    speed_range=(1.22, 1.45), hype_ticks=(10, 14)),
+    )
     jackpot_probability: float = 0.12
     jackpot_hold_seconds: float = 60.0
 

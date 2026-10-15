@@ -71,6 +71,7 @@ class RuntimeState:
         self.barrage_count = 0
         self.barrage_hype_total = 0
         self.barrage_tile_indexes: List[int] = []
+        self.barrage_tier_name = ""
 
         self.want_skip = False
         self.want_lock = False
@@ -96,6 +97,7 @@ class RuntimeState:
             self.barrage_count = 0
             self.barrage_hype_total = 0
             self.barrage_tile_indexes = []
+            self.barrage_tier_name = ""
         return preset
 
     # -- binaural synth parameters (the tone itself is generated client-side via Web Audio) --
@@ -197,11 +199,12 @@ class RuntimeState:
         with self._lock:
             return self.barrage_count > 0
 
-    def start_barrage_hype(self, ticks: int, speed_range, tile_indexes: List[int]):
+    def start_barrage_hype(self, ticks: int, speed_range, tile_indexes: List[int], tier_name: str):
         with self._lock:
             self.barrage_count = ticks
             self.barrage_hype_total = ticks
             self.barrage_tile_indexes = list(tile_indexes)
+            self.barrage_tier_name = tier_name
             for screen in self.screens:
                 screen.hype_speed_target = random.uniform(*speed_range)
 
@@ -266,6 +269,7 @@ class RuntimeState:
                 "jackpot": self.is_jackpot,
                 "barrage": self.barrage_count,
                 "barrage_tiles": list(self.barrage_tile_indexes),
+                "barrage_tier": self.barrage_tier_name,
                 "pace_idx": self.pace_idx,
                 "tone_index": self.tone_index,
                 "binaural_knob": self.binaural_knob,

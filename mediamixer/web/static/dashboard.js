@@ -799,7 +799,7 @@ function pickRandomTiles() {
   return indices;
 }
 
-function runAnticipationBuildUp(durationS, isReal, weightedTiles) {
+function runAnticipationBuildUp(durationS, isReal, weightedTiles, tierName) {
   if (!anticipationFxEnabled) return;
   anticipationActive = true;
   const runId = ++anticipationRunId;
@@ -818,6 +818,15 @@ function runAnticipationBuildUp(durationS, isReal, weightedTiles) {
   // change); fake near-misses have no such list, so pick 1-2 at random
   // purely for the "something's choosing" feeling - nothing behind it.
   if (!weightedTiles) weightedTiles = pickRandomTiles();
+  // Mega is a genuinely different moment, not just a louder one: the rest
+  // of the grid dims slightly so attention actually goes to the screens
+  // that are really about to change. A plain opacity overlay (see
+  // .tile-dimmed), never filter/brightness on the video itself.
+  if (isReal && tierName === 'mega' && weightedTiles.length) {
+    tileElements.forEach((tile, idx) => {
+      if (tile && !weightedTiles.includes(idx)) tile.classList.add('tile-dimmed');
+    });
+  }
 
   function tick() {
     if (runId !== anticipationRunId) return;
@@ -857,6 +866,7 @@ function runAnticipationBuildUp(durationS, isReal, weightedTiles) {
 
 function clearTileGlow() {
   tileGlowEls.forEach(el => { if (el) el.style.opacity = '0'; });
+  tileElements.forEach(tile => { if (tile) tile.classList.remove('tile-dimmed'); });
 }
 
 function fizzleAnticipation(runId) {
@@ -1196,6 +1206,19 @@ function pickJackpotTier() {
   return JACKPOT_TIERS[0];
 }
 
+// Prefers the tier the server actually used for the content that just
+// changed (set by handleAnticipationStatus); only falls back to an
+// independent random pick for a "surprise" jackpot that had no build-up
+// at all, where there's no server tier to match in the first place.
+function resolveTier() {
+  if (pendingServerTier) {
+    const found = JACKPOT_TIERS.find(t => t.name === pendingServerTier);
+    pendingServerTier = null;
+    if (found) return found;
+  }
+  return pickJackpotTier();
+}
+
 function registerJackpotStreak() {
   const now = Date.now();
   if (now - lastJackpotAt > STREAK_RESET_MS) jackpotStreak = 0;
@@ -1289,7 +1312,7 @@ function runPayoff(chainDepth) {
   // so a jackpot landing inside the streak-reset warning window reads as a "save".
   const wasAtRisk = jackpotStreak > 1 && (Date.now() - lastJackpotAt) >= (STREAK_RESET_MS - STREAK_WARNING_S * 1000);
   const milestoneCount = registerMilestone();
-  const tier = milestoneCount ? MILESTONE_TIER : pickJackpotTier();
+  const tier = milestoneCount ? MILESTONE_TIER : resolveTier();
   const streak = registerJackpotStreak();
   lastAnyPayoffAt = Date.now();
   awardXp((XP_PER_TIER[tier.name] || 10) * (milestoneCount ? 3 : 1));
@@ -1377,6 +1400,14 @@ function pushLuck() {
   }
 }
 
+// Set when a real (server-driven) build-up starts, read once by runPayoff
+// when the reveal fires - so the visual tier always matches the tier the
+// server actually used to decide tile_count/jackpot_picks/speed, instead
+// of an independent random guess made at the same time. Cleared after
+// use so a chain re-trigger (or a later "surprise" jackpot with no
+// build-up at all) falls back to its own random tier as before.
+let pendingServerTier = null;
+
 function handleAnticipationStatus(d) {
   if (anticipationFxEnabled) {
     // d.barrage is now ticks remaining in the server's hype window (0.5s
@@ -1387,7 +1418,8 @@ function handleAnticipationStatus(d) {
     // tiles that are really about to change instead of a disconnected
     // random guess.
     if (d.barrage > 0 && !anticipationActive) {
-      runAnticipationBuildUp(Math.max(1.5, d.barrage * 0.5), true, d.barrage_tiles || []);
+      pendingServerTier = d.barrage_tier || null;
+      runAnticipationBuildUp(Math.max(1.5, d.barrage * 0.5), true, d.barrage_tiles || [], pendingServerTier);
     }
     if (d.jackpot && !lastKnownJackpot) {
       runPayoff();
