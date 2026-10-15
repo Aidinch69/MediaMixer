@@ -22,6 +22,10 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .theater.afterglow::before{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,rgba(var(--theme-after,255,190,100),0) 60%,rgba(var(--theme-after,255,190,100),.22) 100%);animation:afterglow-anim var(--afterglow-duration,12s) ease-out forwards}
 @keyframes afterglow-anim{0%{opacity:1}100%{opacity:0}}
 #tier-reveal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.8);z-index:20;font-weight:bold;font-size:2.4rem;letter-spacing:2px;text-transform:uppercase;text-shadow:0 0 20px currentColor;pointer-events:none;opacity:0;transition:opacity .15s,transform .15s;color:#ffd43b}
+/* Full-screen spiral layer: sits above every tile, floater and FX
+   overlay (fx-layer is z15, tier-reveal z20) but below the settings
+   panel (z25) and toast (z40) so those stay usable while it's up. */
+#spiral-overlay{position:fixed;inset:0;z-index:22;width:100%;height:100%;object-fit:cover;opacity:0;pointer-events:none;transition:opacity 3s ease-in-out;mix-blend-mode:screen}
 #tier-reveal.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
 #tier-reveal.tier-small{color:#d6a3ff}
 #tier-reveal.tier-medium{color:#ffa94d}
@@ -62,13 +66,41 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .tap-badge{display:none;background:rgba(10,5,0,.75);color:#ffd43b;font-weight:bold;font-size:.85rem;padding:6px 14px;border-radius:20px;border:1px solid rgba(255,212,59,.7);letter-spacing:.5px;animation:tap-badge-bounce 1s ease-in-out infinite}
 .tile-ambient-fx.bonus-window .tap-badge{display:inline-block}
 @keyframes tap-badge-bounce{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+/* Chase flash: a fast hopping catch-me glow, distinct cyan from the
+   bonus window's gold so the two read as different games at a glance. */
+.tile-ambient-fx.chase-flash{opacity:1;border:4px solid rgba(77,212,255,.95);border-radius:inherit;box-sizing:border-box;animation:chase-pulse-opacity .4s ease-in-out infinite;pointer-events:auto;cursor:pointer}
+.chase-badge{display:none;background:rgba(0,10,20,.75);color:#4dd4ff;font-weight:bold;font-size:.85rem;padding:6px 14px;border-radius:20px;border:1px solid rgba(77,212,255,.7);letter-spacing:.5px;animation:tap-badge-bounce .5s ease-in-out infinite}
+.tile-ambient-fx.chase-flash .chase-badge{display:inline-block}
+@keyframes chase-pulse-opacity{0%,100%{opacity:.55}50%{opacity:1}}
 /* The actual hit, right as a bonus tile is tapped - a bright pop that
-   fades out over ~0.4s instead of the glow just vanishing the instant
-   it's claimed. */
-.tile-ambient-fx.bonus-claimed{opacity:1;border:5px solid rgba(255,255,255,.95);border-radius:inherit;box-sizing:border-box;animation:bonus-claim-flash .4s ease-out forwards}
-@keyframes bonus-claim-flash{0%{opacity:1;transform:scale(1)}35%{opacity:1;transform:scale(1.04)}100%{opacity:0;transform:scale(1.08)}}
-.tile-ambient-fx.due-aura{opacity:1;background:radial-gradient(circle,rgba(120,120,255,.6),rgba(120,120,255,0) 70%);animation:due-pulse-opacity 3s ease-in-out infinite}
+   cycles through a full rainbow over a genuine ~2s instead of vanishing
+   almost as fast as it appeared. A real couple seconds of "that felt
+   good," paired with a brief speed burst on the tile itself
+   (burstTileSpeed) for some kinetic payoff alongside the glow. */
+.tile-ambient-fx.bonus-claimed{opacity:1;border:5px solid rgba(255,255,255,.95);border-radius:inherit;box-sizing:border-box;animation:bonus-claim-flash 2s ease-out forwards}
+@keyframes bonus-claim-flash{
+  0%{opacity:1;border-color:rgba(255,255,255,.95);transform:scale(1.06)}
+  10%{opacity:1;border-color:rgba(255,212,59,1);transform:scale(1)}
+  28%{opacity:1;border-color:rgba(255,100,150,.95)}
+  46%{opacity:.9;border-color:rgba(170,110,255,.9)}
+  64%{opacity:.75;border-color:rgba(100,190,255,.85)}
+  82%{opacity:.5;border-color:rgba(110,255,170,.7)}
+  100%{opacity:0;border-color:rgba(110,255,170,.5);transform:scale(1)}
+}
+.tile-ambient-fx.due-aura{opacity:1;border-radius:inherit;animation:due-pulse-opacity 3s ease-in-out infinite,due-aura-color-cycle 9s linear infinite}
 @keyframes due-pulse-opacity{0%,100%{opacity:.3}50%{opacity:.7}}
+/* Cycles through several hues instead of sitting on one fixed purple/blue -
+   a tile that's been waiting a while reads as "something's happening here"
+   rather than always the same static tint. */
+@keyframes due-aura-color-cycle{
+  0%{background:radial-gradient(circle,rgba(120,120,255,.6),rgba(120,120,255,0) 70%)}
+  16.6%{background:radial-gradient(circle,rgba(185,110,255,.6),rgba(185,110,255,0) 70%)}
+  33.3%{background:radial-gradient(circle,rgba(255,110,190,.6),rgba(255,110,190,0) 70%)}
+  50%{background:radial-gradient(circle,rgba(255,180,90,.6),rgba(255,180,90,0) 70%)}
+  66.6%{background:radial-gradient(circle,rgba(90,220,180,.6),rgba(90,220,180,0) 70%)}
+  83.3%{background:radial-gradient(circle,rgba(90,160,255,.6),rgba(90,160,255,0) 70%)}
+  100%{background:radial-gradient(circle,rgba(120,120,255,.6),rgba(120,120,255,0) 70%)}
+}
 /* Mega-tier only: dims everything except the screens that are really
    changing, via a plain opacity overlay (never filter/brightness on the
    tile or video itself - same reasoning as every other glow effect in

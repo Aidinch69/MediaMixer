@@ -43,6 +43,7 @@ class Config:
     media_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_MEDIA_DIR", "./media_assets"))
     audio_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_AUDIO_DIR", "./Audios"))
     overlay_fx_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_OVERLAY_FX_DIR", "./overlay_fx"))
+    spirals_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_SPIRALS_DIR", "./Spirals"))
     proxy_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_PROXY_DIR", "./media_proxies"))
     db_path: str = field(default_factory=lambda: os.environ.get("MEDIAMIXER_DB_PATH", "system_memory.db"))
 
@@ -110,11 +111,11 @@ class Config:
     # guess at the same time.
     jackpot_tiers: Tuple[JackpotTier, ...] = (
         JackpotTier("small", weight=65, tile_count=(1, 2), jackpot_picks=1,
-                    speed_range=(1.08, 1.40), hype_ticks=(4, 6)),
+                    speed_range=(1.08, 1.54), hype_ticks=(4, 6)),
         JackpotTier("medium", weight=28, tile_count=(2, 3), jackpot_picks=2,
-                    speed_range=(1.18, 1.59), hype_ticks=(6, 9)),
+                    speed_range=(1.18, 1.75), hype_ticks=(6, 9)),
         JackpotTier("mega", weight=7, tile_count=(3, 4), jackpot_picks=4,
-                    speed_range=(1.35, 1.90), hype_ticks=(10, 14)),
+                    speed_range=(1.35, 2.09), hype_ticks=(10, 14)),
     )
     jackpot_probability: float = 0.12
     jackpot_hold_seconds: float = 60.0

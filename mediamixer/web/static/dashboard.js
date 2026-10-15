@@ -54,6 +54,7 @@ const DEFAULT_ASPECT = 16 / 9;
 let mosaicEnabled = false;
 let aspectRatios = [];
 let aspectKnown = [];
+let tileSpeedBurstUntil = [];
 let mosaicSettleTimer = null;
 
 function loadMosaicPref() {
@@ -976,9 +977,17 @@ function tickAnticipationMeter() {
 // slow pulsing aura - leans into the (not literally true) sense that a
 // quiet tile is "due," drawing the eye back to it.
 const DUE_AURA_THRESHOLD_MS = 45000;
+// Once a tile is picked, it holds that spot for at least this long before
+// another tile is allowed to take over - without this, recomputing "most
+// idle" fresh every single tick could hand the glow to a different tile
+// before you'd even gotten to the one it was just on, which read as
+// chasing a moving target around the screen rather than something you
+// could actually act on.
+const DUE_AURA_MIN_HOLD_MS = 15000;
 let tileLastRatedAt = {};
 
 let dueAuraTileIndex = -1;
+let dueAuraSetAt = 0;
 
 function tickDueAura() {
   // Only ever the single most-idle tile, not every tile past the threshold -
@@ -995,10 +1004,34 @@ function tickDueAura() {
       mostIdleTile = i;
     }
   });
+
+  if (dueAuraTileIndex >= 0 && mostIdleTile !== dueAuraTileIndex) {
+    const currentIdleMs = now - (tileLastRatedAt[dueAuraTileIndex] || sessionStartedAt);
+    const currentStillQualifies = currentIdleMs > DUE_AURA_THRESHOLD_MS;
+    if (currentStillQualifies && now - dueAuraSetAt < DUE_AURA_MIN_HOLD_MS) {
+      mostIdleTile = dueAuraTileIndex; // not time to hand it off yet
+    }
+  }
+
+  if (mostIdleTile !== dueAuraTileIndex) dueAuraSetAt = now;
   dueAuraTileIndex = mostIdleTile;
   tileAmbientEls.forEach((el, i) => {
     if (el) el.classList.toggle('due-aura', i === mostIdleTile);
   });
+}
+
+// Tapping a due-aura tile acknowledges it without forcing an actual
+// up/down rating - sometimes you just don't feel strongly either way,
+// and being nagged with no "leave me alone" option but a real rating
+// wasn't great. Resets its idle clock the same as a real rating would,
+// so it stops glowing, but sends nothing to the server.
+function dismissDueAura(idx) {
+  if (idx !== dueAuraTileIndex) return;
+  tileLastRatedAt[idx] = Date.now();
+  const el = tileAmbientEls[idx];
+  if (el) el.classList.remove('due-aura');
+  dueAuraTileIndex = -1;
+  toast('👁 Noted - won\'t ask about this one for a while');
 }
 
 // Plain-language readout of whatever's currently active, in priority
@@ -1011,9 +1044,16 @@ function updateStatusBar() {
   if (!bar) return;
   let text = null;
   if (anticipationActive) {
-    text = '🔥 Something\'s building...';
+    // pendingServerTier is known as soon as a real (server-driven) build-up
+    // starts - read without consuming it (only resolveTier() clears it) so
+    // this can say what's actually coming instead of staying vague. Fake
+    // near-misses have no server tier at all, so they stay vague on
+    // purpose - revealing "this one's fake" would spoil the point of them.
+    text = pendingServerTier ? ('🔥 Building... (' + pendingServerTier + ' incoming)') : '🔥 Something\'s building...';
   } else if (bonusWindowTileIndex >= 0) {
     text = '✨ Bonus tile glowing - tap it before it fades!';
+  } else if (chaseFlashTileIndex >= 0) {
+    text = '🏃 Chase it! Tap the flash before it hops' + (chaseChain > 0 ? ' (chain x' + chaseChain + ')' : '');
   } else if (mysteryTileIndex >= 0) {
     text = '🔮 Mystery tile - just a curiosity, nothing behind it';
   } else if (isSurgeActive()) {
@@ -1021,7 +1061,7 @@ function updateStatusBar() {
   } else if (isGoldenHourActive()) {
     text = '✨ Golden Hour - better odds while it lasts';
   } else if (dueAuraTileIndex >= 0) {
-    text = '💤 A tile hasn\'t been rated in a while - give it a 👍 or 👎';
+    text = '💤 A tile hasn\'t been rated in a while - 👍/👎 it, or tap its glow to dismiss';
   }
   if (text) {
     bar.innerText = text;
@@ -1386,6 +1426,7 @@ function applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk, chainDepth,
   if (tier.shake) {
     theater.classList.add('shake-mega');
     setTimeout(() => theater.classList.remove('shake-mega'), 450);
+    maybeTriggerSpiralOverlay(); // mega+/milestone only - the same "big" threshold shake already uses
   }
   setTimeout(() => { theater.classList.remove('payoff-flash'); if (theaterGlow) theaterGlow.style.transition = ''; }, 650);
 
@@ -1810,6 +1851,7 @@ function ensureTiles(count) {
   currentTileCount = count;
   currentPaths = new Array(count).fill('');
   aspectRatios = new Array(count).fill(DEFAULT_ASPECT);
+  tileSpeedBurstUntil = new Array(count).fill(0);
   aspectKnown = new Array(count).fill(false);
   tileElements = [];
   tileGlowEls = [];
@@ -1824,7 +1866,7 @@ function ensureTiles(count) {
       '<video id="screen-' + i + '" autoplay></video>' +
       '<video id="preload-' + i + '" class="preload" preload="auto" muted></video>' +
       '<div class="tile-glow-fx"></div>' +
-      '<div class="tile-ambient-fx"><span class="tap-badge">👆 TAP</span></div>' +
+      '<div class="tile-ambient-fx"><span class="tap-badge">👆 TAP</span><span class="chase-badge">⚡ CATCH</span></div>' +
       '<div class="tile-overlay">' +
       '<div class="src-label" id="label-' + i + '"></div>' +
       '<div class="tile-actions">' +
@@ -1835,7 +1877,11 @@ function ensureTiles(count) {
     vid.addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
     vid.addEventListener('loadedmetadata', () => onAspectKnown(i));
     const ambientEl = tile.querySelector('.tile-ambient-fx');
-    ambientEl.addEventListener('click', () => claimBonusTile(i));
+    ambientEl.addEventListener('click', () => {
+      if (i === bonusWindowTileIndex) claimBonusTile(i);
+      else if (i === chaseFlashTileIndex) catchChaseFlash(i);
+      else if (i === dueAuraTileIndex) dismissDueAura(i);
+    });
     tileElements.push(tile);
     tileGlowEls.push(tile.querySelector('.tile-glow-fx'));
     tileAmbientEls.push(ambientEl);
@@ -1926,7 +1972,12 @@ function render(d) {
       if (pre && pre.getAttribute('src') !== nextUrl) pre.src = nextUrl;
     }
 
-    vid.playbackRate = s.speed;
+    // A bonus-claim speed burst (see burstTileSpeed) temporarily owns this
+    // tile's rate - skip the server-driven sync for its duration instead
+    // of stomping it the very next poll (every ~0.3s).
+    if (!tileSpeedBurstUntil[i] || Date.now() >= tileSpeedBurstUntil[i]) {
+      vid.playbackRate = s.speed;
+    }
     const sat = Math.floor((s.tension - 1.0) * 60 + 100);
     const cont = Math.floor((s.tension - 1.0) * 40 + 100);
     const filterStr = `saturate(${sat}%) contrast(${cont}%)`;
@@ -2051,17 +2102,163 @@ function clearBonusWindow(idx) {
 // listener wired in ensureTiles), not only via the thumbs-up button -
 // "tap the machine" instead of "find the right button while something's
 // flashing."
+const BONUS_CLAIM_CELEBRATION_MS = 2000;
+
 function claimBonusTile(idx) {
   if (idx !== bonusWindowTileIndex || Date.now() >= bonusWindowExpireAt) return;
   const el = tileAmbientEls[idx];
   clearBonusWindow(idx);
-  // A quick bright flash/pop on the actual hit, instead of the tile just
-  // vanishing the instant it's tapped - the claim itself gets to register.
+  // A ~2s rainbow pulse on the actual hit, instead of a quick white flash
+  // that vanished almost as fast as it appeared - the claim itself gets
+  // a real couple seconds to register and feel good, not just a blip.
   if (el) {
     el.classList.add('bonus-claimed');
-    setTimeout(() => el.classList.remove('bonus-claimed'), 400);
+    setTimeout(() => el.classList.remove('bonus-claimed'), BONUS_CLAIM_CELEBRATION_MS);
   }
+  burstTileSpeed(idx, BONUS_CLAIM_CELEBRATION_MS);
   triggerMiniPayoff();
+}
+
+// Random speed-up on the claimed tile, synced with the claim's visual
+// celebration - a little extra kinetic payoff for the hit itself, not
+// just a border glow. See the tileSpeedBurstUntil guard in render() -
+// without it, the next status poll (every ~0.3s) would immediately
+// overwrite this with the server-driven speed again.
+function burstTileSpeed(idx, durationMs) {
+  const vid = tileElements[idx] && tileElements[idx].querySelector('#screen-' + idx);
+  if (!vid) return;
+  vid.playbackRate = 1.25 + Math.random() * 0.75; // 1.25x - 2.0x
+  tileSpeedBurstUntil[idx] = Date.now() + durationMs;
+}
+
+// ---- Chase flash ----
+// A fast, hopping glow you have to actually chase around the grid - tap
+// it before it moves on and it immediately jumps to a new random tile
+// with a growing chain count and a shrinking window, instead of sitting
+// still like the bonus window above. Miss it (let it expire) and the
+// chain resets to zero. Distinct from the bonus window (single slow
+// static glow) and the due-aura (idle-driven, no time pressure) - this
+// one is pure reflexes/chase, asked for as "another way to interact...
+// makes them want to chase something."
+const CHASE_CHECK_MS = 20000;
+const CHASE_PROBABILITY = 0.22;
+const CHASE_FLASH_START_MS = 1800;
+const CHASE_FLASH_MIN_MS = 900;
+const CHASE_HOP_DELAY_MS = 450;
+let chaseFlashTileIndex = -1;
+let chaseFlashExpireAt = 0;
+let chaseFlashTimer = null;
+let chaseChain = 0;
+
+function maybeTriggerChase() {
+  if (!anticipationFxEnabled) return;
+  if (chaseFlashTileIndex >= 0 || !tileElements.length) return;
+  if (Math.random() < CHASE_PROBABILITY * oddsMultiplier()) {
+    activateChaseFlash(pickChaseTarget());
+  }
+}
+
+// Avoids landing on a tile that's already doing something else (bonus
+// window / due-aura) so the shared ambient element and its click handler
+// never has to guess which mechanic a tap was meant for.
+function pickChaseTarget(exclude) {
+  const n = tileElements.length;
+  if (n <= 1) return 0;
+  let idx;
+  do {
+    idx = Math.floor(Math.random() * n);
+  } while (n > 1 && (idx === exclude || idx === bonusWindowTileIndex || idx === dueAuraTileIndex));
+  return idx;
+}
+
+function chaseFlashDurationForChain() {
+  return Math.max(CHASE_FLASH_MIN_MS, CHASE_FLASH_START_MS - chaseChain * 120);
+}
+
+function activateChaseFlash(idx) {
+  chaseFlashTileIndex = idx;
+  const durationMs = chaseFlashDurationForChain();
+  chaseFlashExpireAt = Date.now() + durationMs;
+  const el = tileAmbientEls[idx];
+  if (el) el.classList.add('chase-flash');
+  clearTimeout(chaseFlashTimer);
+  chaseFlashTimer = setTimeout(() => missChaseFlash(idx), durationMs);
+}
+
+function clearChaseFlashVisual(idx) {
+  const el = tileAmbientEls[idx];
+  if (el) el.classList.remove('chase-flash');
+  clearTimeout(chaseFlashTimer);
+}
+
+function missChaseFlash(idx) {
+  if (idx !== chaseFlashTileIndex) return;
+  clearChaseFlashVisual(idx);
+  chaseFlashTileIndex = -1;
+  if (chaseChain > 0) toast('💨 Chain broken (was x' + chaseChain + ')', true);
+  chaseChain = 0;
+}
+
+// Tapping the flash directly (same "tap the machine" pattern as the
+// bonus window) catches it, grows the chain, and hops it to a fresh
+// tile after a short beat instead of just ending the round.
+function catchChaseFlash(idx) {
+  if (idx !== chaseFlashTileIndex || Date.now() >= chaseFlashExpireAt) return;
+  clearChaseFlashVisual(idx);
+  chaseFlashTileIndex = -1;
+  chaseChain++;
+  playChimeSound(0.5 + Math.min(chaseChain, 5) * 0.08);
+  awardXp(5 + chaseChain * 2);
+  incrementQuestMetric('bonuses', 1);
+  toast('🏃 Caught! Chain x' + chaseChain);
+  setTimeout(() => {
+    if (!tileElements.length) { chaseChain = 0; return; }
+    activateChaseFlash(pickChaseTarget(idx));
+  }, CHASE_HOP_DELAY_MS);
+}
+
+// ---- Spiral overlay ----
+// A single full-screen spiral video, layered above every tile/floater/FX,
+// that fades in to a low opacity during a real mega+/milestone jackpot
+// moment, holds for a while, then fades back out - sourced from whatever
+// video files sit in the Spirals/ folder. Lazy-fetched once and cached,
+// same pattern as fetchFxList above.
+let spiralList = null;
+let spiralListPromise = null;
+let spiralActive = false;
+const SPIRAL_HOLD_MIN_MS = 7000;
+const SPIRAL_HOLD_MAX_MS = 6000;
+const SPIRAL_FADE_MS = 3000; // matches #spiral-overlay's CSS opacity transition
+
+function fetchSpiralList() {
+  if (spiralList) return Promise.resolve(spiralList);
+  if (spiralListPromise) return spiralListPromise;
+  spiralListPromise = fetch('/api/spirals/list')
+    .then(r => r.json())
+    .then(d => { spiralList = d.items || []; return spiralList; })
+    .catch(() => { spiralList = []; return spiralList; });
+  return spiralListPromise;
+}
+
+function maybeTriggerSpiralOverlay() {
+  if (!anticipationFxEnabled || spiralActive) return;
+  fetchSpiralList().then(items => {
+    if (!items.length || spiralActive) return;
+    const el = document.getElementById('spiral-overlay');
+    if (!el) return;
+    const pick = items[Math.floor(Math.random() * items.length)];
+    spiralActive = true;
+    el.src = pick.base + pick.path;
+    el.currentTime = 0;
+    el.play().catch(() => {});
+    const targetOpacity = (0.15 + Math.random() * 0.35).toFixed(2); // 15% - 50%
+    requestAnimationFrame(() => { el.style.opacity = targetOpacity; });
+    const holdMs = SPIRAL_HOLD_MIN_MS + Math.random() * SPIRAL_HOLD_MAX_MS;
+    setTimeout(() => {
+      el.style.opacity = '0';
+      setTimeout(() => { el.pause(); spiralActive = false; }, SPIRAL_FADE_MS);
+    }, holdMs);
+  });
 }
 
 // Mystery tile: a pure curiosity-gap hit, distinct from the loss-aversion
@@ -2219,6 +2416,7 @@ window.addEventListener('resize', () => { if (mosaicEnabled) layoutMosaic(); });
 setInterval(() => { if (mosaicEnabled) layoutMosaic(); }, MOSAIC_REFLOW_INTERVAL_MS);
 setInterval(maybeTriggerFakeNearMiss, FAKE_NEAR_MISS_CHECK_MS);
 setInterval(maybeTriggerBonusWindow, BONUS_WINDOW_CHECK_MS);
+setInterval(maybeTriggerChase, CHASE_CHECK_MS);
 setInterval(tickSessionTimer, 1000);
 setInterval(tickStreakWarning, 1000);
 setInterval(tickGoldenHour, 5000);

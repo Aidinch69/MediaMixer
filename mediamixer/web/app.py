@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 _HERE = os.path.dirname(__file__)
 STREAM_INTERVAL_S = 0.3
-_NO_SESSION_PREFIXES = ("/media/", "/audio/", "/overlay_fx/", "/assets/", "/sw.js")
+_NO_SESSION_PREFIXES = ("/media/", "/audio/", "/overlay_fx/", "/spirals/", "/assets/", "/sw.js")
 
 
 def _relative_media_path(config, path: str) -> str:
@@ -71,6 +71,18 @@ def _scan_overlay_fx_dir(config) -> list:
             items.append({"path": name, "kind": "video"})
         elif lower.endswith(config.overlay_fx_image_exts):
             items.append({"path": name, "kind": "image"})
+    return items
+
+
+def _scan_spirals_dir(config) -> list:
+    """Flat listing of the Spirals folder: video files only, for the
+    full-screen spiral overlay layer."""
+    os.makedirs(config.spirals_dir, exist_ok=True)
+    items = []
+    for name in sorted(os.listdir(config.spirals_dir)):
+        full = os.path.join(config.spirals_dir, name)
+        if os.path.isfile(full) and name.lower().endswith(config.video_exts):
+            items.append(name)
     return items
 
 
@@ -194,6 +206,10 @@ def create_app(ctx: AppContext) -> Flask:
     def overlay_fx_file(filename):
         return send_from_directory(config.overlay_fx_dir, filename, max_age=86400)
 
+    @app.route("/spirals/<path:filename>")
+    def spirals_file(filename):
+        return send_from_directory(config.spirals_dir, filename, max_age=86400)
+
     @app.route("/api/folders")
     def api_folders():
         # dashboard.html gets category names baked into the server-rendered
@@ -212,6 +228,10 @@ def create_app(ctx: AppContext) -> Flask:
                 for it in _scan_overlay_fx_dir(config)
             ]
         return jsonify(items=items)
+
+    @app.route("/api/spirals/list")
+    def api_spirals_list():
+        return jsonify(items=[{"path": name, "base": "/spirals/"} for name in _scan_spirals_dir(config)])
 
     @app.route("/sw.js")
     def service_worker():

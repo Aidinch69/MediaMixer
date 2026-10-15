@@ -19,6 +19,7 @@ media_assets/
 Audios/
 overlay_fx/
 media_proxies/
+Spirals/
 
 # native-viewer binary dependency (122MB DLL, not source - see mediamixer/native/README or setup notes)
 native_deps/
