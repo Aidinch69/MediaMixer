@@ -1733,9 +1733,11 @@ function ensureTiles(count) {
     const vid = tile.querySelector('#screen-' + i);
     vid.addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
     vid.addEventListener('loadedmetadata', () => onAspectKnown(i));
+    const ambientEl = tile.querySelector('.tile-ambient-fx');
+    ambientEl.addEventListener('click', () => claimBonusTile(i));
     tileElements.push(tile);
     tileGlowEls.push(tile.querySelector('.tile-glow-fx'));
-    tileAmbientEls.push(tile.querySelector('.tile-ambient-fx'));
+    tileAmbientEls.push(ambientEl);
   }
   return true;
 }
@@ -1861,15 +1863,32 @@ function pace(v, quiet) {
 }
 function vec(k, v) { fetch('/api/vector?key=' + k + '&val=' + v); }
 function rateScreen(i, dir) {
-  if (dir === 'up' && i === bonusWindowTileIndex && Date.now() < bonusWindowExpireAt) {
-    clearBonusWindow(i);
-    triggerMiniPayoff();
-  }
+  if (dir === 'up') claimBonusTile(i);
   const mult = registerCombo();
   awardXp(Math.round(RATE_XP_BASE * mult));
   incrementQuestMetric('rates', 1);
   tileLastRatedAt[i] = Date.now();
+  if (dir === 'up') pulseTileGlow(i, mult);
   fetch('/api/rate?screen=' + i + '&dir=' + dir).then(() => toast(dir === 'up' ? '👍 Reinforced' : '👎 Penalized', dir !== 'up'));
+}
+
+// A quick border-glow flash on the tile that was just rated, scaling
+// with the current combo multiplier - ties the interaction itself
+// directly to the same "lit boundary" visual language the jackpot/
+// barrage system uses, instead of feedback living only in the XP
+// counter. Opacity only, same compositor-only technique as the rest of
+// the glow system.
+function pulseTileGlow(idx, multiplier) {
+  const el = tileGlowEls[idx];
+  if (!el) return;
+  el.style.transition = 'opacity .12s ease-out';
+  el.style.opacity = Math.min(1, 0.3 + (multiplier - 1) * 0.3).toFixed(2);
+  const holdMs = 100 + (multiplier - 1) * 60;
+  setTimeout(() => {
+    el.style.transition = 'opacity .4s ease-out';
+    el.style.opacity = '0';
+    setTimeout(() => { el.style.transition = ''; }, 400);
+  }, holdMs);
 }
 
 // ---- Interactive bonus window ----
@@ -1888,13 +1907,19 @@ function maybeTriggerBonusWindow() {
   if (!anticipationFxEnabled) return;
   if (bonusWindowTileIndex >= 0 || !tileElements.length) return;
   if (Math.random() < BONUS_WINDOW_PROBABILITY * oddsMultiplier()) {
-    const idx = Math.floor(Math.random() * tileElements.length);
-    bonusWindowTileIndex = idx;
-    bonusWindowExpireAt = Date.now() + BONUS_WINDOW_DURATION_MS;
-    const el = tileAmbientEls[idx];
-    if (el) el.classList.add('bonus-window');
-    bonusWindowTimer = setTimeout(() => clearBonusWindow(idx), BONUS_WINDOW_DURATION_MS);
+    activateBonusWindow(Math.floor(Math.random() * tileElements.length));
   }
+}
+
+// Shared by the passive random roll above and the manual Spin action -
+// either way, a bonus tile works the same once it's lit.
+function activateBonusWindow(idx) {
+  bonusWindowTileIndex = idx;
+  bonusWindowExpireAt = Date.now() + BONUS_WINDOW_DURATION_MS;
+  const el = tileAmbientEls[idx];
+  if (el) el.classList.add('bonus-window');
+  clearTimeout(bonusWindowTimer);
+  bonusWindowTimer = setTimeout(() => clearBonusWindow(idx), BONUS_WINDOW_DURATION_MS);
 }
 
 function clearBonusWindow(idx) {
@@ -1902,6 +1927,16 @@ function clearBonusWindow(idx) {
   if (el) el.classList.remove('bonus-window');
   if (bonusWindowTileIndex === idx) bonusWindowTileIndex = -1;
   clearTimeout(bonusWindowTimer);
+}
+
+// Claiming works by tapping the glowing tile directly (see the click
+// listener wired in ensureTiles), not only via the thumbs-up button -
+// "tap the machine" instead of "find the right button while something's
+// flashing."
+function claimBonusTile(idx) {
+  if (idx !== bonusWindowTileIndex || Date.now() >= bonusWindowExpireAt) return;
+  clearBonusWindow(idx);
+  triggerMiniPayoff();
 }
 
 // Mystery tile: a pure curiosity-gap hit, distinct from the loss-aversion
@@ -1948,6 +1983,61 @@ function triggerMiniPayoff() {
 }
 function rateAudio(d) { fetch('/api/rate_audio?dir=' + d).then(() => toast(d === 'up' ? '🔊 Audio rated up' : '🔇 Audio penalized', d !== 'up')); }
 function nextAudio() { fetch('/api/next_audio').then(() => toast('⏭️ Audio Skipped')); }
+
+// ---- Manual Spin: a casino "pull the lever" action always on screen,
+// independent of the passive jackpot/near-miss/bonus-window rolls above -
+// genuine player-initiated agency instead of only ever waiting for
+// something to happen. Variable-ratio payoff (sometimes nothing, mostly
+// small, occasionally a full jackpot) is deliberate - a guaranteed win
+// every time would stop feeling like a pull and just become a button
+// that gives xp.
+const SPIN_COOLDOWN_MS = 45000;
+let spinReadyAt = 0;
+
+function spin() {
+  const now = Date.now();
+  if (now < spinReadyAt) {
+    toast('🎰 Still cooling down (' + Math.ceil((spinReadyAt - now) / 1000) + 's)');
+    return;
+  }
+  spinReadyAt = now + SPIN_COOLDOWN_MS;
+  updateSpinButton();
+  const theater = document.getElementById('theater-box');
+  teaseNextTheme(theater); // quick visual "tick" regardless of outcome
+
+  const roll = Math.random();
+  if (roll < 0.08 && !anticipationActive) {
+    runPayoff(); // full jackpot-tier celebration - the rare big pull
+  } else if (roll < 0.40) {
+    if (tileElements.length) {
+      activateBonusWindow(Math.floor(Math.random() * tileElements.length));
+      toast('✨ A tile just lit up - tap it!');
+    }
+  } else if (roll < 0.75) {
+    const amount = Math.round(8 + Math.random() * 12);
+    playChimeSound(0.6);
+    awardXp(amount);
+    toast('🎉 +' + amount + 'xp!');
+  } else {
+    toast('💨 Nothing this time...', true);
+  }
+}
+
+function updateSpinButton() {
+  const btn = document.getElementById('spin-btn');
+  if (!btn) return;
+  const remaining = Math.ceil((spinReadyAt - Date.now()) / 1000);
+  if (remaining > 0) {
+    btn.disabled = true;
+    btn.classList.remove('spin-ready');
+    btn.innerText = '🎰 ' + remaining + 's';
+  } else {
+    btn.disabled = false;
+    btn.classList.add('spin-ready');
+    btn.innerText = '🎰 Spin';
+  }
+}
+setInterval(updateSpinButton, 1000);
 
 window.addEventListener('resize', () => { if (mosaicEnabled) layoutMosaic(); });
 setInterval(() => { if (mosaicEnabled) layoutMosaic(); }, MOSAIC_REFLOW_INTERVAL_MS);

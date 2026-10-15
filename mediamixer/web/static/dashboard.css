@@ -39,7 +39,10 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    replaces, just shaped differently. */
 .tile-glow-fx{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;will-change:opacity;border:3px solid rgba(var(--theme-glow,255,70,30),1);border-radius:inherit;box-sizing:border-box}
 .tile-ambient-fx{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;will-change:opacity}
-.tile-ambient-fx.bonus-window{opacity:1;background:radial-gradient(circle,rgba(255,212,59,.7),rgba(255,212,59,0) 70%);animation:bonus-pulse-opacity 1s ease-in-out infinite}
+/* Claimable directly by tapping the tile itself, not just the thumbs-up
+   button - pointer-events only turned on while a bonus is actually live,
+   so it never intercepts normal clicks on an idle tile. */
+.tile-ambient-fx.bonus-window{opacity:1;background:radial-gradient(circle,rgba(255,212,59,.7),rgba(255,212,59,0) 70%);animation:bonus-pulse-opacity 1s ease-in-out infinite;pointer-events:auto;cursor:pointer}
 @keyframes bonus-pulse-opacity{0%,100%{opacity:.45}50%{opacity:.9}}
 .tile-ambient-fx.due-aura{opacity:1;background:radial-gradient(circle,rgba(120,120,255,.6),rgba(120,120,255,0) 70%);animation:due-pulse-opacity 3s ease-in-out infinite}
 @keyframes due-pulse-opacity{0%,100%{opacity:.3}50%{opacity:.7}}
@@ -51,6 +54,13 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .theater.theme-teaser::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,rgba(var(--theme-flash,255,220,120),0) 55%,rgba(var(--theme-flash,255,220,120),.28) 100%);animation:teaser-flash-anim .15s ease-out}
 @keyframes teaser-flash-anim{0%{opacity:1}100%{opacity:0}}
 #push-luck-prompt{display:none;position:fixed;top:58%;left:50%;transform:translate(-50%,0);z-index:21;align-items:center;gap:10px;background:#150a28;border:1px solid #b84dff;border-radius:8px;padding:10px 14px;box-shadow:0 0 20px rgba(184,77,255,.4);font-size:.82rem;font-weight:bold;color:#fff}
+/* Always on screen regardless of panel/settings visibility - a casino
+   lever you can reach for any time, not a buried settings toggle. */
+#spin-btn{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:21;padding:12px 22px;font-size:.85rem;background:linear-gradient(180deg,#2a1540,#150a28);border:1px solid #b84dff;border-radius:24px;box-shadow:0 0 16px rgba(184,77,255,.35);transition:transform .1s,box-shadow .2s}
+#spin-btn:active{transform:translateX(-50%) scale(.95)}
+#spin-btn:disabled{opacity:.5;cursor:default;box-shadow:none}
+#spin-btn.spin-ready{animation:spin-ready-pulse 1.6s ease-in-out infinite}
+@keyframes spin-ready-pulse{0%,100%{box-shadow:0 0 16px rgba(184,77,255,.35)}50%{box-shadow:0 0 26px rgba(184,77,255,.65)}}
 @keyframes glitch-anim{0%{transform:translate(0)}20%{transform:translate(-2px,2px)}40%{transform:translate(-2px,-2px)}60%{transform:translate(2px,2px)}80%{transform:translate(2px,-2px)}100%{transform:translate(0)}}
 .screen-grid{display:grid;gap:8px;width:100%;height:100%}
 .screen-grid.mosaic{display:flex;flex-direction:column;gap:0}
