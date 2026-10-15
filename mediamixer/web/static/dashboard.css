@@ -38,6 +38,18 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    of this file, so it's exactly as cheap as the radial version it
    replaces, just shaped differently. */
 .tile-glow-fx{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;will-change:opacity;border:3px solid rgba(var(--theme-glow,255,70,30),1);border-radius:inherit;box-sizing:border-box}
+/* A slow, idle "breathing" color cycle on a random tile every so often -
+   pure ambience, nothing behind it, distinct from the single-theme-color
+   jackpot glow this element otherwise carries. */
+.tile-glow-fx.ambient-breath{animation:ambient-breath-anim 12s ease-in-out}
+@keyframes ambient-breath-anim{
+  0%{opacity:0;border-color:rgba(255,100,130,.55)}
+  20%{opacity:.6;border-color:rgba(255,100,130,.55)}
+  40%{opacity:.6;border-color:rgba(170,110,255,.55)}
+  60%{opacity:.6;border-color:rgba(100,190,255,.55)}
+  80%{opacity:.6;border-color:rgba(110,255,170,.55)}
+  100%{opacity:0;border-color:rgba(110,255,170,.55)}
+}
 .tile-ambient-fx{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;will-change:opacity;display:flex;align-items:center;justify-content:center}
 /* Claimable directly by tapping the tile itself, not just the thumbs-up
    button - pointer-events only turned on while a bonus is actually live,
@@ -50,6 +62,11 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .tap-badge{display:none;background:rgba(10,5,0,.75);color:#ffd43b;font-weight:bold;font-size:.85rem;padding:6px 14px;border-radius:20px;border:1px solid rgba(255,212,59,.7);letter-spacing:.5px;animation:tap-badge-bounce 1s ease-in-out infinite}
 .tile-ambient-fx.bonus-window .tap-badge{display:inline-block}
 @keyframes tap-badge-bounce{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+/* The actual hit, right as a bonus tile is tapped - a bright pop that
+   fades out over ~0.4s instead of the glow just vanishing the instant
+   it's claimed. */
+.tile-ambient-fx.bonus-claimed{opacity:1;border:5px solid rgba(255,255,255,.95);border-radius:inherit;box-sizing:border-box;animation:bonus-claim-flash .4s ease-out forwards}
+@keyframes bonus-claim-flash{0%{opacity:1;transform:scale(1)}35%{opacity:1;transform:scale(1.04)}100%{opacity:0;transform:scale(1.08)}}
 .tile-ambient-fx.due-aura{opacity:1;background:radial-gradient(circle,rgba(120,120,255,.6),rgba(120,120,255,0) 70%);animation:due-pulse-opacity 3s ease-in-out infinite}
 @keyframes due-pulse-opacity{0%,100%{opacity:.3}50%{opacity:.7}}
 /* Mega-tier only: dims everything except the screens that are really
@@ -77,14 +94,28 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    the settings panel is a fixed, opaque, z-index:25 sidebar that covers
    that entire corner whenever it's open, which was hiding both of these
    completely the moment the panel was visible (its default state). */
-#push-luck-prompt{display:none;position:fixed;bottom:160px;left:25px;z-index:21;align-items:center;gap:10px;background:linear-gradient(180deg,#1d0f38,#150a28);border:1px solid #b84dff;border-radius:12px;padding:12px 16px;box-shadow:0 4px 20px rgba(0,0,0,.5),0 0 16px rgba(184,77,255,.3);font-size:.82rem;font-weight:bold;color:#fff}
+#push-luck-prompt{display:none;flex-direction:column;gap:8px;position:fixed;bottom:160px;left:25px;z-index:21;background:linear-gradient(180deg,#1d0f38,#150a28);border:1px solid #b84dff;border-radius:12px;padding:12px 16px;box-shadow:0 4px 20px rgba(0,0,0,.5),0 0 16px rgba(184,77,255,.3);font-size:.82rem;font-weight:bold;color:#fff;opacity:0;transform:translateY(10px) scale(.95);transition:opacity .25s ease,transform .25s ease}
+#push-luck-prompt.show{opacity:1;transform:translateY(0) scale(1)}
+#push-luck-prompt .push-luck-row{display:flex;align-items:center;gap:10px}
+/* A visible countdown instead of the choice just silently expiring -
+   drains over the same window that auto-banks if you don't decide. */
+.push-luck-timer{height:4px;border-radius:2px;background:rgba(255,255,255,.15);overflow:hidden}
+.push-luck-timer-fill{height:100%;width:100%;background:linear-gradient(90deg,#b84dff,#ffd43b)}
 /* Always on screen regardless of panel/settings visibility - a casino
-   lever you can reach for any time, not a buried settings toggle. */
-#spin-btn{position:fixed;bottom:90px;left:25px;z-index:21;padding:12px 22px;font-size:.85rem;background:linear-gradient(180deg,#2a1540,#150a28);border:1px solid #b84dff;border-radius:24px;box-shadow:0 4px 16px rgba(0,0,0,.5),0 0 16px rgba(184,77,255,.35);transition:transform .1s,box-shadow .2s;min-width:110px}
+   lever you can reach for any time, not a buried settings toggle. A
+   persistent label states what it actually does, since the button
+   alone (even restyled) still wasn't reading as obviously as hoped. */
+#spin-widget{position:fixed;bottom:90px;left:25px;z-index:21;display:flex;flex-direction:column;align-items:center;gap:5px}
+#spin-label{font-size:.65rem;font-weight:bold;color:#d6a3ff;background:rgba(10,5,20,.75);padding:3px 11px;border-radius:10px;white-space:nowrap;text-transform:none}
+#spin-btn{padding:12px 22px;font-size:.85rem;background:linear-gradient(180deg,#2a1540,#150a28);border:1px solid #b84dff;border-radius:24px;box-shadow:0 4px 16px rgba(0,0,0,.5),0 0 16px rgba(184,77,255,.35);transition:transform .1s,box-shadow .2s;min-width:110px}
 #spin-btn:active{transform:scale(.95)}
 #spin-btn:disabled{opacity:.5;cursor:default;box-shadow:none}
 #spin-btn.spin-ready{animation:spin-ready-pulse 1.6s ease-in-out infinite}
 @keyframes spin-ready-pulse{0%,100%{box-shadow:0 0 16px rgba(184,77,255,.35)}50%{box-shadow:0 0 26px rgba(184,77,255,.65)}}
+/* A brief "rolling" wobble right after a press, before the outcome
+   reveals - a flat instant result didn't read as an actual pull. */
+#spin-btn.spin-rolling{animation:spin-rolling-anim .12s linear infinite}
+@keyframes spin-rolling-anim{0%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}100%{transform:rotate(-3deg)}}
 @keyframes glitch-anim{0%{transform:translate(0)}20%{transform:translate(-2px,2px)}40%{transform:translate(-2px,-2px)}60%{transform:translate(2px,2px)}80%{transform:translate(2px,-2px)}100%{transform:translate(0)}}
 .screen-grid{display:grid;gap:8px;width:100%;height:100%}
 .screen-grid.mosaic{display:flex;flex-direction:column;gap:0}
@@ -98,8 +129,18 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .tile:hover .tile-overlay{opacity:1}
 .tile-overlay>*{pointer-events:auto}
 .src-label{font-size:11px;font-family:monospace;color:#fff;background:rgba(0,0,0,.6);padding:2px 6px;border-radius:4px;max-width:92%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tile-actions{display:flex;gap:6px}
-.tile-actions .thumb{padding:4px 10px;font-size:12px}
+.tile-actions{display:flex;gap:8px}
+/* Bigger, round, tactile - scoped to .tile-actions specifically so this
+   doesn't touch the unrelated .up/.down audio-rating buttons elsewhere
+   in the panel, which share the same base classes. */
+.tile-actions .thumb{width:40px;height:40px;padding:0;font-size:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;border-width:2px;transition:transform .15s ease,background .15s ease}
+.tile-actions .thumb.up{background:rgba(255,60,110,.2);border-color:rgba(255,100,150,.6)}
+.tile-actions .thumb.up:hover{background:rgba(255,60,110,.35);border-color:#ff5c96;transform:scale(1.12)}
+.tile-actions .thumb.down{background:rgba(130,130,150,.15);border-color:rgba(150,150,170,.5)}
+.tile-actions .thumb.down:hover{background:rgba(130,130,150,.3);border-color:#9a9ab0;transform:scale(1.12)}
+.tile-actions .thumb:active{transform:scale(.82)}
+.tile-actions .thumb.pop{animation:thumb-pop .35s ease-out}
+@keyframes thumb-pop{0%{transform:scale(1)}40%{transform:scale(1.4)}100%{transform:scale(1)}}
 .hint{font-size:11px;color:#8e8e93;margin:0}
 .panel{position:fixed;top:0;right:0;width:min(400px,92vw);height:100vh;height:100dvh;background:#0a0515;border-left:1px solid #1a0f26;box-shadow:-10px 0 30px rgba(0,0,0,.5);padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;overflow-y:auto;z-index:25;transform:translateX(0);transition:transform .25s ease}
 .panel.collapsed{transform:translateX(100%)}

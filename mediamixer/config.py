@@ -110,11 +110,11 @@ class Config:
     # guess at the same time.
     jackpot_tiers: Tuple[JackpotTier, ...] = (
         JackpotTier("small", weight=65, tile_count=(1, 2), jackpot_picks=1,
-                    speed_range=(1.08, 1.22), hype_ticks=(4, 6)),
+                    speed_range=(1.08, 1.40), hype_ticks=(4, 6)),
         JackpotTier("medium", weight=28, tile_count=(2, 3), jackpot_picks=2,
-                    speed_range=(1.18, 1.38), hype_ticks=(6, 9)),
+                    speed_range=(1.18, 1.59), hype_ticks=(6, 9)),
         JackpotTier("mega", weight=7, tile_count=(3, 4), jackpot_picks=4,
-                    speed_range=(1.35, 1.65), hype_ticks=(10, 14)),
+                    speed_range=(1.35, 1.90), hype_ticks=(10, 14)),
     )
     jackpot_probability: float = 0.12
     jackpot_hold_seconds: float = 60.0

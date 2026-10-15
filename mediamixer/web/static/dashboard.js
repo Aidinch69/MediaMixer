@@ -818,6 +818,11 @@ function runAnticipationBuildUp(durationS, isReal, weightedTiles, tierName) {
   const theater = document.getElementById('theater-box');
   const theaterGlow = document.getElementById('theater-glow');
   teaseNextTheme(theater);
+  // A running CSS animation on opacity/border-color wins out over this
+  // loop's own inline style writes to the same element until it ends -
+  // clear any ambient color-breathe in progress so it can't fight with
+  // the real build-up's glow on whichever tile it happened to land on.
+  tileGlowEls.forEach(el => { if (el) el.classList.remove('ambient-breath'); });
   // Variable build-up length: the shape of the tension, not just whether
   // it resolves, is part of the uncertainty. Purely a visual/audio pacing
   // change - a real jackpot's actual timing is still driven by the status
@@ -1398,7 +1403,12 @@ function applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk, chainDepth,
   if (wasAtRisk) playClutchSting();
   const label = milestoneCount ? ('🏆 MILESTONE: ' + milestoneCount + ' JACKPOTS!') : '🎰 ' + (tier.name === 'mega' ? 'MEGA JACKPOT' : tier.name === 'medium' ? 'Jackpot!' : 'Jackpot');
   const prefix = (chainDepth > 0 ? '⛓ CHAIN! ' : '') + (wasAtRisk ? '🔥 SAVED! ' : '');
-  toast(prefix + label + (streak > 1 ? ' (streak ' + streak + ')' : ''));
+  // Explicitly ties the screen-shake to what just happened, in the same
+  // message that fires at the same moment the shake does - the shake
+  // alone (even with the tier-reveal text) apparently wasn't making that
+  // connection obvious on its own.
+  const shakeNote = tier.shake ? ' 💥 (mega+ jackpots shake the screen)' : '';
+  toast(prefix + label + shakeNote + (streak > 1 ? ' (streak ' + streak + ')' : ''));
   if (!willChain) showPushLuckPrompt();
 }
 
@@ -1414,12 +1424,25 @@ function showPushLuckPrompt() {
   const box = document.getElementById('push-luck-prompt');
   if (!box) return;
   box.style.display = 'flex';
+  void box.offsetWidth; // force reflow so the entrance transition actually plays instead of snapping in
+  box.classList.add('show');
+  const fill = box.querySelector('.push-luck-timer-fill');
+  if (fill) {
+    fill.style.transition = 'none';
+    fill.style.width = '100%';
+    void fill.offsetWidth;
+    fill.style.transition = 'width ' + (PUSH_LUCK_WINDOW_MS / 1000) + 's linear';
+    fill.style.width = '0%';
+  }
   pushLuckTimer = setTimeout(() => bankWin(), PUSH_LUCK_WINDOW_MS);
 }
 
 function hidePushLuckPrompt() {
   const box = document.getElementById('push-luck-prompt');
-  if (box) box.style.display = 'none';
+  if (box) {
+    box.classList.remove('show');
+    setTimeout(() => { if (!box.classList.contains('show')) box.style.display = 'none'; }, 260);
+  }
   clearTimeout(pushLuckTimer);
   pushLuckTimer = null;
 }
@@ -1798,15 +1821,15 @@ function ensureTiles(count) {
     const tile = document.createElement('div');
     tile.className = 'tile';
     tile.innerHTML =
-      '<video id="screen-' + i + '" autoplay controls></video>' +
+      '<video id="screen-' + i + '" autoplay></video>' +
       '<video id="preload-' + i + '" class="preload" preload="auto" muted></video>' +
       '<div class="tile-glow-fx"></div>' +
       '<div class="tile-ambient-fx"><span class="tap-badge">👆 TAP</span></div>' +
       '<div class="tile-overlay">' +
       '<div class="src-label" id="label-' + i + '"></div>' +
       '<div class="tile-actions">' +
-      '<button class="up thumb" onclick="rateScreen(' + i + ',\'up\')">👍</button>' +
-      '<button class="down thumb" onclick="rateScreen(' + i + ',\'down\')">👎</button>' +
+      '<button class="up thumb" onclick="rateScreen(' + i + ',\'up\',this)">❤️</button>' +
+      '<button class="down thumb" onclick="rateScreen(' + i + ',\'down\',this)">👎</button>' +
       '</div></div>';
     const vid = tile.querySelector('#screen-' + i);
     vid.addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
@@ -1940,14 +1963,19 @@ function pace(v, quiet) {
   fetch('/api/pace?mode=' + v).then(() => { if (!quiet) toast('Pace updated'); });
 }
 function vec(k, v) { fetch('/api/vector?key=' + k + '&val=' + v); }
-function rateScreen(i, dir) {
+function rateScreen(i, dir, btn) {
   if (dir === 'up') claimBonusTile(i);
   const mult = registerCombo();
   awardXp(Math.round(RATE_XP_BASE * mult));
   incrementQuestMetric('rates', 1);
   tileLastRatedAt[i] = Date.now();
-  if (dir === 'up') pulseTileGlow(i, mult);
-  fetch('/api/rate?screen=' + i + '&dir=' + dir).then(() => toast(dir === 'up' ? '👍 Reinforced' : '👎 Penalized', dir !== 'up'));
+  pulseTileGlow(i, mult, dir !== 'up');
+  if (btn) {
+    btn.classList.remove('pop');
+    void btn.offsetWidth;
+    btn.classList.add('pop');
+  }
+  fetch('/api/rate?screen=' + i + '&dir=' + dir).then(() => toast(dir === 'up' ? '❤️ Reinforced' : '👎 Penalized', dir !== 'up'));
 }
 
 // A quick border-glow flash on the tile that was just rated, scaling
@@ -1956,16 +1984,20 @@ function rateScreen(i, dir) {
 // barrage system uses, instead of feedback living only in the XP
 // counter. Opacity only, same compositor-only technique as the rest of
 // the glow system.
-function pulseTileGlow(idx, multiplier) {
+function pulseTileGlow(idx, multiplier, negative) {
   const el = tileGlowEls[idx];
   if (!el) return;
   el.style.transition = 'opacity .12s ease-out';
-  el.style.opacity = Math.min(1, 0.3 + (multiplier - 1) * 0.3).toFixed(2);
-  const holdMs = 100 + (multiplier - 1) * 60;
+  if (negative) el.style.borderColor = 'rgba(255,90,90,.95)';
+  el.style.opacity = Math.min(1, 0.45 + (multiplier - 1) * 0.35).toFixed(2);
+  const holdMs = 140 + (multiplier - 1) * 70;
   setTimeout(() => {
-    el.style.transition = 'opacity .4s ease-out';
+    el.style.transition = 'opacity .5s ease-out';
     el.style.opacity = '0';
-    setTimeout(() => { el.style.transition = ''; }, 400);
+    setTimeout(() => {
+      el.style.transition = '';
+      if (negative) el.style.borderColor = '';
+    }, 500);
   }, holdMs);
 }
 
@@ -2021,7 +2053,14 @@ function clearBonusWindow(idx) {
 // flashing."
 function claimBonusTile(idx) {
   if (idx !== bonusWindowTileIndex || Date.now() >= bonusWindowExpireAt) return;
+  const el = tileAmbientEls[idx];
   clearBonusWindow(idx);
+  // A quick bright flash/pop on the actual hit, instead of the tile just
+  // vanishing the instant it's tapped - the claim itself gets to register.
+  if (el) {
+    el.classList.add('bonus-claimed');
+    setTimeout(() => el.classList.remove('bonus-claimed'), 400);
+  }
   triggerMiniPayoff();
 }
 
@@ -2043,6 +2082,25 @@ function maybeTriggerMysteryTile() {
   mysteryTileIndex = idx;
   tile.classList.add('mystery-tile');
   setTimeout(() => clearMysteryTile(idx), MYSTERY_TILE_DURATION_MS);
+}
+
+// Ambient color-breathe: purely decorative, no mechanic behind it at
+// all - just a slow multi-color pulse on a random tile every so often,
+// to keep an idle grid feeling a little alive even between real events.
+const AMBIENT_PULSE_CHECK_MS = 25000;
+const AMBIENT_PULSE_PROBABILITY = 0.3;
+const AMBIENT_PULSE_DURATION_MS = 12000;
+
+function maybeTriggerAmbientPulse() {
+  if (anticipationActive || !tileGlowEls.length) return;
+  if (Math.random() >= AMBIENT_PULSE_PROBABILITY) return;
+  const idx = Math.floor(Math.random() * tileGlowEls.length);
+  const el = tileGlowEls[idx];
+  if (!el) return;
+  el.classList.remove('ambient-breath');
+  void el.offsetWidth; // restart the animation cleanly if one was already mid-cycle
+  el.classList.add('ambient-breath');
+  setTimeout(() => el.classList.remove('ambient-breath'), AMBIENT_PULSE_DURATION_MS);
 }
 
 function clearMysteryTile(idx) {
@@ -2090,6 +2148,8 @@ function showSpinResult(text) {
   btn.innerText = text;
 }
 
+const SPIN_ROLL_DELAY_MS = 500;
+
 function spin() {
   const now = Date.now();
   if (now < spinReadyAt) {
@@ -2100,24 +2160,42 @@ function spin() {
   const theater = document.getElementById('theater-box');
   teaseNextTheme(theater); // quick visual "tick" regardless of outcome
 
-  const roll = Math.random();
-  if (roll < 0.08 && !anticipationActive) {
-    showSpinResult('🎉 JACKPOT!');
-    runPayoff(); // full jackpot-tier celebration - the rare big pull
-  } else if (roll < 0.40 && tileElements.length) {
-    activateBonusWindow(Math.floor(Math.random() * tileElements.length));
-    showSpinResult('✨ Tap the tile!');
-    toast('✨ A tile just lit up - tap it!');
-  } else if (roll < 0.75) {
-    const amount = Math.round(8 + Math.random() * 12);
-    playChimeSound(0.6);
-    awardXp(amount);
-    showSpinResult('🎉 +' + amount + 'xp');
-    toast('🎉 +' + amount + 'xp!');
-  } else {
-    showSpinResult('💨 Nothing');
-    toast('💨 Nothing this time...', true);
+  // A brief "rolling" wobble before the outcome reveals - an instant,
+  // flat result didn't read as an actual pull, just a button press.
+  const btn = document.getElementById('spin-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.remove('spin-ready');
+    btn.classList.add('spin-rolling');
+    btn.innerText = '🎰 ...';
+    // Covers the rolling window too, not just the result display after it -
+    // otherwise the 1s countdown tick (updateSpinButton) could land inside
+    // this gap and stomp "..." with a premature countdown before the
+    // outcome even reveals.
+    spinResultUntil = Date.now() + SPIN_ROLL_DELAY_MS + 2500;
   }
+
+  const roll = Math.random();
+  setTimeout(() => {
+    if (btn) btn.classList.remove('spin-rolling');
+    if (roll < 0.08 && !anticipationActive) {
+      showSpinResult('🎉 JACKPOT!');
+      runPayoff(); // full jackpot-tier celebration - the rare big pull
+    } else if (roll < 0.40 && tileElements.length) {
+      activateBonusWindow(Math.floor(Math.random() * tileElements.length));
+      showSpinResult('✨ Tap the tile!');
+      toast('✨ A tile just lit up - tap it!');
+    } else if (roll < 0.75) {
+      const amount = Math.round(8 + Math.random() * 12);
+      playChimeSound(0.6);
+      awardXp(amount);
+      showSpinResult('🎉 +' + amount + 'xp');
+      toast('🎉 +' + amount + 'xp!');
+    } else {
+      showSpinResult('💨 Nothing');
+      toast('💨 Nothing this time...', true);
+    }
+  }, SPIN_ROLL_DELAY_MS);
 }
 
 function updateSpinButton() {
@@ -2149,6 +2227,7 @@ setInterval(tickSurgeBadge, 5000);
 setInterval(tickAnticipationMeter, 1000);
 setInterval(tickDueAura, 5000);
 setInterval(maybeTriggerMysteryTile, MYSTERY_TILE_CHECK_MS);
+setInterval(maybeTriggerAmbientPulse, AMBIENT_PULSE_CHECK_MS);
 
 // Session-opening primer: guarantee a near-miss within the first ~15-25s
 // of opening the dashboard (if anticipation/near-miss are on), so a
