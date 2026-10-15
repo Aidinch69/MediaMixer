@@ -304,7 +304,29 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .phone-url{font-family:monospace;font-size:.8rem;color:#fff;background:#1a0a29;border:1px solid #3d1e4c;padding:6px 10px;border-radius:6px;cursor:pointer;word-break:break-all}
 .phone-url:hover{border-color:#b84dff}
 h2,h3{margin:0;color:#c999ff;text-transform:uppercase;letter-spacing:1px;font-size:1.05rem}
-h2{font-size:1.25rem;border-bottom:1px solid #1a0f26;padding-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+h2{font-size:1.25rem;border-bottom:none;padding-bottom:0;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.level-readout{font-family:monospace;font-size:.72rem;color:#d6a3ff;text-transform:none;letter-spacing:normal}
+/* The dynamic status badges (jackpot/streak/combo/golden-hour/surge/
+   audio) used to live crammed into the h2 title row itself - split onto
+   their own wrapping row so the title stays readable and the badges
+   have room to wrap on their own. */
+.status-badges{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid #1a0f26;padding-bottom:10px}
+.jackpot-streak-readout{font-weight:bold;color:#ffcc55;font-size:.85rem}
+.combo-readout{font-weight:bold;color:#4dd4ff;font-size:.8rem}
+.session-timer-readout{display:none;font-family:monospace;font-size:.75rem;color:#8e8e93}
+/* A small consistent pill instead of a plain "(Experimental)" text
+   suffix on each section header - reads as a deliberate label at a
+   glance rather than looking unfinished. */
+.experimental-pill{display:inline-block;margin-left:8px;vertical-align:middle;background:rgba(255,150,60,.15);border:1px solid rgba(255,150,60,.5);color:#ffb366;font-size:.6rem;letter-spacing:.5px;padding:2px 7px;border-radius:10px;text-transform:uppercase}
+.zone-readout{font-weight:bold;color:#ffd43b;font-size:.85rem}
+/* Each tab's own section headers pick up a matching accent instead of
+   every h3 in the panel being the same plain purple - a quick visual
+   cue for which page you're on as you scroll, not just the tab bar
+   itself. */
+.panel-tab[data-tab="display"] h3{color:#4dd4ff}
+.panel-tab[data-tab="engagement"] h3{color:#ffd43b}
+.panel-tab[data-tab="audio"] h3{color:#ff8fc7}
+.panel-tab[data-tab="more"] h3{color:#b399ff}
 .metric{background:#0e081f;padding:10px;border-radius:8px;border:1px solid #221435;font-size:.82rem;display:flex;flex-direction:column;gap:4px}
 .slider{display:flex;flex-direction:column;gap:6px;background:#0e081f;padding:10px;border-radius:8px;border:1px solid #221435}
 label{font-size:.75rem;color:#8e8e93;text-transform:uppercase;font-weight:bold}

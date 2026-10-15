@@ -1786,6 +1786,34 @@ let autopilotTimer = null;
 let autopilotLastPace = null;
 let autopilotLastMosaic = null;
 
+// A fresh zone is picked each time the cycle wraps back to its start
+// (never the same zone twice in a row) so repeat cycles lean into a
+// different mix of the passive systems each time, instead of every
+// climax feeling identical just because it's the same arc shape. Only
+// scales the odds of things that were already going to happen somewhat
+// - a "quiet" zone's systems still fire, just less often, so turning
+// Auto-Pilot on never silently disables something you'd otherwise see.
+const AUTOPILOT_ZONES = {
+  chase: { label: 'Chase Zone', chase: 1.9, bonus: 1.3, sealed: 0.6, colorRush: 0.5, barrage: 1.0 },
+  color: { label: 'Color Zone', chase: 0.6, bonus: 0.8, sealed: 0.8, colorRush: 2.4, barrage: 1.0 },
+  jackpot: { label: 'Jackpot Zone', chase: 0.7, bonus: 0.9, sealed: 1.0, colorRush: 0.7, barrage: 1.6 },
+  vault: { label: 'Vault Zone', chase: 0.6, bonus: 0.7, sealed: 2.2, colorRush: 0.6, barrage: 0.9 },
+};
+const AUTOPILOT_ZONE_NAMES = Object.keys(AUTOPILOT_ZONES);
+let autopilotZone = null;
+let autopilotLastFrac = 0;
+
+function pickAutopilotZone(excludeName) {
+  const choices = AUTOPILOT_ZONE_NAMES.filter(n => n !== excludeName);
+  return choices[Math.floor(Math.random() * choices.length)];
+}
+
+// Falls back to 1 (no-op) whenever Auto-Pilot is off, so manual play is
+// never affected by zone weighting at all.
+function autopilotZoneMultiplier(key) {
+  return autopilotZone ? AUTOPILOT_ZONES[autopilotZone][key] : 1;
+}
+
 function loadAutopilotPrefs() {
   try {
     const cyc = localStorage.getItem('mm_autopilot_minutes');
@@ -1818,8 +1846,16 @@ function autopilotTick() {
   const frac = (elapsed % cycleS) / cycleS;
   const { a, b, lf } = autopilotPhaseAt(frac);
 
-  const barrageP = lerp(a.barrage, b.barrage, lf);
-  const jackpotP = lerp(a.jackpot, b.jackpot, lf);
+  // A new zone whenever the cycle wraps back to its start (frac drops
+  // below where it was last tick) - not on every tick, so the zone
+  // holds steady for a whole cycle's calm->climax->cooldown arc rather
+  // than flickering between zones mid-arc.
+  if (!autopilotZone || frac < autopilotLastFrac) autopilotZone = pickAutopilotZone(autopilotZone);
+  autopilotLastFrac = frac;
+  updateAutopilotZoneUi();
+
+  const barrageP = lerp(a.barrage, b.barrage, lf) * autopilotZoneMultiplier('barrage');
+  const jackpotP = lerp(a.jackpot, b.jackpot, lf) * autopilotZoneMultiplier('barrage');
   const noveltyBonus = lerp(a.novelty, b.novelty, lf);
   const fxTarget = Math.round(lerp(a.fx, b.fx, lf));
   const targetPace = lf < 0.5 ? a.pace : b.pace;
@@ -1836,10 +1872,19 @@ function autopilotTick() {
   if (fxCount !== fxTarget) setFxCount(fxTarget);
 }
 
+function updateAutopilotZoneUi() {
+  const el = document.getElementById('l-autopilot-zone');
+  const row = document.getElementById('autopilot-zone-row');
+  if (el) el.innerText = autopilotZone ? AUTOPILOT_ZONES[autopilotZone].label : '';
+  if (row) row.style.display = autopilotZone ? 'flex' : 'none';
+}
+
 function startAutopilot() {
   autopilotStartTime = Date.now();
   autopilotLastPace = null;
   autopilotLastMosaic = null;
+  autopilotZone = null;
+  autopilotLastFrac = 0;
   if (!fxEnabled) toggleFx();
   autopilotTick();
   autopilotTimer = setInterval(autopilotTick, AUTOPILOT_TICK_MS);
@@ -1849,6 +1894,8 @@ function stopAutopilot() {
   clearInterval(autopilotTimer);
   autopilotTimer = null;
   autopilotAmbientBoost = 0;
+  autopilotZone = null;
+  updateAutopilotZoneUi();
 }
 
 function toggleAutopilot() {
@@ -2240,7 +2287,7 @@ function maybeTriggerBonusWindow() {
   if (!anticipationFxEnabled) return;
   if (bonusWindowTileIndex >= 0 || !tileElements.length) return;
   if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
-  if (Math.random() < BONUS_WINDOW_PROBABILITY * oddsMultiplier()) {
+  if (Math.random() < BONUS_WINDOW_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('bonus')) {
     lastAmbientSpawnAt = Date.now();
     activateBonusWindow(pickAmbientTarget());
   }
@@ -2332,7 +2379,7 @@ function maybeTriggerSealedTile() {
   if (!anticipationFxEnabled) return;
   if (sealedTileIndex >= 0 || !tileElements.length) return;
   if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
-  if (Math.random() < SEALED_PROBABILITY * oddsMultiplier()) {
+  if (Math.random() < SEALED_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('sealed')) {
     lastAmbientSpawnAt = Date.now();
     activateSealedTile(pickAmbientTarget());
   }
@@ -2435,7 +2482,7 @@ function maybeTriggerChase() {
   if (!anticipationFxEnabled) return;
   if (chaseFlashTileIndex >= 0 || !tileElements.length) return;
   if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
-  if (Math.random() < CHASE_PROBABILITY * oddsMultiplier()) {
+  if (Math.random() < CHASE_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('chase')) {
     lastAmbientSpawnAt = Date.now();
     activateChaseFlash(pickAmbientTarget());
   }
@@ -2672,7 +2719,7 @@ let colorRushActive = false;
 
 function maybeTriggerColorRush() {
   if (!anticipationFxEnabled || colorRushActive) return;
-  if (Math.random() < COLOR_RUSH_PROBABILITY * oddsMultiplier()) triggerColorRush();
+  if (Math.random() < COLOR_RUSH_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('colorRush')) triggerColorRush();
 }
 
 function triggerColorRush() {

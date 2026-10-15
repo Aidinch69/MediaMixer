@@ -42,16 +42,18 @@
 <div class="panel" id="panel">
   <h2>
     <span>🧬 MediaMixer</span>
+    <span id="level-readout" class="level-readout"></span>
+  </h2>
+  <div class="status-badges" id="status-badges">
     <span class="badge jackpot-badge" id="jackpot-tag">🎰 JACKPOT</span>
-    <span id="jackpot-streak" style="font-weight:bold;color:#ffcc55;font-size:.85rem"></span>
-    <span id="level-readout" style="font-family:monospace;font-size:.72rem;color:#d6a3ff"></span>
-    <span id="combo-readout" style="font-weight:bold;color:#4dd4ff;font-size:.8rem"></span>
+    <span id="jackpot-streak" class="jackpot-streak-readout"></span>
+    <span id="combo-readout" class="combo-readout"></span>
     <span class="offline-badge golden-hour-badge" id="golden-hour-badge">✨ GOLDEN HOUR</span>
     <span class="offline-badge surge-badge" id="surge-badge">⚡ SURGE</span>
     <span class="offline-badge" id="audio-offline">🔇 No Overlay Tracks</span>
     <button class="offline-badge unlock-badge" id="audio-unlock" onclick="enableAudio()">🔈 Tap to Enable Audio</button>
-    <span id="session-timer-readout" style="display:none;font-family:monospace;font-size:.75rem;color:#8e8e93"></span>
-  </h2>
+    <span id="session-timer-readout" class="session-timer-readout"></span>
+  </div>
   <div class="metric">
     <div style="display:flex;align-items:center;font-size:.7rem;color:#8e8e93">
       <span class="status-dot" id="conn-dot"></span><span id="conn-label">Connected</span>
@@ -84,7 +86,7 @@
       <button class="badge" id="mosaic-toggle" onclick="toggleMosaic()">OFF</button>
     </div>
     <p class="hint">Sizes tiles by each clip's own aspect ratio to cut down on black bars, instead of a uniform grid. Reflows every few seconds, not on every clip change, to stay calm.</p>
-    <h3>✨ Floating Overlay (Experimental)</h3>
+    <h3>✨ Floating Overlay<span class="experimental-pill">Experimental</span></h3>
     <div class="slider">
       <label>Enabled</label>
       <button class="badge" id="fx-toggle" onclick="toggleFx()">OFF</button>
@@ -103,7 +105,7 @@
   </div>
 
   <div class="panel-tab" data-tab="engagement">
-    <h3>⚡ Anticipation (Experimental)</h3>
+    <h3>⚡ Anticipation<span class="experimental-pill">Experimental</span></h3>
     <div class="slider">
       <label>Build-up &amp; Payoff FX</label>
       <button class="badge" id="anticipation-toggle" onclick="toggleAnticipationFx()">OFF</button>
@@ -119,13 +121,17 @@
     <div class="metric" id="quest-list"></div>
     <button class="badge" id="prestige-btn" onclick="prestige()" style="display:none">⭐ Prestige (reset level for a rank)</button>
     <p class="hint">Lifetime bests and two daily quests that re-roll each day and auto-claim XP on completion - all stored on this device, nothing leaves it.</p>
-    <h3>🎬 Auto-Pilot (Experimental)</h3>
+    <h3>🎬 Auto-Pilot<span class="experimental-pill">Experimental</span></h3>
     <div class="slider">
       <label>Enabled</label>
       <button class="badge" id="autopilot-toggle" onclick="toggleAutopilot()">OFF</button>
     </div>
     <div class="slider"><label>Cycle Length: <b><span id="l-autopilot-minutes">6 min</span></b></label><input type="range" id="autopilot-minutes-input" min="2" max="15" step="1" value="6" oninput="setAutopilotMinutes(this.value)"></div>
-    <p class="hint">Scripts pace, barrage/jackpot odds, mosaic, floater count, and content novelty through a calm -&gt; building -&gt; climax -&gt; cooldown arc on a repeating timer, instead of those staying wherever you last set them. Also ramps how often the passive stuff above fires (bonus windows, chase flashes, sealed tiles, near-misses, Color Rush, spiral-from-hearts) the same way - climax means more of everything, not just more barrages. Turns Floating Overlay on if it's off.</p>
+    <div class="slider" id="autopilot-zone-row" style="display:none">
+      <label>Current Zone</label>
+      <span id="l-autopilot-zone" class="zone-readout"></span>
+    </div>
+    <p class="hint">Scripts pace, barrage/jackpot odds, mosaic, floater count, and content novelty through a calm -&gt; building -&gt; climax -&gt; cooldown arc on a repeating timer, instead of those staying wherever you last set them. Each cycle also picks a fresh "zone" (Chase/Color/Jackpot/Vault) that leans the climax toward a different mix of the passive stuff above - one cycle's climax might be chase-flash heavy, the next a Color Rush, the next sealed tiles - instead of every climax looking the same. Turns Floating Overlay on if it's off.</p>
     <div class="slider">
       <label>Session Timer (opt-in)</label>
       <button class="badge" id="session-timer-toggle" onclick="toggleSessionTimer()">OFF</button>
