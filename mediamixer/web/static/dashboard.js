@@ -2338,6 +2338,34 @@ function setVibeDial(v) {
   if (!autopilotEnabled) applyVibeDial(vibeDialValue);
 }
 
+// Fast-Dislike "Recalibrate": several 👎 in a row reads as "nothing
+// here is landing right now," not just more negative data points to
+// quietly fold into the reward average - it triggers an immediate
+// reroll of everything on screen plus a brief discovery push, instead
+// of leaving the viewer to keep disliking the same vein of content one
+// clip at a time while the slower-moving reward averages catch up.
+const RECALIBRATE_THRESHOLD = 3;
+const RECALIBRATE_DISCOVERY_BONUS = 1.4;
+const RECALIBRATE_DISCOVERY_HOLD_MS = 20000;
+let dislikeStreak = 0;
+
+function registerDislikeForRecalibrate() {
+  dislikeStreak++;
+  if (dislikeStreak >= RECALIBRATE_THRESHOLD) {
+    dislikeStreak = 0;
+    recalibrate();
+  }
+}
+
+function recalibrate() {
+  toast('🔄 Recalibrating - mixing it up');
+  fetch('/api/skip');
+  if (!autopilotEnabled) {
+    applyVibeDial(Math.max(vibeDialValue, RECALIBRATE_DISCOVERY_BONUS));
+    setTimeout(() => { if (!autopilotEnabled) applyVibeDial(vibeDialValue); }, RECALIBRATE_DISCOVERY_HOLD_MS);
+  }
+}
+
 function loadVibeDialPref() {
   let saved = VIBE_DIAL_DEFAULT;
   try {
@@ -2705,6 +2733,9 @@ function rateScreen(i, dir, btn, strength) {
     if (Math.random() < 0.10 + heartMultiplier * 0.07) {
       burstTileSpeed(i, 1500, 1.05 + heartMultiplier * 0.02, 1.15 + heartMultiplier * 0.03);
     }
+    dislikeStreak = 0;
+  } else {
+    registerDislikeForRecalibrate();
   }
   const mult = registerCombo();
   awardXp(Math.round(TUNING.RATE_XP_BASE * mult * strength));
