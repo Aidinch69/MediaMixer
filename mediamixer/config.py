@@ -79,11 +79,12 @@ class Config:
     default_preload_enabled: bool = True
 
     # -- low-res proxy for dense grids --
-    # Source clips are full 1080p+ at several Mbps - fine decoded one or two
-    # at a time, wasteful decoded 16-25x at once into a tile a fraction of
-    # that size. Layouts past this tile count get a cached, cheaper-to-decode
-    # proxy instead of the original; matches grid4x4/grid5x5 (16/25 tiles).
-    proxy_tile_threshold: int = 9
+    # Source clips are full 1080p+ at several Mbps - every layout now uses
+    # the cached, cheaper-to-decode proxy when one exists (see
+    # mediamixer/web/app.py's media() route and mediamixer/cache_warmer.py,
+    # which keeps the whole library covered in the background), not just
+    # dense grids - a real cost even at 2 simultaneous screens, not only
+    # at 16-25.
     proxy_max_dimension: int = 640
     proxy_bitrate_kbps: int = 1200
 

@@ -6,6 +6,8 @@ import logging
 import threading
 from dataclasses import replace
 
+from waitress import serve
+
 from . import library
 from .config import Config, load_config
 from .context import AppContext
@@ -29,9 +31,17 @@ class MediaMixerApp:
     def run(self):
         library.sync_library(self.db, self.config)
 
+        # Werkzeug's dev server (Flask's default .run()) is explicitly not
+        # built for this: several simultaneous video streams plus a
+        # long-lived SSE connection per viewer is real concurrent I/O load,
+        # and the dev server's own docs say not to use it for that. Waitress
+        # is a mature, pure-Python production WSGI server (no C extensions
+        # to fight with on Windows) with a real worker thread pool sized
+        # for actual concurrent request handling - a straight swap, since
+        # any WSGI-compliant app (Flask included) runs under it unchanged.
         threading.Thread(
-            target=lambda: self.flask_app.run(
-                host=self.config.host, port=self.config.port, threaded=True, use_reloader=False
+            target=lambda: serve(
+                self.flask_app, host=self.config.host, port=self.config.port, threads=16,
             ),
             name="web",
             daemon=True,

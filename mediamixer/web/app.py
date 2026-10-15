@@ -170,12 +170,20 @@ def create_app(ctx: AppContext) -> Flask:
         # revalidation round-trip on repeat requests (e.g. a preloaded clip's
         # <video> swapping to the same URL the hidden preload element already
         # fetched in the background).
-        tiles = request.args.get("tiles", type=int)
-        if tiles and tiles > config.proxy_tile_threshold:
-            proxy_path = proxy.ensure_proxy(os.path.join(config.media_dir, filename), config)
-            if proxy_path:
-                directory, name = os.path.split(proxy_path)
-                return send_from_directory(directory, name, max_age=86400)
+        #
+        # Always prefer the cached low-res proxy when one exists, regardless
+        # of tile count - this used to be gated to dense grids only
+        # (tiles > proxy_tile_threshold), back when proxies were generated
+        # lazily and sparsely. mediamixer/cache_warmer.py now keeps the
+        # whole library covered in the background, so there's no reason to
+        # withhold the win from small layouts: the full originals run
+        # several Mbps each (one measured sample was 8.2 Mbps vs the
+        # proxy's 1200kbps target, an ~85% reduction), a real cost even at
+        # just 2 simultaneous screens, not only at 25 or 64.
+        proxy_path = proxy.ensure_proxy(os.path.join(config.media_dir, filename), config)
+        if proxy_path:
+            directory, name = os.path.split(proxy_path)
+            return send_from_directory(directory, name, max_age=86400)
         return send_from_directory(config.media_dir, filename, max_age=86400)
 
     @app.route("/audio/<path:filename>")
