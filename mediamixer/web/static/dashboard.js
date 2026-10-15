@@ -1089,6 +1089,8 @@ function updateModeBadge() {
     text = pendingServerTier ? ('🎰 ' + pendingServerTier.toUpperCase() + ' building...') : '🎰 Building...';
   } else if (jackpotStreak > 1 && Date.now() - lastJackpotAt < STREAK_RESET_MS) {
     text = '🔥 Jackpot streak x' + jackpotStreak;
+  } else if (heartMultiplier >= 2) {
+    text = '❤️ Heart multiplier x' + Math.floor(heartMultiplier);
   } else if (jackpotHeat > 1.2) {
     // Otherwise bumpJackpotHeat's whole effect (catch streaks/bonus taps
     // nudging odds toward bigger jackpots) would be invisible - nothing
@@ -1338,8 +1340,29 @@ function bumpJackpotHeat(amount) {
 }
 setInterval(() => { jackpotHeat = Math.max(0, jackpotHeat - JACKPOT_HEAT_DECAY_PER_TICK); }, JACKPOT_HEAT_DECAY_MS);
 
+// ---- Heart multiplier ----
+// A slower, more persistent cousin of jackpotHeat - built specifically
+// by hearting (rate-up) tiles, "more hearts provided on different or
+// same vids, more chance of rewards." Builds the same whether those
+// hearts land on one tile repeatedly or spread across several (unlike
+// comboMultiplier, which is specifically about rapid-fire same-tile
+// rating). Feeds into the same odds/tier-bias machinery as jackpotHeat,
+// plus two effects of its own: a direct (if small) chance to trigger a
+// spiral outright, and a chance of a little speed kick right on the
+// tile that was just hearted - see rateScreen and
+// maybeTriggerSpiralFromHearts below.
+let heartMultiplier = 0;
+const HEART_MULT_MAX = 5;
+const HEART_MULT_DECAY_MS = 6000;
+const HEART_MULT_DECAY_PER_TICK = 0.1;
+
+function bumpHeartMultiplier() {
+  heartMultiplier = Math.min(HEART_MULT_MAX, heartMultiplier + 1);
+}
+setInterval(() => { heartMultiplier = Math.max(0, heartMultiplier - HEART_MULT_DECAY_PER_TICK); }, HEART_MULT_DECAY_MS);
+
 function pickJackpotTier() {
-  const heat = jackpotHeat;
+  const heat = jackpotHeat + heartMultiplier * 0.3;
   const weighted = JACKPOT_TIERS.map(t => heat <= 0 ? t.weight
     : t.name === 'small' ? t.weight / (1 + heat * 0.5)
     : t.weight * (1 + heat * 0.5));
@@ -1685,7 +1708,8 @@ function oddsMultiplier() {
     * (isGoldenHourActive() ? GOLDEN_HOUR_MULTIPLIER : 1)
     * (isSurgeActive() ? SURGE_MULTIPLIER : 1)
     * comboMultiplier()
-    * (1 + jackpotHeat * 0.15); // catch streaks/bonus taps nudge this up too, see bumpJackpotHeat
+    * (1 + jackpotHeat * 0.15) // catch streaks/bonus taps nudge this up too, see bumpJackpotHeat
+    * (1 + heartMultiplier * 0.08); // hearts nudge it too, see bumpHeartMultiplier
   return Math.min(3, raw);
 }
 
@@ -2082,7 +2106,18 @@ function pace(v, quiet) {
 }
 function vec(k, v) { fetch('/api/vector?key=' + k + '&val=' + v); }
 function rateScreen(i, dir, btn) {
-  if (dir === 'up') claimBonusTile(i);
+  if (dir === 'up') {
+    claimBonusTile(i);
+    bumpHeartMultiplier();
+    // A little bonus XP and an occasional speed kick right on the
+    // hearted tile, both scaling with the multiplier - "more hearts...
+    // more chance of rewards" landing on the heart itself, not just the
+    // odds of other systems elsewhere.
+    if (heartMultiplier > 1) awardXp(Math.round(heartMultiplier));
+    if (Math.random() < 0.10 + heartMultiplier * 0.07) {
+      burstTileSpeed(i, 1500, 1.05 + heartMultiplier * 0.02, 1.15 + heartMultiplier * 0.03);
+    }
+  }
   const mult = registerCombo();
   awardXp(Math.round(RATE_XP_BASE * mult));
   incrementQuestMetric('rates', 1);
@@ -2220,7 +2255,7 @@ const CHASE_PROBABILITY = 0.22;
 const CHASE_FLASH_START_MS = 1800;
 const CHASE_FLASH_MIN_MS = 900;
 const CHASE_HOP_DELAY_MS = 450;
-const CHASE_CAUGHT_CELEBRATION_MS = 900;
+const CHASE_CAUGHT_CELEBRATION_MS = 500; // matches .chase-caught-flash's CSS duration
 const CHASE_CAUGHT_MAX_PULSES = 5;
 let chaseFlashTileIndex = -1;
 let chaseFlashExpireAt = 0;
@@ -2335,8 +2370,8 @@ let spiralListPromise = null;
 let spiralActive = false;
 const SPIRAL_HOLD_MIN_MS = 30000; // 30s - 60s total hold
 const SPIRAL_HOLD_RANGE_MS = 30000;
-const SPIRAL_FADE_MIN_MS = 5000; // 5s - 8.5s fade, same duration in and out
-const SPIRAL_FADE_RANGE_MS = 3500;
+const SPIRAL_FADE_MIN_MS = 6000; // 6s - 10s fade (~8s typical), same duration in and out
+const SPIRAL_FADE_RANGE_MS = 4000;
 
 function fetchSpiralList() {
   if (spiralList) return Promise.resolve(spiralList);
@@ -2360,14 +2395,14 @@ function maybeTriggerSpiralOverlay() {
     el.loop = true;
     // Belt-and-suspenders alongside the HTML `loop` attribute - these
     // source clips typically only run a few seconds, well short of the
-    // 7-13s hold below, so if `loop` ever fails to restart playback for
+    // 30-60s hold below, so if `loop` ever fails to restart playback for
     // any reason the spiral would just freeze on its last frame for the
     // rest of the hold instead of looping for as long as it's up.
     el.onended = () => { el.currentTime = 0; el.play().catch(() => {}); };
     el.src = pick.base + pick.path;
     el.currentTime = 0;
     el.play().catch(() => {});
-    const targetOpacity = (0.15 + Math.random() * 0.30).toFixed(2); // 15% - 45%
+    const targetOpacity = (0.15 + Math.random() * 0.25).toFixed(2); // 15% - 40%
     const fadeMs = SPIRAL_FADE_MIN_MS + Math.random() * SPIRAL_FADE_RANGE_MS; // same fade both ways
     el.style.transition = 'opacity ' + (fadeMs / 1000).toFixed(2) + 's ease-in-out';
     requestAnimationFrame(() => { el.style.opacity = targetOpacity; });
@@ -2378,6 +2413,20 @@ function maybeTriggerSpiralOverlay() {
     }, holdMs);
   });
 }
+
+// Heart multiplier gives spirals a direct path of their own, not just
+// the mega+/milestone jackpot gate above - "more hearts... more chance
+// of [a] Spiral." Small per-check odds (4% per point of multiplier,
+// checked every 20s) since a spiral now runs a genuinely long time
+// (30-60s hold); maybeTriggerSpiralOverlay's own spiralActive guard
+// still applies, so this never interrupts one already running.
+const HEART_SPIRAL_CHECK_MS = 20000;
+
+function maybeTriggerSpiralFromHearts() {
+  if (heartMultiplier <= 0 || spiralActive) return;
+  if (Math.random() < 0.04 * heartMultiplier) maybeTriggerSpiralOverlay();
+}
+setInterval(maybeTriggerSpiralFromHearts, HEART_SPIRAL_CHECK_MS);
 
 // Mystery tile: a pure curiosity-gap hit, distinct from the loss-aversion
 // and reward mechanics above - a tile briefly blurs under a "?" overlay
