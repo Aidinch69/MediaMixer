@@ -253,7 +253,13 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    only transform, not `left`) while it's ready to pull. */
 #spin-btn{position:relative;overflow:hidden;padding:14px 26px;font-size:.95rem;font-weight:bold;letter-spacing:.3px;color:#fff;background:linear-gradient(180deg,#3a1d5c,#1d0f38);border:2px solid #ffd43b;border-radius:28px;box-shadow:0 4px 18px rgba(0,0,0,.55),0 0 16px rgba(255,212,59,.3);transition:transform .1s,box-shadow .2s;min-width:118px}
 #spin-btn:active{transform:scale(.95)}
-#spin-btn:disabled{opacity:.5;cursor:default;box-shadow:none}
+/* No opacity dimming while disabled (rolling, or cooling down) - it was
+   washing out the reel's own cycling text right as it was meant to be
+   exciting, and stayed that way for the whole cooldown. The countdown/
+   result text itself already says "not ready yet," and .spin-ready
+   (not :disabled) is what actually controls the idle glow, so dropping
+   this doesn't make a cooling-down button look falsely ready. */
+#spin-btn:disabled{cursor:default;box-shadow:none}
 #spin-btn.spin-ready::after{content:'';position:absolute;top:0;left:0;width:40%;height:100%;background:linear-gradient(115deg,transparent,rgba(255,255,255,.45),transparent);transform:translateX(-150%);animation:spin-shimmer 2.6s ease-in-out infinite;pointer-events:none}
 @keyframes spin-shimmer{0%{transform:translateX(-150%)}100%{transform:translateX(350%)}}
 #spin-btn.spin-ready{animation:spin-ready-pulse 1.6s ease-in-out infinite}

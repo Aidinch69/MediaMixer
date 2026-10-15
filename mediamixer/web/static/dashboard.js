@@ -43,6 +43,22 @@ const TUNING_DEFAULTS = {
   COLOR_RUSH_PROBABILITY: 0.06,
   COLOR_SPLASH_CHECK_MS: 25000,
   COLOR_SPLASH_PROBABILITY: 0.12,
+  RATE_XP_BASE: 2,
+  CHASE_XP_BASE: 5,
+  CHASE_XP_PER_CATCH: 2,
+  CHASE_HOP_DELAY_MS: 450,
+  CHASE_CAUGHT_MAX_PULSES: 3,
+  DUE_AURA_THRESHOLD_MS: 45000,
+  DUE_AURA_MIN_HOLD_MS: 15000,
+  MYSTERY_TILE_CHECK_MS: 30000,
+  MYSTERY_TILE_PROBABILITY: 0.15,
+  MYSTERY_TILE_DURATION_MS: 1600,
+  AMBIENT_SPAWN_SEPARATION_MS: 2500,
+  JACKPOT_HEAT_DECAY_PER_TICK: 0.08,
+  HEART_MULT_DECAY_PER_TICK: 0.1,
+  GOLDEN_HOUR_MULTIPLIER: 2.5,
+  SURGE_MULTIPLIER: 2.0,
+  SPIN_COOLDOWN_MS: 45000,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -85,9 +101,10 @@ function restartAllTunableIntervals() {
   startTunableInterval('CHASE_CHECK_MS', maybeTriggerChase);
   startTunableInterval('COLOR_RUSH_CHECK_MS', maybeTriggerColorRush);
   startTunableInterval('COLOR_SPLASH_CHECK_MS', maybeTriggerColorSplashPiece);
+  startTunableInterval('MYSTERY_TILE_CHECK_MS', maybeTriggerMysteryTile);
 }
 
-const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS'];
+const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS', 'MYSTERY_TILE_CHECK_MS'];
 
 function setTuning(key, value) {
   TUNING[key] = value;
@@ -129,10 +146,12 @@ function restoreTuningBackup() {
 const TUNING_GROUPS = [
   { label: 'Spiral', keys: ['SPIRAL_OPACITY_MIN', 'SPIRAL_OPACITY_RANGE', 'SPIRAL_HOLD_MIN_MS', 'SPIRAL_HOLD_RANGE_MS', 'SPIRAL_FADE_MIN_MS', 'SPIRAL_FADE_RANGE_MS', 'SPIRAL_BREATHE_PROBABILITY', 'SPIRAL_BREATHE_INTERVAL_MS'] },
   { label: 'Sealed Tile', keys: ['SEALED_PROBABILITY', 'SEALED_CHECK_MS', 'SEALED_DURATION_MS'] },
-  { label: 'Chase', keys: ['CHASE_PROBABILITY', 'CHASE_CHECK_MS', 'CHASE_FLASH_START_MS', 'CHASE_FLASH_MIN_MS'] },
+  { label: 'Chase', keys: ['CHASE_PROBABILITY', 'CHASE_CHECK_MS', 'CHASE_FLASH_START_MS', 'CHASE_FLASH_MIN_MS', 'CHASE_HOP_DELAY_MS', 'CHASE_CAUGHT_MAX_PULSES', 'CHASE_XP_BASE', 'CHASE_XP_PER_CATCH'] },
   { label: 'Bonus Window', keys: ['BONUS_WINDOW_PROBABILITY', 'BONUS_WINDOW_CHECK_MS', 'BONUS_WINDOW_DURATION_MS'] },
   { label: 'Color Rush / Splash', keys: ['COLOR_RUSH_PROBABILITY', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_PROBABILITY', 'COLOR_SPLASH_CHECK_MS'] },
-  { label: 'Multipliers & XP', keys: ['JACKPOT_HEAT_MAX', 'HEART_MULT_MAX', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'XP_PER_BONUS_CLAIM'] },
+  { label: 'Mystery Tile & Due-Aura', keys: ['MYSTERY_TILE_PROBABILITY', 'MYSTERY_TILE_CHECK_MS', 'MYSTERY_TILE_DURATION_MS', 'DUE_AURA_THRESHOLD_MS', 'DUE_AURA_MIN_HOLD_MS'] },
+  { label: 'Spin & Spawning', keys: ['SPIN_COOLDOWN_MS', 'AMBIENT_SPAWN_SEPARATION_MS'] },
+  { label: 'Multipliers & XP', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
 ];
 const TUNING_META = {
   XP_PER_BONUS_CLAIM: { label: 'Bonus-tap XP', unit: 'n', min: 5, max: 50, step: 1 },
@@ -163,6 +182,22 @@ const TUNING_META = {
   COLOR_RUSH_PROBABILITY: { label: 'Color Rush odds', unit: 'pct', min: 0, max: 0.3, step: 0.01 },
   COLOR_SPLASH_CHECK_MS: { label: 'Color splash check interval', unit: 's', min: 5000, max: 60000, step: 1000 },
   COLOR_SPLASH_PROBABILITY: { label: 'Color splash odds', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
+  CHASE_HOP_DELAY_MS: { label: 'Chase hop delay (after a catch)', unit: 's', min: 100, max: 2000, step: 50 },
+  CHASE_CAUGHT_MAX_PULSES: { label: 'Chase catch pulses (cap)', unit: 'n', min: 1, max: 8, step: 1 },
+  CHASE_XP_BASE: { label: 'Chase catch XP (base)', unit: 'n', min: 1, max: 30, step: 1 },
+  CHASE_XP_PER_CATCH: { label: 'Chase catch XP (added per streak)', unit: 'n', min: 0, max: 10, step: 1 },
+  MYSTERY_TILE_PROBABILITY: { label: 'Mystery-tile odds', unit: 'pct', min: 0, max: 0.6, step: 0.01 },
+  MYSTERY_TILE_CHECK_MS: { label: 'Mystery-tile check interval', unit: 's', min: 5000, max: 90000, step: 1000 },
+  MYSTERY_TILE_DURATION_MS: { label: 'Mystery-tile duration', unit: 's', min: 500, max: 5000, step: 100 },
+  DUE_AURA_THRESHOLD_MS: { label: 'Due-aura idle threshold', unit: 's', min: 10000, max: 180000, step: 5000 },
+  DUE_AURA_MIN_HOLD_MS: { label: 'Due-aura min hold (before handoff)', unit: 's', min: 2000, max: 60000, step: 1000 },
+  SPIN_COOLDOWN_MS: { label: 'Spin cooldown', unit: 's', min: 5000, max: 120000, step: 5000 },
+  AMBIENT_SPAWN_SEPARATION_MS: { label: 'Ambient-spawn separation', unit: 's', min: 0, max: 10000, step: 250 },
+  JACKPOT_HEAT_DECAY_PER_TICK: { label: 'Jackpot-heat decay (per 5s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
+  HEART_MULT_DECAY_PER_TICK: { label: 'Heart-multiplier decay (per 6s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
+  GOLDEN_HOUR_MULTIPLIER: { label: 'Golden Hour odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
+  SURGE_MULTIPLIER: { label: 'Surge odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
+  RATE_XP_BASE: { label: 'Rate (👍/👎) base XP', unit: 'n', min: 1, max: 20, step: 1 },
 };
 
 function formatTuningValue(key, value) {
@@ -170,7 +205,7 @@ function formatTuningValue(key, value) {
   if (meta.unit === 'pct') return Math.round(value * 100) + '%';
   if (meta.unit === 's') return (value / 1000).toFixed(1) + 's';
   if (meta.unit === 'x') return 'x' + (Math.round(value * 10) / 10);
-  return String(value);
+  return String(Math.round(value * 1000) / 1000); // avoids stray floating-point tails like 0.07999999999999999
 }
 
 // Builds the whole tab from TUNING_GROUPS/TUNING_META rather than hand-
@@ -1189,15 +1224,13 @@ function tickAnticipationMeter() {
 
 // "Due" tile aura: tiles that haven't been rated in a while get a faint,
 // slow pulsing aura - leans into the (not literally true) sense that a
-// quiet tile is "due," drawing the eye back to it.
-const DUE_AURA_THRESHOLD_MS = 45000;
-// Once a tile is picked, it holds that spot for at least this long before
+// quiet tile is "due," drawing the eye back to it. Once a tile is picked,
+// it holds that spot for at least TUNING.DUE_AURA_MIN_HOLD_MS before
 // another tile is allowed to take over - without this, recomputing "most
 // idle" fresh every single tick could hand the glow to a different tile
 // before you'd even gotten to the one it was just on, which read as
 // chasing a moving target around the screen rather than something you
 // could actually act on.
-const DUE_AURA_MIN_HOLD_MS = 15000;
 let tileLastRatedAt = {};
 
 let dueAuraTileIndex = -1;
@@ -1209,7 +1242,7 @@ function tickDueAura() {
   // heavy enough to visibly stall video playback across the whole screen.
   const now = Date.now();
   let mostIdleTile = -1;
-  let mostIdleMs = DUE_AURA_THRESHOLD_MS;
+  let mostIdleMs = TUNING.DUE_AURA_THRESHOLD_MS;
   tileElements.forEach((tile, i) => {
     if (!tile) return;
     const idleMs = now - (tileLastRatedAt[i] || sessionStartedAt);
@@ -1221,8 +1254,8 @@ function tickDueAura() {
 
   if (dueAuraTileIndex >= 0 && mostIdleTile !== dueAuraTileIndex) {
     const currentIdleMs = now - (tileLastRatedAt[dueAuraTileIndex] || sessionStartedAt);
-    const currentStillQualifies = currentIdleMs > DUE_AURA_THRESHOLD_MS;
-    if (currentStillQualifies && now - dueAuraSetAt < DUE_AURA_MIN_HOLD_MS) {
+    const currentStillQualifies = currentIdleMs > TUNING.DUE_AURA_THRESHOLD_MS;
+    if (currentStillQualifies && now - dueAuraSetAt < TUNING.DUE_AURA_MIN_HOLD_MS) {
       mostIdleTile = dueAuraTileIndex; // not time to hand it off yet
     }
   }
@@ -1330,7 +1363,6 @@ setInterval(updateModeBadge, 1000);
 // goes up, so coming back later always has somewhere to pick up from.
 const XP_STORAGE_KEY = 'mm_xp_state';
 const XP_PER_TIER = { small: 10, medium: 20, mega: 40, milestone: 60 };
-const RATE_XP_BASE = 2;
 const PRESTIGE_LEVEL_CAP = 20;
 let xpTotal = 0;
 let xpLevel = 1;
@@ -1550,12 +1582,11 @@ let totalJackpotCount = 0;
 // weighted pick away from "small" and toward "medium"/"mega" while hot).
 let jackpotHeat = 0;
 const JACKPOT_HEAT_DECAY_MS = 5000;
-const JACKPOT_HEAT_DECAY_PER_TICK = 0.08;
 
 function bumpJackpotHeat(amount) {
   jackpotHeat = Math.min(TUNING.JACKPOT_HEAT_MAX, jackpotHeat + amount);
 }
-setInterval(() => { jackpotHeat = Math.max(0, jackpotHeat - JACKPOT_HEAT_DECAY_PER_TICK); }, JACKPOT_HEAT_DECAY_MS);
+setInterval(() => { jackpotHeat = Math.max(0, jackpotHeat - TUNING.JACKPOT_HEAT_DECAY_PER_TICK); }, JACKPOT_HEAT_DECAY_MS);
 
 // ---- Heart multiplier ----
 // A slower, more persistent cousin of jackpotHeat - built specifically
@@ -1570,12 +1601,11 @@ setInterval(() => { jackpotHeat = Math.max(0, jackpotHeat - JACKPOT_HEAT_DECAY_P
 // maybeTriggerSpiralFromHearts below.
 let heartMultiplier = 0;
 const HEART_MULT_DECAY_MS = 6000;
-const HEART_MULT_DECAY_PER_TICK = 0.1;
 
 function bumpHeartMultiplier() {
   heartMultiplier = Math.min(TUNING.HEART_MULT_MAX, heartMultiplier + 1);
 }
-setInterval(() => { heartMultiplier = Math.max(0, heartMultiplier - HEART_MULT_DECAY_PER_TICK); }, HEART_MULT_DECAY_MS);
+setInterval(() => { heartMultiplier = Math.max(0, heartMultiplier - TUNING.HEART_MULT_DECAY_PER_TICK); }, HEART_MULT_DECAY_MS);
 
 function pickJackpotTier() {
   const heat = jackpotHeat + heartMultiplier * 0.3;
@@ -1875,7 +1905,6 @@ function engagementMultiplier() {
 // it, not to pull anyone in from outside (nothing here notifies off-app).
 const GOLDEN_HOUR_STORAGE_KEY = 'mm_golden_hour';
 const GOLDEN_HOUR_DURATION_MS = 20 * 60 * 1000;
-const GOLDEN_HOUR_MULTIPLIER = 2.5;
 let goldenHourStart = 0;
 
 function scheduleGoldenHour() {
@@ -1915,7 +1944,6 @@ function tickGoldenHour() {
 const SURGE_CHECK_MS = 20000;
 const SURGE_PROBABILITY = 0.08;
 const SURGE_DURATION_RANGE_MS = [60000, 90000];
-const SURGE_MULTIPLIER = 2.0;
 let surgeExpireAt = 0;
 
 function maybeTriggerSurge() {
@@ -1945,8 +1973,8 @@ function oddsMultiplier() {
   // frequent playback lag. Capped so the boosts still stack and feel
   // noticeable without letting the triggers run back-to-back.
   const raw = engagementMultiplier()
-    * (isGoldenHourActive() ? GOLDEN_HOUR_MULTIPLIER : 1)
-    * (isSurgeActive() ? SURGE_MULTIPLIER : 1)
+    * (isGoldenHourActive() ? TUNING.GOLDEN_HOUR_MULTIPLIER : 1)
+    * (isSurgeActive() ? TUNING.SURGE_MULTIPLIER : 1)
     * comboMultiplier()
     * (1 + jackpotHeat * 0.15) // catch streaks/bonus taps nudge this up too, see bumpJackpotHeat
     * (1 + heartMultiplier * 0.08) // hearts nudge it too, see bumpHeartMultiplier
@@ -2439,7 +2467,7 @@ function rateScreen(i, dir, btn) {
     }
   }
   const mult = registerCombo();
-  awardXp(Math.round(RATE_XP_BASE * mult));
+  awardXp(Math.round(TUNING.RATE_XP_BASE * mult));
   incrementQuestMetric('rates', 1);
   tileLastRatedAt[i] = Date.now();
   pulseTileGlow(i, mult, dir !== 'up');
@@ -2491,12 +2519,11 @@ let bonusWindowTimer = null;
 // at once. Spin's own activateBonusWindow call is deliberate/manual and
 // bypasses this too - only the passive rolls below check it.
 let lastAmbientSpawnAt = 0;
-const AMBIENT_SPAWN_SEPARATION_MS = 2500;
 
 function maybeTriggerBonusWindow() {
   if (!anticipationFxEnabled) return;
   if (bonusWindowTileIndex >= 0 || !tileElements.length) return;
-  if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
+  if (Date.now() - lastAmbientSpawnAt < TUNING.AMBIENT_SPAWN_SEPARATION_MS) return;
   if (Math.random() < TUNING.BONUS_WINDOW_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('bonus')) {
     lastAmbientSpawnAt = Date.now();
     activateBonusWindow(pickAmbientTarget());
@@ -2585,7 +2612,7 @@ let sealedTimer = null;
 function maybeTriggerSealedTile() {
   if (!anticipationFxEnabled) return;
   if (sealedTileIndex >= 0 || !tileElements.length) return;
-  if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
+  if (Date.now() - lastAmbientSpawnAt < TUNING.AMBIENT_SPAWN_SEPARATION_MS) return;
   if (Math.random() < TUNING.SEALED_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('sealed')) {
     lastAmbientSpawnAt = Date.now();
     activateSealedTile(pickAmbientTarget());
@@ -2683,9 +2710,7 @@ startTunableInterval('SEALED_CHECK_MS', maybeTriggerSealedTile);
 // static glow) and the due-aura (idle-driven, no time pressure) - this
 // one is pure reflexes/chase, asked for as "another way to interact...
 // makes them want to chase something."
-const CHASE_HOP_DELAY_MS = 450;
 const CHASE_CAUGHT_CELEBRATION_MS = 320; // matches .chase-caught-flash's CSS duration
-const CHASE_CAUGHT_MAX_PULSES = 3; // capped lower - at 5 pulses it was still visibly going a few seconds after a fast streak
 let chaseFlashTileIndex = -1;
 let chaseFlashExpireAt = 0;
 let chaseFlashTimer = null;
@@ -2703,7 +2728,7 @@ const CHASE_NEAR_MISS_GRACE_MS = 700;
 function maybeTriggerChase() {
   if (!anticipationFxEnabled) return;
   if (chaseFlashTileIndex >= 0 || !tileElements.length) return;
-  if (Date.now() - lastAmbientSpawnAt < AMBIENT_SPAWN_SEPARATION_MS) return;
+  if (Date.now() - lastAmbientSpawnAt < TUNING.AMBIENT_SPAWN_SEPARATION_MS) return;
   if (Math.random() < TUNING.CHASE_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('chase')) {
     lastAmbientSpawnAt = Date.now();
     activateChaseFlash(pickAmbientTarget());
@@ -2789,7 +2814,7 @@ function catchChaseFlash(idx) {
   // doesn't turn into an absurdly long animation) - 1 catch is a single
   // pop, a chain of 3 is three quick pops in a row, building visually
   // the same way the chain count itself builds.
-  const pulses = Math.min(chaseChain, CHASE_CAUGHT_MAX_PULSES);
+  const pulses = Math.min(chaseChain, TUNING.CHASE_CAUGHT_MAX_PULSES);
   const el = tileClaimEls[idx];
   if (el) {
     el.style.animationIterationCount = pulses;
@@ -2811,7 +2836,7 @@ function catchChaseFlash(idx) {
   const chainSpeedExtra = chainForSpeed * (0.05 + Math.random() * 0.05);
   burstTileSpeed(idx, CHASE_CAUGHT_CELEBRATION_MS * pulses, 1.05 + chainSpeedExtra, 1.15 + chainSpeedExtra);
   const catchMult = hiddenMultiplierFactor();
-  awardXp((5 + chaseChain * 2) * catchMult);
+  awardXp((TUNING.CHASE_XP_BASE + chaseChain * TUNING.CHASE_XP_PER_CATCH) * catchMult);
   incrementQuestMetric('bonuses', 1);
   bumpJackpotHeat(chaseChain * 0.4); // longer chains nudge the odds toward bigger jackpots - see bumpJackpotHeat
   const chainTag = catchMult > 1 ? ' (hidden x' + catchMult + '!)' : '';
@@ -2823,7 +2848,7 @@ function catchChaseFlash(idx) {
   setTimeout(() => {
     if (!tileElements.length) { chaseChain = 0; return; }
     activateChaseFlash(pickAmbientTarget(idx));
-  }, CHASE_HOP_DELAY_MS);
+  }, TUNING.CHASE_HOP_DELAY_MS);
 }
 
 // ---- Spiral overlay ----
@@ -3011,7 +3036,23 @@ function fireDiscoTilePulse(durationMs, indexes) {
     el.classList.add('disco-pulse');
   });
   setTimeout(() => {
-    targets.forEach(i => { const el = tileGlowEls[i]; if (el) { el.classList.remove('disco-pulse'); el.style.animationDelay = ''; } });
+    targets.forEach(i => {
+      const el = tileGlowEls[i];
+      if (!el) return;
+      // Just removing the class snapped opacity straight back to
+      // whatever the element's other classes dictate (usually 0) the
+      // instant the animation stopped - jarring. Freeze the animation's
+      // current opacity as an explicit inline value first, then
+      // transition that down, so the pulse actually fades away.
+      const current = getComputedStyle(el).opacity;
+      el.classList.remove('disco-pulse');
+      el.style.animationDelay = '';
+      el.style.transition = 'opacity .6s ease';
+      el.style.opacity = current;
+      void el.offsetWidth; // force a reflow so the transition reliably engages
+      el.style.opacity = '0';
+      setTimeout(() => { el.style.transition = ''; el.style.opacity = ''; }, 650);
+    });
   }, durationMs);
 }
 
@@ -3079,21 +3120,18 @@ function fireColorSplashPiece(pieceOverride, tileIdx) {
 // Mystery tile: a pure curiosity-gap hit, distinct from the loss-aversion
 // and reward mechanics above - a tile briefly blurs under a "?" overlay
 // and un-blurs on its own, nothing to act on and no payoff behind it.
-const MYSTERY_TILE_CHECK_MS = 30000;
-const MYSTERY_TILE_PROBABILITY = 0.15;
-const MYSTERY_TILE_DURATION_MS = 1600;
 let mysteryTileIndex = -1;
 
 function maybeTriggerMysteryTile() {
   if (!anticipationFxEnabled) return;
   if (mysteryTileIndex >= 0 || !tileElements.length) return;
-  if (Math.random() >= MYSTERY_TILE_PROBABILITY) return;
+  if (Math.random() >= TUNING.MYSTERY_TILE_PROBABILITY) return;
   const idx = Math.floor(Math.random() * tileElements.length);
   const tile = tileElements[idx];
   if (!tile) return;
   mysteryTileIndex = idx;
   tile.classList.add('mystery-tile');
-  setTimeout(() => clearMysteryTile(idx), MYSTERY_TILE_DURATION_MS);
+  setTimeout(() => clearMysteryTile(idx), TUNING.MYSTERY_TILE_DURATION_MS);
 }
 
 // Ambient color-breathe: purely decorative, no mechanic behind it at
@@ -3164,7 +3202,6 @@ function nextAudio() { fetch('/api/next_audio').then(() => toast('⏭️ Audio S
 // small, occasionally a full jackpot) is deliberate - a guaranteed win
 // every time would stop feeling like a pull and just become a button
 // that gives xp.
-const SPIN_COOLDOWN_MS = 45000;
 let spinReadyAt = 0;
 
 // Shows the outcome directly on the button itself for a couple seconds -
@@ -3184,7 +3221,10 @@ function showSpinResult(text) {
 
 const SPIN_ROLL_DELAY_MS = 900; // was 500 - needs enough room for the reel below to actually read as cycling
 const SPIN_REEL_TICK_MS = 110;
-const SPIN_REEL_SYMBOLS = ['🎰', '✨', '🎉', '💨', '😤', '🎉'];
+// Words alongside the icons, not just the icons alone - names each
+// actual possible landing state so the cycling reads as "here's what
+// you could get" instead of an ambiguous string of emoji.
+const SPIN_REEL_SYMBOLS = ['🎰 JACKPOT', '😤 SO CLOSE', '✨ BONUS', '🎉 XP', '💨 NOTHING'];
 
 function spin() {
   const now = Date.now();
@@ -3192,7 +3232,7 @@ function spin() {
     toast('🎰 Still cooling down (' + Math.ceil((spinReadyAt - now) / 1000) + 's)');
     return;
   }
-  spinReadyAt = now + SPIN_COOLDOWN_MS;
+  spinReadyAt = now + TUNING.SPIN_COOLDOWN_MS;
   const theater = document.getElementById('theater-box');
   teaseNextTheme(theater); // quick visual "tick" regardless of outcome
 
@@ -3281,7 +3321,7 @@ setInterval(maybeTriggerSurge, SURGE_CHECK_MS);
 setInterval(tickSurgeBadge, 5000);
 setInterval(tickAnticipationMeter, 1000);
 setInterval(tickDueAura, 5000);
-setInterval(maybeTriggerMysteryTile, MYSTERY_TILE_CHECK_MS);
+startTunableInterval('MYSTERY_TILE_CHECK_MS', maybeTriggerMysteryTile);
 setInterval(maybeTriggerAmbientPulse, AMBIENT_PULSE_CHECK_MS);
 
 // Session-opening primer: guarantee a near-miss within the first ~15-25s
