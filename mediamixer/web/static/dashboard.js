@@ -1400,15 +1400,27 @@ function updateLevelUi() {
     const nextCeil = xpForLevel(xpLevel);
     const pct = Math.min(100, Math.round(((xpTotal - curFloor) / (nextCeil - curFloor)) * 100));
     const stars = prestigeCount > 0 ? '★'.repeat(Math.min(prestigeCount, 5)) + ' ' : '';
-    el.innerText = stars + 'LV ' + xpLevel + ' · ' + xpTotal + 'xp (' + pct + '% to ' + (xpLevel + 1) + ')';
+    const legacyTag = prestigeCount > 0 ? ' +' + Math.round((legacyBonusMultiplier() - 1) * 100) + '%xp' : '';
+    el.innerText = stars + 'LV ' + xpLevel + ' · ' + xpTotal + 'xp (' + pct + '% to ' + (xpLevel + 1) + ')' + legacyTag;
   }
   const btn = document.getElementById('prestige-btn');
   if (btn) btn.style.display = xpLevel >= PRESTIGE_LEVEL_CAP ? 'inline-block' : 'none';
 }
 
+// Prestige Legacy Carry-over: each star is a permanent +5% XP bonus (capped
+// at 50% / 10 stars) rather than prestiging being a pure reset - "trading
+// back to 0" should leave something behind that keeps paying off, not just
+// a cosmetic star.
+const LEGACY_BONUS_PER_STAR = 0.05;
+const LEGACY_BONUS_CAP = 0.5;
+
+function legacyBonusMultiplier() {
+  return 1 + Math.min(prestigeCount, 10) * LEGACY_BONUS_PER_STAR;
+}
+
 function awardXp(amount) {
   const beforeLevel = xpLevel;
-  xpTotal += amount;
+  xpTotal += Math.round(amount * legacyBonusMultiplier());
   recomputeLevel();
   updateLevelUi();
   saveXpState();
@@ -1425,12 +1437,16 @@ function prestige() {
   recomputeLevel();
   updateLevelUi();
   saveXpState();
-  toast('🌟 Prestige ' + prestigeCount + '!');
+  toast('🌟 Prestige ' + prestigeCount + '! +' + Math.round(LEGACY_BONUS_PER_STAR * 100) + '% permanent XP');
+  checkTrophies();
 }
 
-// Rating combo: rating clips in quick succession builds a short-lived
-// multiplier (capped 3x) on XP and on near-miss/bonus-window odds, so
-// bursts of activity feel more electric than idly spaced-out clicks.
+// Combo Chain Mechanics: any rewarding action in quick succession - rating,
+// a chase catch, a bonus claim, a non-empty sealed tile - builds one shared
+// short-lived multiplier (capped 3x) on XP and on near-miss/bonus-window
+// odds, so a burst of activity feels electric regardless of which mechanic
+// it's coming through, instead of each mechanic tracking its own isolated
+// streak that never interacts with the others.
 const COMBO_WINDOW_MS = 4000;
 let comboCount = 0;
 let comboExpireAt = 0;
@@ -1460,6 +1476,8 @@ const STATS_STORAGE_KEY = 'mm_stats';
 let statsBestStreak = 0;
 let statsLifetimeJackpots = 0;
 let statsBestMilestoneSeconds = {};
+let statsLifetimeHearts = 0;
+let statsBestChaseChain = 0;
 
 function loadStats() {
   try {
@@ -1467,7 +1485,12 @@ function loadStats() {
     statsBestStreak = Number(saved.bestStreak) || 0;
     statsLifetimeJackpots = Number(saved.lifetimeJackpots) || 0;
     statsBestMilestoneSeconds = saved.bestMilestoneSeconds || {};
-  } catch (e) { statsBestStreak = 0; statsLifetimeJackpots = 0; statsBestMilestoneSeconds = {}; }
+    statsLifetimeHearts = Number(saved.lifetimeHearts) || 0;
+    statsBestChaseChain = Number(saved.bestChaseChain) || 0;
+  } catch (e) {
+    statsBestStreak = 0; statsLifetimeJackpots = 0; statsBestMilestoneSeconds = {};
+    statsLifetimeHearts = 0; statsBestChaseChain = 0;
+  }
   updateStatsUi();
 }
 
@@ -1475,8 +1498,57 @@ function saveStats() {
   try {
     localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify({
       bestStreak: statsBestStreak, lifetimeJackpots: statsLifetimeJackpots, bestMilestoneSeconds: statsBestMilestoneSeconds,
+      lifetimeHearts: statsLifetimeHearts, bestChaseChain: statsBestChaseChain,
     }));
   } catch (e) {}
+}
+
+// Milestone Trophy: a small permanent trophy case built on top of the
+// personal-best stats above - crossing a threshold once unlocks it forever,
+// persisted separately from the stats themselves so a later stat reset
+// (there isn't one today, but defensively) wouldn't silently re-lock an
+// already-earned trophy.
+const TROPHY_STORAGE_KEY = 'mm_trophies';
+const TROPHY_DEFS = [
+  { id: 'heart10', label: '💗 Fond', desc: '10 lifetime hearts', check: () => statsLifetimeHearts >= 10 },
+  { id: 'heart50', label: '💗 Devoted', desc: '50 lifetime hearts', check: () => statsLifetimeHearts >= 50 },
+  { id: 'heart200', label: '💗 Obsessed', desc: '200 lifetime hearts', check: () => statsLifetimeHearts >= 200 },
+  { id: 'jackpot10', label: '🎰 Lucky', desc: '10 lifetime jackpots', check: () => statsLifetimeJackpots >= 10 },
+  { id: 'jackpot50', label: '🎰 High Roller', desc: '50 lifetime jackpots', check: () => statsLifetimeJackpots >= 50 },
+  { id: 'chain10', label: '🏃 Relentless', desc: 'Chase chain of 10', check: () => statsBestChaseChain >= 10 },
+  { id: 'chain20', label: '🏃 Unstoppable', desc: 'Chase chain of 20', check: () => statsBestChaseChain >= 20 },
+  { id: 'prestige1', label: '🌟 Reborn', desc: 'First Prestige', check: () => prestigeCount >= 1 },
+  { id: 'prestige5', label: '🌟 Legend', desc: 'Prestige 5 times', check: () => prestigeCount >= 5 },
+];
+let unlockedTrophies = {};
+
+function loadTrophies() {
+  try { unlockedTrophies = JSON.parse(localStorage.getItem(TROPHY_STORAGE_KEY) || '{}'); } catch (e) { unlockedTrophies = {}; }
+  updateTrophyUi();
+}
+
+function checkTrophies() {
+  let changed = false;
+  for (const t of TROPHY_DEFS) {
+    if (!unlockedTrophies[t.id] && t.check()) {
+      unlockedTrophies[t.id] = Date.now();
+      changed = true;
+      toast('🏆 Trophy unlocked: ' + t.label + ' (' + t.desc + ')');
+    }
+  }
+  if (changed) {
+    try { localStorage.setItem(TROPHY_STORAGE_KEY, JSON.stringify(unlockedTrophies)); } catch (e) {}
+    updateTrophyUi();
+  }
+}
+
+function updateTrophyUi() {
+  const el = document.getElementById('trophy-case');
+  if (!el) return;
+  el.innerHTML = TROPHY_DEFS.map((t) => {
+    const got = !!unlockedTrophies[t.id];
+    return '<span class="trophy-chip' + (got ? ' earned' : '') + '" title="' + t.desc + '">' + (got ? t.label : '🔒 ???') + '</span>';
+  }).join('');
 }
 
 function recordPayoffStats(streak, milestoneCount) {
@@ -1492,12 +1564,14 @@ function recordPayoffStats(streak, milestoneCount) {
   }
   saveStats();
   updateStatsUi();
+  checkTrophies();
 }
 
 function updateStatsUi() {
   const el = document.getElementById('personal-best');
   if (!el) return;
-  el.innerText = 'Best streak: ' + statsBestStreak + ' · Lifetime jackpots: ' + statsLifetimeJackpots;
+  el.innerText = 'Best streak: ' + statsBestStreak + ' · Lifetime jackpots: ' + statsLifetimeJackpots +
+    ' · Hearts: ' + statsLifetimeHearts + ' · Best chain: ' + statsBestChaseChain;
 }
 
 // Daily quests: a couple of lightweight in-app checklist items, re-rolled
@@ -2457,6 +2531,10 @@ function rateScreen(i, dir, btn) {
   if (dir === 'up') {
     claimBonusTile(i);
     bumpHeartMultiplier();
+    statsLifetimeHearts++;
+    saveStats();
+    updateStatsUi();
+    checkTrophies();
     // A little bonus XP and an occasional speed kick right on the
     // hearted tile, both scaling with the multiplier - "more hearts...
     // more chance of rewards" landing on the heart itself, not just the
@@ -2690,7 +2768,10 @@ function openSealedTile(idx) {
 
   const outcome = rollSealedOutcome();
   const mult = outcome.negative ? 1 : hiddenMultiplierFactor(); // nothing to double on an empty pull
-  const xpAmount = (Array.isArray(outcome.xp) ? Math.round(outcome.xp[0] + Math.random() * (outcome.xp[1] - outcome.xp[0])) : outcome.xp) * mult;
+  // Combo Chain Mechanics - see catchChaseFlash. An empty pull doesn't
+  // feed the chain; only an actual payoff should keep it alive.
+  const chainMult = outcome.negative ? 1 : registerCombo();
+  const xpAmount = (Array.isArray(outcome.xp) ? Math.round(outcome.xp[0] + Math.random() * (outcome.xp[1] - outcome.xp[0])) : outcome.xp) * mult * chainMult;
   const claimEl = tileClaimEls[idx];
   if (claimEl) {
     claimEl.classList.add('sealed-opened');
@@ -2812,6 +2893,11 @@ function catchChaseFlash(idx) {
   clearChaseFlashVisual(idx);
   chaseFlashTileIndex = -1;
   chaseChain++;
+  if (chaseChain > statsBestChaseChain) {
+    statsBestChaseChain = chaseChain;
+    saveStats();
+    checkTrophies();
+  }
   // A quick, punchy cyan-to-gold pop on its own tile-claim-fx element -
   // a different flavor of "that felt good" from the bonus tap's slow
   // rainbow, matching chase's faster, more reflex-driven pace. XP grows
@@ -2844,7 +2930,13 @@ function catchChaseFlash(idx) {
   const chainSpeedExtra = chainForSpeed * (0.05 + Math.random() * 0.05);
   burstTileSpeed(idx, CHASE_CAUGHT_CELEBRATION_MS * pulses, 1.05 + chainSpeedExtra, 1.15 + chainSpeedExtra);
   const catchMult = hiddenMultiplierFactor();
-  awardXp((TUNING.CHASE_XP_BASE + chaseChain * TUNING.CHASE_XP_PER_CATCH) * catchMult);
+  // Combo Chain Mechanics: a catch here feeds the same shared combo meter
+  // rating-in-succession builds (registerCombo/comboMultiplier), so bursts
+  // of activity across different mechanics - not just rapid-fire rating -
+  // ramp the one multiplier together instead of each tracking its own
+  // isolated streak.
+  const chainMult = registerCombo();
+  awardXp((TUNING.CHASE_XP_BASE + chaseChain * TUNING.CHASE_XP_PER_CATCH) * catchMult * chainMult);
   incrementQuestMetric('bonuses', 1);
   bumpJackpotHeat(chaseChain * 0.4); // longer chains nudge the odds toward bigger jackpots - see bumpJackpotHeat
   const chainTag = catchMult > 1 ? ' (hidden x' + catchMult + '!)' : '';
@@ -3175,7 +3267,8 @@ function triggerMiniPayoff(idx) {
   playChimeSound(0.7);
   burstExtraFloaters(0.5);
   const mult = hiddenMultiplierFactor();
-  const xp = TUNING.XP_PER_BONUS_CLAIM * mult;
+  const chainMult = registerCombo(); // Combo Chain Mechanics - see catchChaseFlash
+  const xp = TUNING.XP_PER_BONUS_CLAIM * mult * chainMult;
   const tag = mult > 1 ? ' (hidden x' + mult + '!)' : '';
   awardXp(xp);
   incrementQuestMetric('bonuses', 1);
@@ -3354,6 +3447,7 @@ window.onload = () => {
   loadXpState();
   scheduleGoldenHour();
   loadStats();
+  loadTrophies();
   loadQuests();
   lastAnyPayoffAt = sessionStartedAt;
   overlayEl = document.getElementById('overlay-audio');

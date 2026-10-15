@@ -350,6 +350,9 @@ h2{font-size:1.25rem;border-bottom:none;padding-bottom:0;display:flex;justify-co
 .panel-tab[data-tab="more"] h3{color:#b399ff}
 .panel-tab[data-tab="tuning"] h3{color:#8fffb3}
 .metric{background:#0e081f;padding:10px;border-radius:8px;border:1px solid #221435;font-size:.82rem;display:flex;flex-direction:column;gap:4px}
+.trophy-case{display:flex;flex-wrap:wrap;gap:6px;background:#0e081f;padding:10px;border-radius:8px;border:1px solid #221435}
+.trophy-chip{font-size:.72rem;padding:4px 8px;border-radius:12px;background:#150a28;border:1px solid #2d163f;color:#5c5c66;white-space:nowrap}
+.trophy-chip.earned{color:#fff;border-color:#b84dff;background:#2a1240}
 .slider{display:flex;flex-direction:column;gap:6px;background:#0e081f;padding:10px;border-radius:8px;border:1px solid #221435}
 label{font-size:.75rem;color:#8e8e93;text-transform:uppercase;font-weight:bold}
 input[type=range]{width:100%;accent-color:#b84dff;cursor:pointer}
