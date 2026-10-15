@@ -37,6 +37,7 @@ let tileElements = [];
 // the tile or video itself, so effects never force a video repaint.
 let tileGlowEls = [];
 let tileAmbientEls = [];
+let tileClaimEls = [];
 let lastFilterStr = [];
 
 // ---- Mosaic Fit (experimental) ----
@@ -1072,6 +1073,31 @@ function updateStatusBar() {
 }
 setInterval(updateStatusBar, 1000);
 
+// A separate, persistent "what mode/jackpot state is this" readout,
+// distinct from the status bar above - that bar cycles through whatever
+// transient prompt has priority right now (a bonus tile, due-aura, a
+// mystery tile...), which could bury "a build-up toward a medium jackpot
+// is running" under some unrelated one-off notice. This stays fixed on
+// the ongoing jackpot context (an active build-up, or a live streak)
+// while the status bar keeps rotating through its own notifications.
+function updateModeBadge() {
+  const el = document.getElementById('mode-badge');
+  if (!el) return;
+  let text = null;
+  if (anticipationActive) {
+    text = pendingServerTier ? ('🎰 ' + pendingServerTier.toUpperCase() + ' building...') : '🎰 Building...';
+  } else if (jackpotStreak > 1 && Date.now() - lastJackpotAt < STREAK_RESET_MS) {
+    text = '🔥 Jackpot streak x' + jackpotStreak;
+  }
+  if (text) {
+    el.innerText = text;
+    el.classList.add('show');
+  } else {
+    el.classList.remove('show');
+  }
+}
+setInterval(updateModeBadge, 1000);
+
 // Leveling/XP: a persistent long-horizon progress bar across sessions,
 // separate from any single jackpot - the point is a number that only ever
 // goes up, so coming back later always has somewhere to pick up from.
@@ -1856,6 +1882,7 @@ function ensureTiles(count) {
   tileElements = [];
   tileGlowEls = [];
   tileAmbientEls = [];
+  tileClaimEls = [];
   lastFilterStr = new Array(count).fill('');
   clearTimeout(bonusWindowTimer);
   bonusWindowTileIndex = -1; // old tile references are about to be discarded
@@ -1867,6 +1894,7 @@ function ensureTiles(count) {
       '<video id="preload-' + i + '" class="preload" preload="auto" muted></video>' +
       '<div class="tile-glow-fx"></div>' +
       '<div class="tile-ambient-fx"><span class="tap-badge">👆 TAP</span><span class="chase-badge">⚡ CATCH</span></div>' +
+      '<div class="tile-claim-fx"></div>' +
       '<div class="tile-overlay">' +
       '<div class="src-label" id="label-' + i + '"></div>' +
       '<div class="tile-actions">' +
@@ -1885,6 +1913,7 @@ function ensureTiles(count) {
     tileElements.push(tile);
     tileGlowEls.push(tile.querySelector('.tile-glow-fx'));
     tileAmbientEls.push(ambientEl);
+    tileClaimEls.push(tile.querySelector('.tile-claim-fx'));
   }
   return true;
 }
@@ -2106,11 +2135,16 @@ const BONUS_CLAIM_CELEBRATION_MS = 2000;
 
 function claimBonusTile(idx) {
   if (idx !== bonusWindowTileIndex || Date.now() >= bonusWindowExpireAt) return;
-  const el = tileAmbientEls[idx];
   clearBonusWindow(idx);
   // A ~2s rainbow pulse on the actual hit, instead of a quick white flash
   // that vanished almost as fast as it appeared - the claim itself gets
   // a real couple seconds to register and feel good, not just a blip.
+  // Lives on its own tile-claim-fx element, not the shared tile-ambient-fx
+  // one - that used to make the rainbow silently lose to due-aura's own
+  // "animation" CSS property whenever both landed on the same tile at
+  // once, leaving only a static white border (the "sometimes it just
+  // goes white" report).
+  const el = tileClaimEls[idx];
   if (el) {
     el.classList.add('bonus-claimed');
     setTimeout(() => el.classList.remove('bonus-claimed'), BONUS_CLAIM_CELEBRATION_MS);
@@ -2145,6 +2179,7 @@ const CHASE_PROBABILITY = 0.22;
 const CHASE_FLASH_START_MS = 1800;
 const CHASE_FLASH_MIN_MS = 900;
 const CHASE_HOP_DELAY_MS = 450;
+const CHASE_CAUGHT_CELEBRATION_MS = 900;
 let chaseFlashTileIndex = -1;
 let chaseFlashExpireAt = 0;
 let chaseFlashTimer = null;
@@ -2207,6 +2242,17 @@ function catchChaseFlash(idx) {
   clearChaseFlashVisual(idx);
   chaseFlashTileIndex = -1;
   chaseChain++;
+  // A quick, punchy cyan-to-gold pop on its own tile-claim-fx element -
+  // a different flavor of "that felt good" from the bonus tap's slow
+  // rainbow, matching chase's faster, more reflex-driven pace. XP grows
+  // a little with the chain (5, 7, 9, ...) same as the catch window
+  // shrinks - both already scale with chaseChain, just needed a visible
+  // payoff to actually register as the chain climbing.
+  const el = tileClaimEls[idx];
+  if (el) {
+    el.classList.add('chase-caught');
+    setTimeout(() => el.classList.remove('chase-caught'), CHASE_CAUGHT_CELEBRATION_MS);
+  }
   playChimeSound(0.5 + Math.min(chaseChain, 5) * 0.08);
   awardXp(5 + chaseChain * 2);
   incrementQuestMetric('bonuses', 1);
@@ -2248,15 +2294,23 @@ function maybeTriggerSpiralOverlay() {
     if (!el) return;
     const pick = items[Math.floor(Math.random() * items.length)];
     spiralActive = true;
+    el.muted = true;
+    el.loop = true;
+    // Belt-and-suspenders alongside the HTML `loop` attribute - these
+    // source clips typically only run a few seconds, well short of the
+    // 7-13s hold below, so if `loop` ever fails to restart playback for
+    // any reason the spiral would just freeze on its last frame for the
+    // rest of the hold instead of looping for as long as it's up.
+    el.onended = () => { el.currentTime = 0; el.play().catch(() => {}); };
     el.src = pick.base + pick.path;
     el.currentTime = 0;
     el.play().catch(() => {});
-    const targetOpacity = (0.15 + Math.random() * 0.35).toFixed(2); // 15% - 50%
+    const targetOpacity = (0.15 + Math.random() * 0.30).toFixed(2); // 15% - 45%
     requestAnimationFrame(() => { el.style.opacity = targetOpacity; });
     const holdMs = SPIRAL_HOLD_MIN_MS + Math.random() * SPIRAL_HOLD_MAX_MS;
     setTimeout(() => {
       el.style.opacity = '0';
-      setTimeout(() => { el.pause(); spiralActive = false; }, SPIRAL_FADE_MS);
+      setTimeout(() => { el.pause(); el.onended = null; spiralActive = false; }, SPIRAL_FADE_MS);
     }, holdMs);
   });
 }

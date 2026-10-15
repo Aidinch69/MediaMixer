@@ -72,12 +72,23 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .chase-badge{display:none;background:rgba(0,10,20,.75);color:#4dd4ff;font-weight:bold;font-size:.85rem;padding:6px 14px;border-radius:20px;border:1px solid rgba(77,212,255,.7);letter-spacing:.5px;animation:tap-badge-bounce .5s ease-in-out infinite}
 .tile-ambient-fx.chase-flash .chase-badge{display:inline-block}
 @keyframes chase-pulse-opacity{0%,100%{opacity:.55}50%{opacity:1}}
+/* One-off claim/catch celebrations live on their own element
+   (.tile-claim-fx), separate from .tile-ambient-fx's continuous states
+   (bonus-window, chase-flash, due-aura). They used to share the ambient
+   element, and since "animation" is a single CSS property, whichever
+   class's rule happened to be declared later in this file won entirely
+   whenever two classes landed on the same tile at once (e.g. a due-aura
+   tile getting bonus-claimed) - silently killing the rainbow/catch
+   animation and leaving only its static border color, which read as
+   "sometimes it just goes white." A dedicated element sidesteps the
+   whole class of bug instead of trying to exclude every combination. */
+.tile-claim-fx{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;will-change:opacity,transform;border-radius:inherit;box-sizing:border-box}
 /* The actual hit, right as a bonus tile is tapped - a bright pop that
    cycles through a full rainbow over a genuine ~2s instead of vanishing
    almost as fast as it appeared. A real couple seconds of "that felt
    good," paired with a brief speed burst on the tile itself
    (burstTileSpeed) for some kinetic payoff alongside the glow. */
-.tile-ambient-fx.bonus-claimed{opacity:1;border:5px solid rgba(255,255,255,.95);border-radius:inherit;box-sizing:border-box;animation:bonus-claim-flash 2s ease-out forwards}
+.tile-claim-fx.bonus-claimed{opacity:1;border:5px solid rgba(255,255,255,.95);animation:bonus-claim-flash 2s ease-out forwards}
 @keyframes bonus-claim-flash{
   0%{opacity:1;border-color:rgba(255,255,255,.95);transform:scale(1.06)}
   10%{opacity:1;border-color:rgba(255,212,59,1);transform:scale(1)}
@@ -87,19 +98,38 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
   82%{opacity:.5;border-color:rgba(110,255,170,.7)}
   100%{opacity:0;border-color:rgba(110,255,170,.5);transform:scale(1)}
 }
-.tile-ambient-fx.due-aura{opacity:1;border-radius:inherit;animation:due-pulse-opacity 3s ease-in-out infinite,due-aura-color-cycle 9s linear infinite}
+/* The catch, distinct from the bonus claim's slow rainbow - chase is a
+   fast reflex game, so its payoff is a quick, punchy cyan-to-gold pop
+   instead of a lingering multi-color fade. */
+.tile-claim-fx.chase-caught{opacity:1;border:5px solid rgba(255,255,255,1);animation:chase-caught-flash .9s ease-out forwards}
+@keyframes chase-caught-flash{
+  0%{opacity:1;border-color:rgba(255,255,255,1);transform:scale(1.12)}
+  30%{opacity:1;border-color:rgba(77,212,255,1);transform:scale(.96)}
+  60%{opacity:.85;border-color:rgba(255,212,59,.95);transform:scale(1.05)}
+  100%{opacity:0;border-color:rgba(255,212,59,.3);transform:scale(1)}
+}
+/* Registering --due-hue as a typed (<number>) custom property is what
+   actually makes this fade smoothly - animating the "background" shorthand
+   directly between two differently-colored gradients mostly just snaps at
+   each keyframe boundary instead of cross-fading, which read as "flashing"
+   rather than fading. The browser interpolates a typed custom property like
+   any other animatable value, then the gradient referencing it via var()
+   is recomputed live every frame. Also missing pointer-events:auto below
+   was the actual bug behind "can't dismiss by tapping the glow" - every
+   other ambient-fx state (bonus-window, chase-flash) sets it explicitly,
+   this one never did, so clicks always fell through to whatever was under
+   it and only the heart/thumb buttons ever reached dismissDueAura. */
+@property --due-hue{syntax:'<number>';inherits:false;initial-value:240}
+.tile-ambient-fx.due-aura{--due-hue:240;opacity:1;border-radius:inherit;pointer-events:auto;cursor:pointer;background:radial-gradient(circle,hsla(var(--due-hue),85%,70%,.6),hsla(var(--due-hue),85%,70%,0) 70%);animation:due-pulse-opacity 3s ease-in-out infinite,due-aura-hue-cycle 16s linear infinite}
 @keyframes due-pulse-opacity{0%,100%{opacity:.3}50%{opacity:.7}}
-/* Cycles through several hues instead of sitting on one fixed purple/blue -
-   a tile that's been waiting a while reads as "something's happening here"
-   rather than always the same static tint. */
-@keyframes due-aura-color-cycle{
-  0%{background:radial-gradient(circle,rgba(120,120,255,.6),rgba(120,120,255,0) 70%)}
-  16.6%{background:radial-gradient(circle,rgba(185,110,255,.6),rgba(185,110,255,0) 70%)}
-  33.3%{background:radial-gradient(circle,rgba(255,110,190,.6),rgba(255,110,190,0) 70%)}
-  50%{background:radial-gradient(circle,rgba(255,180,90,.6),rgba(255,180,90,0) 70%)}
-  66.6%{background:radial-gradient(circle,rgba(90,220,180,.6),rgba(90,220,180,0) 70%)}
-  83.3%{background:radial-gradient(circle,rgba(90,160,255,.6),rgba(90,160,255,0) 70%)}
-  100%{background:radial-gradient(circle,rgba(120,120,255,.6),rgba(120,120,255,0) 70%)}
+@keyframes due-aura-hue-cycle{
+  0%{--due-hue:240}
+  16.6%{--due-hue:270}
+  33.3%{--due-hue:330}
+  50%{--due-hue:32}
+  66.6%{--due-hue:160}
+  83.3%{--due-hue:213}
+  100%{--due-hue:240}
 }
 /* Mega-tier only: dims everything except the screens that are really
    changing, via a plain opacity overlay (never filter/brightness on the
@@ -116,8 +146,14 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    in the moment instead of leaving it unexplained. Always visible
    (not tucked in the collapsible panel), but only actually shown while
    there's something worth saying - no generic idle message. */
-#status-bar{display:none;position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:19;align-items:center;gap:6px;background:rgba(10,5,20,.82);border:1px solid rgba(184,77,255,.5);border-radius:20px;padding:7px 18px;font-size:.78rem;font-weight:bold;color:#fff;white-space:nowrap;max-width:88vw;overflow:hidden;text-overflow:ellipsis;pointer-events:none;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+#status-bar{display:none;position:fixed;top:46px;left:50%;transform:translateX(-50%);z-index:19;align-items:center;gap:6px;background:rgba(10,5,20,.82);border:1px solid rgba(184,77,255,.5);border-radius:20px;padding:7px 18px;font-size:.78rem;font-weight:bold;color:#fff;white-space:nowrap;max-width:88vw;overflow:hidden;text-overflow:ellipsis;pointer-events:none;box-shadow:0 2px 12px rgba(0,0,0,.4)}
 #status-bar.show{display:flex}
+/* Persistent jackpot/mode context (an active build-up, or a live streak),
+   separate from #status-bar's rotating one-off notifications just below
+   it - see updateModeBadge() in dashboard.js. Gold-toned to read as
+   distinct from the purple status bar at a glance. */
+#mode-badge{display:none;position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:19;background:rgba(10,5,20,.82);border:1px solid rgba(255,212,59,.6);border-radius:18px;padding:5px 16px;font-size:.72rem;font-weight:bold;color:#ffd43b;white-space:nowrap;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+#mode-badge.show{display:flex}
 .theater.theme-teaser::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,rgba(var(--theme-flash,255,220,120),0) 55%,rgba(var(--theme-flash,255,220,120),.28) 100%);animation:teaser-flash-anim .15s ease-out}
 @keyframes teaser-flash-anim{0%{opacity:1}100%{opacity:0}}
 /* Bottom-left, stacked above the existing #toast - not the center of
@@ -138,12 +174,18 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    persistent label states what it actually does, since the button
    alone (even restyled) still wasn't reading as obviously as hoped. */
 #spin-widget{position:fixed;bottom:90px;left:25px;z-index:21;display:flex;flex-direction:column;align-items:center;gap:5px}
-#spin-label{font-size:.65rem;font-weight:bold;color:#d6a3ff;background:rgba(10,5,20,.75);padding:3px 11px;border-radius:10px;white-space:nowrap;text-transform:none}
-#spin-btn{padding:12px 22px;font-size:.85rem;background:linear-gradient(180deg,#2a1540,#150a28);border:1px solid #b84dff;border-radius:24px;box-shadow:0 4px 16px rgba(0,0,0,.5),0 0 16px rgba(184,77,255,.35);transition:transform .1s,box-shadow .2s;min-width:110px}
+/* Gold-rimmed casino-lever look (was a flatter purple button with a
+   persistent "Free pull for a bonus" caption underneath) - the caption's
+   gone, so the button itself needs to read as inviting on its own: a
+   bigger gold border, warmer glow, and an idle shimmer sweep (compositor-
+   only transform, not `left`) while it's ready to pull. */
+#spin-btn{position:relative;overflow:hidden;padding:14px 26px;font-size:.95rem;font-weight:bold;letter-spacing:.3px;color:#fff;background:linear-gradient(180deg,#3a1d5c,#1d0f38);border:2px solid #ffd43b;border-radius:28px;box-shadow:0 4px 18px rgba(0,0,0,.55),0 0 16px rgba(255,212,59,.3);transition:transform .1s,box-shadow .2s;min-width:118px}
 #spin-btn:active{transform:scale(.95)}
 #spin-btn:disabled{opacity:.5;cursor:default;box-shadow:none}
+#spin-btn.spin-ready::after{content:'';position:absolute;top:0;left:0;width:40%;height:100%;background:linear-gradient(115deg,transparent,rgba(255,255,255,.45),transparent);transform:translateX(-150%);animation:spin-shimmer 2.6s ease-in-out infinite;pointer-events:none}
+@keyframes spin-shimmer{0%{transform:translateX(-150%)}100%{transform:translateX(350%)}}
 #spin-btn.spin-ready{animation:spin-ready-pulse 1.6s ease-in-out infinite}
-@keyframes spin-ready-pulse{0%,100%{box-shadow:0 0 16px rgba(184,77,255,.35)}50%{box-shadow:0 0 26px rgba(184,77,255,.65)}}
+@keyframes spin-ready-pulse{0%,100%{box-shadow:0 0 16px rgba(255,212,59,.35)}50%{box-shadow:0 0 28px rgba(255,212,59,.7)}}
 /* A brief "rolling" wobble right after a press, before the outcome
    reveals - a flat instant result didn't read as an actual pull. */
 #spin-btn.spin-rolling{animation:spin-rolling-anim .12s linear infinite}

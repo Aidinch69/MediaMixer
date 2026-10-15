@@ -208,6 +208,16 @@ def create_app(ctx: AppContext) -> Flask:
 
     @app.route("/spirals/<path:filename>")
     def spirals_file(filename):
+        # Same cached-proxy machinery as /media/ - a full-screen overlay
+        # played at 1080p+ full bitrate is just as wasteful as a tile
+        # would be, even blended at low opacity.
+        proxy_path = proxy.ensure_proxy(
+            os.path.join(config.spirals_dir, filename), config,
+            base_dir=config.spirals_dir, proxy_subdir="_spirals",
+        )
+        if proxy_path:
+            directory, name = os.path.split(proxy_path)
+            return send_from_directory(directory, name, max_age=86400)
         return send_from_directory(config.spirals_dir, filename, max_age=86400)
 
     @app.route("/api/folders")

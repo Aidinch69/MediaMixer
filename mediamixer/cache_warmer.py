@@ -39,25 +39,36 @@ def _handle_stop(_signum, _frame) -> None:
     _stop = True
 
 
-def _iter_source_files(media_dir: str):
-    for root, _dirs, files in os.walk(media_dir):
+def _iter_source_files(root_dir: str):
+    for root, _dirs, files in os.walk(root_dir):
         for name in files:
             if name.lower().endswith((".mp4", ".webm", ".mov", ".m4v")):
                 yield os.path.join(root, name)
 
 
-def _find_missing(config) -> list[tuple[str, str]]:
-    media_dir = os.path.realpath(config.media_dir)
+def _find_missing_in(source_dir: str, proxy_subdir: str, config) -> list[tuple[str, str]]:
+    source_dir = os.path.realpath(source_dir)
     missing = []
-    for source_path in _iter_source_files(media_dir):
-        rel = os.path.relpath(source_path, media_dir)
-        proxy_path = os.path.join(config.proxy_dir, os.path.splitext(rel)[0] + ".proxy.mp4")
+    for source_path in _iter_source_files(source_dir):
+        rel = os.path.relpath(source_path, source_dir)
+        proxy_path = os.path.join(config.proxy_dir, proxy_subdir, os.path.splitext(rel)[0] + ".proxy.mp4")
         # Skip anything another process (this same tool, or Engine.py's
         # own on-demand path) is already mid-transcode on - both target
         # the identical .tmp filename, and two ffmpegs writing the same
         # file at once is a real collision, not just wasted work.
         if not os.path.isfile(proxy_path) and not os.path.isfile(proxy_path + ".tmp"):
             missing.append((source_path, proxy_path))
+    return missing
+
+
+def _find_missing(config) -> list[tuple[str, str]]:
+    # Mirrors mediamixer/proxy.py's ensure_proxy(base_dir=, proxy_subdir=)
+    # namespacing - the Spirals overlay folder shares the same proxy_dir
+    # cache, just under its own "_spirals" corner, so this pre-warms it
+    # the same way instead of only ever transcoding on first play.
+    missing = _find_missing_in(config.media_dir, "", config)
+    if os.path.isdir(config.spirals_dir):
+        missing += _find_missing_in(config.spirals_dir, "_spirals", config)
     return missing
 
 

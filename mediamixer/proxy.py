@@ -98,19 +98,24 @@ def _generate(ffmpeg: str, source_path: str, proxy_path: str, config) -> None:
             _pending.discard(source_path)
 
 
-def ensure_proxy(source_path: str, config) -> str | None:
+def ensure_proxy(source_path: str, config, base_dir: str | None = None, proxy_subdir: str = "") -> str | None:
     """Return the path to a cached proxy for source_path if one already
     exists. If not, kick off a background transcode (unless one's already
     in flight for this file) and return None immediately - the caller falls
     back to the original for this request. Never blocks; a missing or slow
-    proxy must never be the reason a clip won't play."""
-    media_dir = os.path.realpath(config.media_dir)
+    proxy must never be the reason a clip won't play.
+
+    base_dir/proxy_subdir let a second library (e.g. the Spirals overlay
+    folder) share this same cache machinery under its own namespaced
+    corner of config.proxy_dir, instead of duplicating this whole module -
+    defaults to the main media library for every existing caller."""
+    base_dir = os.path.realpath(base_dir or config.media_dir)
     source_path = os.path.realpath(source_path)
-    if not source_path.startswith(media_dir + os.sep) or not os.path.isfile(source_path):
+    if not source_path.startswith(base_dir + os.sep) or not os.path.isfile(source_path):
         return None
 
-    rel = os.path.relpath(source_path, media_dir)
-    proxy_path = os.path.join(config.proxy_dir, os.path.splitext(rel)[0] + ".proxy.mp4")
+    rel = os.path.relpath(source_path, base_dir)
+    proxy_path = os.path.join(config.proxy_dir, proxy_subdir, os.path.splitext(rel)[0] + ".proxy.mp4")
     if os.path.isfile(proxy_path):
         return proxy_path
 
