@@ -29,6 +29,7 @@ class RotationEngine:
         self._config = config
         self._stop_event = threading.Event()
         self._rotate_lock = threading.Lock()
+        self._ticks_since_barrage_check = 0
 
     def stop(self):
         self._stop_event.set()
@@ -65,7 +66,7 @@ class RotationEngine:
 
     def _rotate_locked(self, override_folder: Optional[str], side: Side):
         cfg = self._config
-        pace_idx, folder, played, barrage, current_paths, next_paths = self._state.rotation_context()
+        pace_idx, folder, played, current_paths, next_paths = self._state.rotation_context()
 
         target = override_folder or folder
         if override_folder:
@@ -78,7 +79,7 @@ class RotationEngine:
             library.sync_library(self._db, cfg)
             return
 
-        is_jackpot, event_expires_in, barrage = self._roll_event(barrage, pace_idx)
+        is_jackpot, event_expires_in = self._roll_event(pace_idx)
         indexes = range(len(current_paths)) if side == "all" else [side]
 
         # Every video currently visible on any screen is off-limits for a new pick,
@@ -93,7 +94,7 @@ class RotationEngine:
         use_preload = override_folder is None
 
         for index in indexes:
-            if barrage > 0 or is_jackpot:
+            if is_jackpot:
                 expires_in = event_expires_in
             else:
                 lo, hi, _label = cfg.pace_presets[pace_idx]
@@ -109,29 +110,21 @@ class RotationEngine:
             folder=target,
             played=played + (1 if side == "all" else 0),
             is_jackpot=is_jackpot,
-            barrage=barrage,
         )
 
-    def _roll_event(self, barrage: int, pace_idx: int):
+    def _roll_event(self, pace_idx: int):
+        """A plain, unannounced jackpot roll for whichever single screen
+        happens to be naturally rotating right now - a "surprise" flavor,
+        distinct from the built-up-then-revealed barrage jackpot below.
+        No longer threads barrage state through here at all: that's now
+        handled once per control-loop tick in _tick_barrage, independent
+        of any particular screen's rotation."""
         cfg = self._config
-        barrage_probability, jackpot_probability = self._state.event_probabilities()
-        is_jackpot = False
-
-        if barrage > 0:
-            barrage -= 1
-            expires_in = random.uniform(*cfg.barrage_clip_seconds)
-            if barrage == 0:
-                is_jackpot = True
-                expires_in = cfg.jackpot_hold_seconds
-            return is_jackpot, expires_in, barrage
-
-        if random.random() < barrage_probability:
-            barrage = random.randint(cfg.barrage_min, cfg.barrage_max)
-            return False, cfg.barrage_clip_seconds[0], barrage
-
+        _barrage_probability, jackpot_probability = self._state.event_probabilities()
         is_jackpot = random.random() < jackpot_probability
         lo, hi, _label = cfg.pace_presets[pace_idx]
-        return is_jackpot, random.randint(lo, hi), barrage
+        expires_in = cfg.jackpot_hold_seconds if is_jackpot else random.randint(lo, hi)
+        return is_jackpot, expires_in
 
     def _swap_screen(
         self,
@@ -162,7 +155,8 @@ class RotationEngine:
         return picked
 
     def tick(self):
-        """One control-loop iteration: tension/time-dilation plus expiry-based rotation.
+        """One control-loop iteration: barrage hype, tension/time-dilation,
+        plus expiry-based rotation.
 
         Called on a shared cadence by whatever's driving this engine - either
         this class's own `run()` loop for standalone use, or a SessionManager
@@ -170,6 +164,7 @@ class RotationEngine:
         """
         now = time.time()
         want_skip, want_lock = self._state.consume_flags()
+        self._tick_barrage(now)
         self._tick_tension(now)
 
         if want_lock:
@@ -194,21 +189,82 @@ class RotationEngine:
             self.tick()
             self._stop_event.wait(0.5)
 
+    def _tick_barrage(self, now: float):
+        """Advance an in-progress hype window, or roll for a new one.
+
+        Deliberately independent of any particular screen's expiry timer -
+        this is what stops a barrage from cascading into a rapid-fire
+        content-swap storm across however many screens happen to rotate
+        next. The content swap (a handful of screens, picked directly
+        below) happens exactly once, atomically, right when the barrage
+        starts; everything after that is pure speed/visual build-up on
+        already-buffered video.
+        """
+        cfg = self._config
+        if self._state.tick_barrage_hype():
+            self._state.set_is_jackpot(True)
+            return
+        if self._state.barrage_active():
+            return
+        self._ticks_since_barrage_check += 1
+        if self._ticks_since_barrage_check < cfg.barrage_check_every_ticks:
+            return
+        self._ticks_since_barrage_check = 0
+        barrage_probability, _jackpot_probability = self._state.event_probabilities()
+        if random.random() < barrage_probability:
+            self._start_barrage(now)
+
+    def _start_barrage(self, now: float):
+        cfg = self._config
+        with self._rotate_lock:
+            pace_idx, folder, played, current_paths, next_paths = self._state.rotation_context()
+            target = folder or library.pick_folder(self._db, cfg)
+            if not target:
+                return
+
+            count = min(random.randint(*cfg.barrage_tile_count), len(current_paths))
+            if count <= 0:
+                return
+            indexes = random.sample(range(len(current_paths)), count)
+            jackpot_index = random.choice(indexes)
+            in_use = {p for p in current_paths if p}
+            lo, hi, _label = cfg.pace_presets[pace_idx]
+
+            for index in indexes:
+                is_jackpot_pick = index == jackpot_index
+                expires_in = cfg.jackpot_hold_seconds if is_jackpot_pick else random.randint(lo, hi)
+                preferred = next_paths[index] if index < len(next_paths) else None
+                picked = self._swap_screen(
+                    index, target, set(in_use), is_jackpot_pick, offset=index, expires_in=expires_in,
+                    preferred=preferred,
+                )
+                if picked:
+                    in_use.add(picked)
+
+            self._state.finish_rotation(folder=target, played=played)
+            ticks = random.randint(*cfg.barrage_hype_ticks)
+            self._state.start_barrage_hype(ticks, cfg.barrage_speed_range, indexes)
+
     def _tick_tension(self, now: float):
         cfg = self._config
-        lefts, locked, barrage = self._state.screen_timers(now)
+        lefts, locked, _hype_ticks_left = self._state.screen_timers(now)
+        hype_fraction = self._state.barrage_hype_fraction()
+        hype_targets = self._state.hype_speed_targets() if hype_fraction > 0 else None
 
-        def tension_speed(time_left: float):
-            if barrage > 0:
-                return 1.0, cfg.barrage_speed
+        def tension_speed(time_left: float, idx: int):
             if time_left < cfg.tension_window_s and not locked:
                 ratio = (cfg.tension_window_s - time_left) / cfg.tension_window_s
-                return 1.0 + ratio, 1.0 - (cfg.tension_max_drag * ratio)
-            return 1.0, 1.0
+                tension, speed = 1.0 + ratio, 1.0 - (cfg.tension_max_drag * ratio)
+            else:
+                tension, speed = 1.0, 1.0
+            if hype_targets is not None:
+                speed += (hype_targets[idx] - 1.0) * hype_fraction
+                tension = max(tension, 1.0 + hype_fraction * 0.5)
+            return tension, speed
 
         tensions, speeds = [], []
-        for time_left in lefts:
-            tension, speed = tension_speed(time_left)
+        for idx, time_left in enumerate(lefts):
+            tension, speed = tension_speed(time_left, idx)
             tensions.append(tension)
             speeds.append(speed)
         self._state.update_tension(tensions, speeds)

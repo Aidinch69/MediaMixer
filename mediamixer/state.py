@@ -10,6 +10,7 @@ between layout presets (e.g. dual screen <-> 4x4 grid).
 """
 from __future__ import annotations
 
+import math
 import random
 import threading
 import time
@@ -26,6 +27,7 @@ class ScreenState:
     expires_at: float = 0.0
     tension: float = 1.0
     speed: float = 1.0
+    hype_speed_target: float = 1.0
 
 
 def _find_preset(config: Config, name: str) -> LayoutPreset:
@@ -61,7 +63,14 @@ class RuntimeState:
 
         self.locked = False
         self.is_jackpot = False
+        # barrage_count: ticks remaining in the current speed-up "hype"
+        # window (0.5s each), not a count of screens left to force-rotate -
+        # see RotationEngine._tick_barrage. barrage_hype_total is the
+        # window's starting tick count, needed to compute how far through
+        # it we are for the speed-ramp envelope.
         self.barrage_count = 0
+        self.barrage_hype_total = 0
+        self.barrage_tile_indexes: List[int] = []
 
         self.want_skip = False
         self.want_lock = False
@@ -85,6 +94,8 @@ class RuntimeState:
             self.locked = False
             self.is_jackpot = False
             self.barrage_count = 0
+            self.barrage_hype_total = 0
+            self.barrage_tile_indexes = []
         return preset
 
     # -- binaural synth parameters (the tone itself is generated client-side via Web Audio) --
@@ -159,7 +170,6 @@ class RuntimeState:
                 self.pace_idx,
                 self.current_folder,
                 self.videos_in_folder,
-                self.barrage_count,
                 [s.current for s in self.screens],
                 [s.next for s in self.screens],
             )
@@ -175,13 +185,53 @@ class RuntimeState:
             screen.tension = 1.0
             screen.speed = 1.0
 
-    def finish_rotation(self, folder: str, played: int, is_jackpot: bool, barrage: int):
+    def finish_rotation(self, folder: str, played: int, is_jackpot: bool = False):
         with self._lock:
             self.current_folder = folder
             self.videos_in_folder = played
             self.locked = False
             self.is_jackpot = is_jackpot
-            self.barrage_count = barrage
+
+    # -- barrage hype window (speed-up build-up, decoupled from content swaps) --
+    def barrage_active(self) -> bool:
+        with self._lock:
+            return self.barrage_count > 0
+
+    def start_barrage_hype(self, ticks: int, speed_range, tile_indexes: List[int]):
+        with self._lock:
+            self.barrage_count = ticks
+            self.barrage_hype_total = ticks
+            self.barrage_tile_indexes = list(tile_indexes)
+            for screen in self.screens:
+                screen.hype_speed_target = random.uniform(*speed_range)
+
+    def tick_barrage_hype(self) -> bool:
+        """Advance the hype countdown by one tick. Returns True exactly once -
+        on the tick the countdown reaches zero, the moment to reveal the
+        jackpot payoff."""
+        with self._lock:
+            if self.barrage_count <= 0:
+                return False
+            self.barrage_count -= 1
+            return self.barrage_count == 0
+
+    def barrage_hype_fraction(self) -> float:
+        """0 when no hype window is active, otherwise a smooth envelope
+        (sine, 0 -> 1 -> 0) over its lifetime so the speed-up ramps in and
+        back out instead of snapping to a flat value and back."""
+        with self._lock:
+            if self.barrage_hype_total <= 0 or self.barrage_count <= 0:
+                return 0.0
+            progress = 1 - (self.barrage_count / self.barrage_hype_total)
+            return math.sin(math.pi * max(0.0, min(1.0, progress)))
+
+    def hype_speed_targets(self) -> List[float]:
+        with self._lock:
+            return [s.hype_speed_target for s in self.screens]
+
+    def set_is_jackpot(self, value: bool):
+        with self._lock:
+            self.is_jackpot = value
 
     def set_pace(self, idx: int, lo: int, hi: int):
         with self._lock:
@@ -215,6 +265,7 @@ class RuntimeState:
                 "played": self.videos_in_folder,
                 "jackpot": self.is_jackpot,
                 "barrage": self.barrage_count,
+                "barrage_tiles": list(self.barrage_tile_indexes),
                 "pace_idx": self.pace_idx,
                 "tone_index": self.tone_index,
                 "binaural_knob": self.binaural_knob,

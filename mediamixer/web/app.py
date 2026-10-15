@@ -139,6 +139,7 @@ def create_app(ctx: AppContext) -> Flask:
             ),
             "jackpot": snap["jackpot"],
             "barrage": snap["barrage"],
+            "barrage_tiles": snap["barrage_tiles"],
             "preload_enabled": snap["preload_enabled"],
         }
 

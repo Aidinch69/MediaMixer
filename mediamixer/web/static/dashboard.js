@@ -788,11 +788,7 @@ function playBassDropSound(scale) {
   osc.stop(now + 0.6);
 }
 
-// Weighted tile glow: on a real barrage, 1-2 tiles get picked to glow
-// noticeably brighter than the rest right at the start of the build-up,
-// fading toward even as general intensity catches up - a sense of
-// "something's choosing" rather than everything lighting up at once.
-function pickWeightedTiles() {
+function pickRandomTiles() {
   if (!tileElements.length) return [];
   const count = tileElements.length >= 2 && Math.random() < 0.5 ? 2 : 1;
   const indices = [];
@@ -803,7 +799,7 @@ function pickWeightedTiles() {
   return indices;
 }
 
-function runAnticipationBuildUp(durationS, isReal) {
+function runAnticipationBuildUp(durationS, isReal, weightedTiles) {
   if (!anticipationFxEnabled) return;
   anticipationActive = true;
   const runId = ++anticipationRunId;
@@ -817,7 +813,11 @@ function runAnticipationBuildUp(durationS, isReal) {
   const variedDuration = durationS * (0.7 + Math.random() * 0.9);
   playRiserSound(variedDuration);
   const start = performance.now();
-  const weightedTiles = isReal ? pickWeightedTiles() : [];
+  // Real barrages pass the server's actual list of screens about to get
+  // new content (so the glow highlights tiles that are really about to
+  // change); fake near-misses have no such list, so pick 1-2 at random
+  // purely for the "something's choosing" feeling - nothing behind it.
+  if (!weightedTiles) weightedTiles = pickRandomTiles();
 
   function tick() {
     if (runId !== anticipationRunId) return;
@@ -1379,8 +1379,15 @@ function pushLuck() {
 
 function handleAnticipationStatus(d) {
   if (anticipationFxEnabled) {
+    // d.barrage is now ticks remaining in the server's hype window (0.5s
+    // each), not a small count of screens still left to force-rotate - so
+    // the duration here is a direct unit conversion, not the old loose
+    // *1.8 fudge factor. d.barrage_tiles names the actual screens getting
+    // real content, so the "something's choosing" glow highlights the
+    // tiles that are really about to change instead of a disconnected
+    // random guess.
     if (d.barrage > 0 && !anticipationActive) {
-      runAnticipationBuildUp(Math.max(1.5, d.barrage * 1.8), true);
+      runAnticipationBuildUp(Math.max(1.5, d.barrage * 0.5), true, d.barrage_tiles || []);
     }
     if (d.jackpot && !lastKnownJackpot) {
       runPayoff();

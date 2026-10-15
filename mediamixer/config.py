@@ -79,11 +79,18 @@ class Config:
     proxy_bitrate_kbps: int = 1200
 
     # -- barrage / jackpot events --
+    # A barrage no longer forces a cascade of rapid-fire, never-buffered
+    # clip swaps across however many screens happen to expire next (that
+    # was the actual cause of "everything flashes and reswaps" - a real
+    # content-rotation storm, not just a visual effect). Instead it swaps
+    # a small, bounded number of screens once immediately, then runs a
+    # speed-up "hype" window on already-buffered content for everyone -
+    # see RotationEngine._start_barrage/_tick_barrage.
     barrage_probability: float = 0.05
-    barrage_min: int = 3
-    barrage_max: int = 5
-    barrage_clip_seconds: Tuple[float, float] = (1.2, 2.5)
-    barrage_speed: float = 1.3
+    barrage_check_every_ticks: int = 6  # how often (in 0.5s ticks) to roll for a new barrage - every ~3s
+    barrage_tile_count: Tuple[int, int] = (2, 4)  # screens that get a fresh clip when a barrage fires
+    barrage_hype_ticks: Tuple[int, int] = (6, 12)  # 0.5s ticks the speed-up window runs before the reveal (3-6s)
+    barrage_speed_range: Tuple[float, float] = (1.08, 1.35)  # per-screen randomized speed-up target during that window
     jackpot_probability: float = 0.12
     jackpot_hold_seconds: float = 60.0
 
