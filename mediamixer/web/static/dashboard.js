@@ -66,6 +66,10 @@ const TUNING_DEFAULTS = {
   HOLD_TO_HEART_STRENGTH: 3,
   PACE_REWARD_XP: 5,
   PACE_REWARD_COOLDOWN_MS: 15000,
+  CHOICE_MOMENT_CHECK_MS: 90000,
+  CHOICE_MOMENT_PROBABILITY: 0.15,
+  CHOICE_MOMENT_WINDOW_MS: 8000,
+  CHOICE_MOMENT_XP: 10,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -111,7 +115,7 @@ function restartAllTunableIntervals() {
   startTunableInterval('MYSTERY_TILE_CHECK_MS', maybeTriggerMysteryTile);
 }
 
-const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS', 'MYSTERY_TILE_CHECK_MS', 'PATIENCE_CHECK_MS'];
+const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS', 'MYSTERY_TILE_CHECK_MS', 'PATIENCE_CHECK_MS', 'CHOICE_MOMENT_CHECK_MS'];
 
 function setTuning(key, value) {
   TUNING[key] = value;
@@ -161,6 +165,7 @@ const TUNING_GROUPS = [
   { label: 'Patience Hold', keys: ['PATIENCE_CHECK_MS', 'PATIENCE_HOLD_MS', 'PATIENCE_XP'] },
   { label: 'Hold-to-Heart', keys: ['HOLD_TO_HEART_MS', 'HOLD_TO_HEART_STRENGTH'] },
   { label: 'Pace-as-Reward', keys: ['PACE_REWARD_XP', 'PACE_REWARD_COOLDOWN_MS'] },
+  { label: 'Choice Moments', keys: ['CHOICE_MOMENT_CHECK_MS', 'CHOICE_MOMENT_PROBABILITY', 'CHOICE_MOMENT_WINDOW_MS', 'CHOICE_MOMENT_XP'] },
   { label: 'Multipliers & XP', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
 ];
 const TUNING_META = {
@@ -210,6 +215,10 @@ const TUNING_META = {
   HOLD_TO_HEART_STRENGTH: { label: 'Hold-to-Heart strength', unit: 'n', min: 2, max: 5, step: 1 },
   PACE_REWARD_XP: { label: 'Pace-change bonus XP', unit: 'n', min: 1, max: 30, step: 1 },
   PACE_REWARD_COOLDOWN_MS: { label: 'Pace-change reward cooldown', unit: 's', min: 5000, max: 60000, step: 5000 },
+  CHOICE_MOMENT_CHECK_MS: { label: 'Choice Moment check interval', unit: 's', min: 30000, max: 240000, step: 10000 },
+  CHOICE_MOMENT_PROBABILITY: { label: 'Choice Moment odds', unit: 'pct', min: 0, max: 0.6, step: 0.01 },
+  CHOICE_MOMENT_WINDOW_MS: { label: 'Choice Moment window', unit: 's', min: 3000, max: 20000, step: 1000 },
+  CHOICE_MOMENT_XP: { label: 'Choice Moment XP', unit: 'n', min: 1, max: 40, step: 1 },
   JACKPOT_HEAT_DECAY_PER_TICK: { label: 'Jackpot-heat decay (per 5s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   HEART_MULT_DECAY_PER_TICK: { label: 'Heart-multiplier decay (per 6s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   GOLDEN_HOUR_MULTIPLIER: { label: 'Golden Hour odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
@@ -1998,6 +2007,67 @@ function hidePushLuckPrompt() {
 function bankWin(quiet) {
   hidePushLuckPrompt();
   if (!quiet) toast('🏦 Banked.');
+}
+
+// ---- Choice Moments ----
+// A periodic, entirely optional prompt offering a real decision about
+// where things go next - distinct from push-your-luck (bank/push a
+// payoff you already earned) and from the Recalibrate/Vibe-Dial
+// mechanics it reuses under the hood: this is the direct, player-facing
+// moment of agency over Core content direction. Ignoring it costs
+// nothing and it just fades away, same "no penalty for doing nothing"
+// philosophy as push-your-luck.
+let choiceMomentTimer = null;
+
+function maybeTriggerChoiceMoment() {
+  if (choiceMomentTimer) return; // one at a time
+  if (Math.random() < TUNING.CHOICE_MOMENT_PROBABILITY) showChoiceMoment();
+}
+startTunableInterval('CHOICE_MOMENT_CHECK_MS', maybeTriggerChoiceMoment);
+
+function showChoiceMoment() {
+  const box = document.getElementById('choice-moment-prompt');
+  if (!box) return;
+  box.style.display = 'flex';
+  void box.offsetWidth;
+  box.classList.add('show');
+  const fill = box.querySelector('.choice-moment-timer-fill');
+  if (fill) {
+    fill.style.transition = 'none';
+    fill.style.width = '100%';
+    void fill.offsetWidth;
+    fill.style.transition = 'width ' + (TUNING.CHOICE_MOMENT_WINDOW_MS / 1000) + 's linear';
+    fill.style.width = '0%';
+  }
+  choiceMomentTimer = setTimeout(hideChoiceMoment, TUNING.CHOICE_MOMENT_WINDOW_MS);
+}
+
+function hideChoiceMoment() {
+  const box = document.getElementById('choice-moment-prompt');
+  if (box) {
+    box.classList.remove('show');
+    setTimeout(() => { if (!box.classList.contains('show')) box.style.display = 'none'; }, 260);
+  }
+  clearTimeout(choiceMomentTimer);
+  choiceMomentTimer = null;
+}
+
+function chooseMoment(kind) {
+  hideChoiceMoment();
+  markInteraction();
+  awardXp(TUNING.CHOICE_MOMENT_XP);
+  if (kind === 'more') {
+    toast('🔥 More like this');
+    if (!autopilotEnabled) applyVibeDial(Math.max(0, vibeDialValue - 0.5));
+  } else if (kind === 'new') {
+    toast('🌱 Something different');
+    fetch('/api/skip');
+    if (!autopilotEnabled) applyVibeDial(Math.min(2, vibeDialValue + 0.5));
+  } else {
+    toast('🎲 Surprise me!');
+    fetch('/api/skip');
+    fireColorSplashPiece('confetti');
+  }
 }
 
 function pushLuck() {

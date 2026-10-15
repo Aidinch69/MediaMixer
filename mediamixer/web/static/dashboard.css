@@ -254,6 +254,15 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    drains over the same window that auto-banks if you don't decide. */
 .push-luck-timer{height:4px;border-radius:2px;background:rgba(255,255,255,.15);overflow:hidden}
 .push-luck-timer-fill{height:100%;width:100%;background:linear-gradient(90deg,#b84dff,#ffd43b)}
+/* Same prompt pattern as push-luck above, stacked higher (bottom:230px
+   vs 160px) so the two never overlap if both happen to be up at once -
+   unlikely, but Choice Moments' window is deliberately long (8s) and
+   push-luck's own box could still be settling from a recent payoff. */
+#choice-moment-prompt{display:none;flex-direction:column;gap:8px;position:fixed;bottom:230px;left:25px;z-index:21;background:linear-gradient(180deg,#1d0f38,#150a28);border:1px solid #4ddcff;border-radius:12px;padding:12px 16px;box-shadow:0 4px 20px rgba(0,0,0,.5),0 0 16px rgba(77,220,255,.3);font-size:.82rem;font-weight:bold;color:#fff;opacity:0;transform:translateY(10px) scale(.95);transition:opacity .25s ease,transform .25s ease}
+#choice-moment-prompt.show{opacity:1;transform:translateY(0) scale(1)}
+#choice-moment-prompt .choice-moment-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.choice-moment-timer{height:4px;border-radius:2px;background:rgba(255,255,255,.15);overflow:hidden}
+.choice-moment-timer-fill{height:100%;width:100%;background:linear-gradient(90deg,#4ddcff,#b84dff)}
 /* Always on screen regardless of panel/settings visibility - a casino
    lever you can reach for any time, not a buried settings toggle. A
    persistent label states what it actually does, since the button
