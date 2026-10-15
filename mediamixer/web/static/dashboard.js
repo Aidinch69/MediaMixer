@@ -1098,6 +1098,11 @@ function updateModeBadge() {
     // nudging odds toward bigger jackpots) would be invisible - nothing
     // to notice means nothing to feel rewarded by.
     text = '🔥 Odds heating up';
+  } else if (autopilotZone) {
+    // Lowest priority - only shown when nothing more pressing is. Auto-
+    // Pilot's zone otherwise only showed in the panel itself, which
+    // "can't tell if you're not in the menu."
+    text = '🎬 ' + AUTOPILOT_ZONES[autopilotZone].label;
   }
   if (text) {
     el.innerText = text;
@@ -1548,6 +1553,7 @@ function applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk, chainDepth,
   playBassDropSound(tier.bass);
   burstExtraFloaters(tier.burst);
   if (wasAtRisk) playClutchSting();
+  if (Math.random() < 0.12 * tier.flash) fireColorSplashPiece(); // bigger tiers roll a bit more often
   const label = milestoneCount ? ('🏆 MILESTONE: ' + milestoneCount + ' JACKPOTS!') : '🎰 ' + (tier.name === 'mega' ? 'MEGA JACKPOT' : tier.name === 'medium' ? 'Jackpot!' : 'Jackpot');
   const prefix = (chainDepth > 0 ? '⛓ CHAIN! ' : '') + (wasAtRisk ? '🔥 SAVED! ' : '');
   // Explicitly ties the screen-shake to what just happened, in the same
@@ -2077,6 +2083,7 @@ function ensureTiles(count) {
       else if (i === lastChaseMissIdx && Date.now() - lastChaseMissAt < CHASE_NEAR_MISS_GRACE_MS) {
         lastChaseMissIdx = -1;
         toast('😤 So close! Missed it by a hair', true);
+        showClaimRewardLabel(i, '😤 So close!');
       }
     });
     tileElements.push(tile);
@@ -2390,6 +2397,14 @@ function activateSealedTile(idx) {
   sealedExpireAt = Date.now() + SEALED_DURATION_MS;
   const el = tileAmbientEls[idx];
   if (el) el.classList.add('sealed-tile');
+  // Looks actually locked, not just bordered: a dim overlay on the tile
+  // itself (same opacity-only technique as the mega-barrage dim, but its
+  // own class so the two never fight over who gets to clear it) plus a
+  // genuine 25% slowdown - burstTileSpeed doubles as a slow-down here
+  // since min/max are both 0.75.
+  const tile = tileElements[idx];
+  if (tile) tile.classList.add('tile-sealed-dim');
+  burstTileSpeed(idx, SEALED_DURATION_MS, 0.75, 0.75);
   clearTimeout(sealedTimer);
   sealedTimer = setTimeout(() => missSealedTile(idx), SEALED_DURATION_MS);
 }
@@ -2398,6 +2413,8 @@ function missSealedTile(idx) {
   if (idx !== sealedTileIndex) return;
   const el = tileAmbientEls[idx];
   if (el) el.classList.remove('sealed-tile');
+  const tile = tileElements[idx];
+  if (tile) tile.classList.remove('tile-sealed-dim');
   sealedTileIndex = -1;
 }
 
@@ -2425,6 +2442,14 @@ function openSealedTile(idx) {
   if (idx !== sealedTileIndex || Date.now() >= sealedExpireAt) return;
   const ambientEl = tileAmbientEls[idx];
   if (ambientEl) ambientEl.classList.remove('sealed-tile');
+  const tile = tileElements[idx];
+  if (tile) tile.classList.remove('tile-sealed-dim');
+  // Clears the 0.75x lock-slowdown's burst window outright rather than
+  // waiting for it to expire on its own schedule - opening early (before
+  // the full seal duration) with an outcome that has no speed component
+  // of its own would otherwise leave the video looking stuck at 75%
+  // speed with no sealed badge left to explain why.
+  tileSpeedBurstUntil[idx] = 0;
   clearTimeout(sealedTimer);
   sealedTileIndex = -1;
 
@@ -2445,6 +2470,7 @@ function openSealedTile(idx) {
   const label = outcome.label || ('+' + xpAmount + 'xp' + (outcome.speed ? ' ⚡' : '') + tag);
   showClaimRewardLabel(idx, label);
   toast((outcome.negative ? '📦 Sealed tile was empty' : '🔓 Sealed tile: ' + label), outcome.negative);
+  if (!outcome.negative && Math.random() < 0.3) fireColorSplashPiece(null, idx);
 }
 setInterval(maybeTriggerSealedTile, SEALED_CHECK_MS);
 
@@ -2592,7 +2618,12 @@ function catchChaseFlash(idx) {
   awardXp((5 + chaseChain * 2) * catchMult);
   incrementQuestMetric('bonuses', 1);
   bumpJackpotHeat(chaseChain * 0.4); // longer chains nudge the odds toward bigger jackpots - see bumpJackpotHeat
-  toast('🏃 Caught! Chain x' + chaseChain + (catchMult > 1 ? ' (hidden x' + catchMult + '!)' : ''));
+  const chainTag = catchMult > 1 ? ' (hidden x' + catchMult + '!)' : '';
+  toast('🏃 Caught! Chain x' + chaseChain + chainTag);
+  // The corner toast is easy to miss on a denser grid - right on the
+  // tile that was actually caught is where attention already is.
+  showClaimRewardLabel(idx, 'Chain x' + chaseChain + chainTag);
+  if (Math.random() < 0.25) fireColorSplashPiece('tiles', idx); // small, occasional flourish - see Color Rush section
   setTimeout(() => {
     if (!tileElements.length) { chaseChain = 0; return; }
     activateChaseFlash(pickAmbientTarget(idx));
@@ -2612,6 +2643,7 @@ const SPIRAL_HOLD_MIN_MS = 30000; // 30s - 60s total hold
 const SPIRAL_HOLD_RANGE_MS = 30000;
 const SPIRAL_FADE_MIN_MS = 6000; // 6s - 10s fade (~8s typical), same duration in and out
 const SPIRAL_FADE_RANGE_MS = 4000;
+const SPIRAL_BREATHE_INTERVAL_MS = 10000;
 
 function fetchSpiralList() {
   if (spiralList) return Promise.resolve(spiralList);
@@ -2643,8 +2675,15 @@ function maybeTriggerSpiralOverlay() {
     // any reason the spiral would just freeze on its last frame for the
     // rest of the hold instead of looping for as long as it's up.
     el.onended = () => { el.currentTime = 0; el.play().catch(() => {}); };
-    const targetOpacity = (0.15 + Math.random() * 0.20).toFixed(2); // 15% - 35%
+    const targetOpacity = (0.15 + Math.random() * 0.15).toFixed(2); // 15% - 30%
     const fadeMs = SPIRAL_FADE_MIN_MS + Math.random() * SPIRAL_FADE_RANGE_MS; // same fade both ways
+    // Not every time - about half of activations also get a slow
+    // "breathing" wave once the fade-in settles: nudges opacity +-5%
+    // every 10s. Started only after the fade-in completes (see the
+    // canplay handler) and explicitly stopped before the real fade-out
+    // begins, so it never fights that transition.
+    const shouldBreathe = Math.random() < 0.5;
+    let breatheTimer = null;
     // Don't start the fade until the video actually has a decodable
     // frame - starting it right on src assignment meant the CSS
     // transition ran on schedule regardless of buffering, so by the
@@ -2655,6 +2694,15 @@ function maybeTriggerSpiralOverlay() {
       el.style.transition = 'opacity ' + (fadeMs / 1000).toFixed(2) + 's ease-in-out';
       void el.offsetWidth; // force a reflow so the transition reliably engages
       requestAnimationFrame(() => { el.style.opacity = targetOpacity; });
+      if (shouldBreathe) {
+        let dir = 1;
+        breatheTimer = setInterval(() => {
+          const t = Math.max(0.05, Math.min(0.95, parseFloat(targetOpacity) + dir * 0.05));
+          el.style.transition = 'opacity 3s ease-in-out';
+          el.style.opacity = t.toFixed(2);
+          dir *= -1;
+        }, SPIRAL_BREATHE_INTERVAL_MS);
+      }
     }, { once: true });
     el.src = pick.base + pick.path;
     el.currentTime = 0;
@@ -2675,6 +2723,8 @@ function maybeTriggerSpiralOverlay() {
     }, SPIRAL_STALL_CHECK_MS);
     const holdMs = SPIRAL_HOLD_MIN_MS + Math.random() * SPIRAL_HOLD_RANGE_MS;
     setTimeout(() => {
+      clearInterval(breatheTimer);
+      el.style.transition = 'opacity ' + (fadeMs / 1000).toFixed(2) + 's ease-in-out';
       el.style.opacity = '0';
       setTimeout(() => {
         el.pause();
@@ -2722,50 +2772,59 @@ function maybeTriggerColorRush() {
   if (Math.random() < COLOR_RUSH_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('colorRush')) triggerColorRush();
 }
 
-function triggerColorRush() {
-  if (colorRushActive || !tileElements.length) return;
-  colorRushActive = true;
-  toast('🌈 Color Rush!');
-
+// The full event is just these pieces fired together - each one also
+// works completely standalone (see fireColorSplashPiece below), so the
+// same "cool effect" can show up as a small flourish on a streak/
+// unlock/bonus/jackpot without it always being the full intense combo.
+function fireDiscoRain(durationMs) {
   const rain = document.getElementById('disco-rain');
-  if (rain) {
-    rain.innerHTML = '';
-    for (let i = 0; i < COLOR_RUSH_STREAK_COUNT; i++) {
-      const s = document.createElement('div');
-      s.className = 'disco-streak';
-      const hue = COLOR_RUSH_HUES[Math.floor(Math.random() * COLOR_RUSH_HUES.length)];
-      s.style.left = (Math.random() * 100).toFixed(1) + '%';
-      s.style.background = 'linear-gradient(180deg,transparent,hsla(' + hue + ',90%,65%,.9),transparent)';
-      s.style.animationDuration = (1.1 + Math.random() * 1.3).toFixed(2) + 's';
-      s.style.animationDelay = (-Math.random() * 2).toFixed(2) + 's'; // staggered, not all falling in sync
-      rain.appendChild(s);
-    }
-    rain.classList.add('show');
+  if (!rain) return;
+  rain.innerHTML = '';
+  for (let i = 0; i < COLOR_RUSH_STREAK_COUNT; i++) {
+    const s = document.createElement('div');
+    s.className = 'disco-streak';
+    const hue = COLOR_RUSH_HUES[Math.floor(Math.random() * COLOR_RUSH_HUES.length)];
+    s.style.left = (Math.random() * 100).toFixed(1) + '%';
+    s.style.background = 'linear-gradient(180deg,transparent,hsla(' + hue + ',90%,65%,.9),transparent)';
+    s.style.animationDuration = (1.1 + Math.random() * 1.3).toFixed(2) + 's';
+    s.style.animationDelay = (-Math.random() * 2).toFixed(2) + 's'; // staggered, not all falling in sync
+    rain.appendChild(s);
   }
+  rain.classList.add('show');
+  setTimeout(() => {
+    rain.classList.remove('show');
+    setTimeout(() => { rain.innerHTML = ''; }, 1000); // matches its own fade-out transition
+  }, durationMs);
+}
 
+function fireDiscoBorder(durationMs) {
   const border = document.getElementById('disco-border');
-  if (border) border.classList.add('show');
+  if (!border) return;
+  border.classList.add('show');
+  setTimeout(() => border.classList.remove('show'), durationMs);
+}
 
+function fireScreenBeat(durationMs) {
   const theater = document.getElementById('theater-box');
-  if (theater) theater.classList.add('disco-beat');
+  if (!theater) return;
+  theater.classList.add('disco-beat');
+  setTimeout(() => theater.classList.remove('disco-beat'), durationMs);
+}
 
-  tileGlowEls.forEach(el => {
+// indexes lets a caller light up just one tile (e.g. the tile that was
+// actually caught/opened) instead of the whole grid, for the smaller
+// per-event flourishes.
+function fireDiscoTilePulse(durationMs, indexes) {
+  const targets = indexes || tileGlowEls.map((_, i) => i);
+  targets.forEach(i => {
+    const el = tileGlowEls[i];
     if (!el) return;
     el.style.animationDelay = (-Math.random() * 1.6).toFixed(2) + 's,' + (-Math.random() * 0.7).toFixed(2) + 's';
     el.classList.add('disco-pulse');
   });
-
-  burstConfetti(50);
-  const midBurst = setTimeout(() => burstConfetti(30), COLOR_RUSH_DURATION_MS / 2);
-
   setTimeout(() => {
-    clearTimeout(midBurst);
-    if (rain) rain.classList.remove('show');
-    if (border) border.classList.remove('show');
-    if (theater) theater.classList.remove('disco-beat');
-    tileGlowEls.forEach(el => { if (el) { el.classList.remove('disco-pulse'); el.style.animationDelay = ''; } });
-    setTimeout(() => { if (rain) rain.innerHTML = ''; colorRushActive = false; }, 1000); // matches disco-rain's own fade-out transition
-  }, COLOR_RUSH_DURATION_MS);
+    targets.forEach(i => { const el = tileGlowEls[i]; if (el) { el.classList.remove('disco-pulse'); el.style.animationDelay = ''; } });
+  }, durationMs);
 }
 
 function burstConfetti(count) {
@@ -2784,7 +2843,52 @@ function burstConfetti(count) {
     layer.appendChild(p);
   }
 }
+
+function triggerColorRush() {
+  if (colorRushActive || !tileElements.length) return;
+  colorRushActive = true;
+  toast('🌈 Color Rush!');
+  fireDiscoRain(COLOR_RUSH_DURATION_MS);
+  fireDiscoBorder(COLOR_RUSH_DURATION_MS);
+  fireScreenBeat(COLOR_RUSH_DURATION_MS);
+  fireDiscoTilePulse(COLOR_RUSH_DURATION_MS);
+  burstConfetti(50);
+  const midBurst = setTimeout(() => burstConfetti(30), COLOR_RUSH_DURATION_MS / 2);
+  setTimeout(() => {
+    clearTimeout(midBurst);
+    colorRushActive = false;
+  }, COLOR_RUSH_DURATION_MS + 1000); // +1000 covers disco-rain's own fade-out tail above
+}
 setInterval(maybeTriggerColorRush, COLOR_RUSH_CHECK_MS);
+
+// ---- Color splash pieces (standalone) ----
+// The same pieces Color Rush combines, but fired one at a time as a
+// smaller, more frequent flourish tied to other moments (a catch, a
+// bonus claim, a sealed-tile open, a jackpot payoff) - "sometimes it
+// can just go with the disco tiles, sometimes just the confetti,"
+// instead of every reward moment reaching for the full intense combo.
+const COLOR_SPLASH_CHECK_MS = 25000;
+const COLOR_SPLASH_PROBABILITY = 0.12;
+const COLOR_SPLASH_PIECES = ['confetti', 'tiles', 'border', 'rain'];
+
+function maybeTriggerColorSplashPiece() {
+  if (!anticipationFxEnabled || colorRushActive) return;
+  if (Math.random() < COLOR_SPLASH_PROBABILITY * oddsMultiplier()) fireColorSplashPiece();
+}
+setInterval(maybeTriggerColorSplashPiece, COLOR_SPLASH_CHECK_MS);
+
+// tileIdx (optional) confines a 'tiles' piece to just that one tile -
+// used when a splash is tied to a specific tile's own moment (a catch,
+// an unlock) rather than firing ambient and grid-wide.
+function fireColorSplashPiece(pieceOverride, tileIdx) {
+  if (colorRushActive || !tileElements.length) return;
+  const piece = pieceOverride || COLOR_SPLASH_PIECES[Math.floor(Math.random() * COLOR_SPLASH_PIECES.length)];
+  const duration = 3000 + Math.random() * 2000;
+  if (piece === 'confetti') burstConfetti(14 + Math.floor(Math.random() * 14));
+  else if (piece === 'tiles') fireDiscoTilePulse(duration, tileIdx != null ? [tileIdx] : null);
+  else if (piece === 'border') fireDiscoBorder(duration);
+  else if (piece === 'rain') fireDiscoRain(Math.max(duration, 4000)); // needs a bit more runway to actually read
+}
 
 // Mystery tile: a pure curiosity-gap hit, distinct from the loss-aversion
 // and reward mechanics above - a tile briefly blurs under a "?" overlay
@@ -2849,6 +2953,7 @@ function triggerMiniPayoff(idx) {
   // attention already is, rather than relying on the viewer to glance
   // elsewhere to find out if (and what) they were rewarded.
   if (idx != null) showClaimRewardLabel(idx, '+' + xp + 'xp' + tag);
+  if (Math.random() < 0.2) fireColorSplashPiece('confetti');
 }
 
 const CLAIM_REWARD_LABEL_MS = 1400;
@@ -2891,7 +2996,9 @@ function showSpinResult(text) {
   btn.innerText = text;
 }
 
-const SPIN_ROLL_DELAY_MS = 500;
+const SPIN_ROLL_DELAY_MS = 900; // was 500 - needs enough room for the reel below to actually read as cycling
+const SPIN_REEL_TICK_MS = 110;
+const SPIN_REEL_SYMBOLS = ['🎰', '✨', '🎉', '💨', '😤', '🎉'];
 
 function spin() {
   const now = Date.now();
@@ -2904,22 +3011,32 @@ function spin() {
   teaseNextTheme(theater); // quick visual "tick" regardless of outcome
 
   // A brief "rolling" wobble before the outcome reveals - an instant,
-  // flat result didn't read as an actual pull, just a button press.
+  // flat result didn't read as an actual pull, just a button press. The
+  // symbols cycling through are cosmetic only (the real roll is already
+  // fixed below) but let you feel the possible outcomes going by, like
+  // an actual reel, instead of a cloak-and-dagger wait for one number.
   const btn = document.getElementById('spin-btn');
+  let reelTimer = null;
   if (btn) {
     btn.disabled = true;
     btn.classList.remove('spin-ready');
     btn.classList.add('spin-rolling');
-    btn.innerText = '🎰 ...';
+    let reelIdx = 0;
+    btn.innerText = SPIN_REEL_SYMBOLS[0];
+    reelTimer = setInterval(() => {
+      reelIdx = (reelIdx + 1) % SPIN_REEL_SYMBOLS.length;
+      btn.innerText = SPIN_REEL_SYMBOLS[reelIdx];
+    }, SPIN_REEL_TICK_MS);
     // Covers the rolling window too, not just the result display after it -
     // otherwise the 1s countdown tick (updateSpinButton) could land inside
-    // this gap and stomp "..." with a premature countdown before the
+    // this gap and stomp the reel with a premature countdown before the
     // outcome even reveals.
     spinResultUntil = Date.now() + SPIN_ROLL_DELAY_MS + 2500;
   }
 
   const roll = Math.random();
   setTimeout(() => {
+    clearInterval(reelTimer);
     if (btn) btn.classList.remove('spin-rolling');
     if (roll < 0.08 && !anticipationActive) {
       showSpinResult('🎉 JACKPOT!');

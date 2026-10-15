@@ -204,6 +204,11 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    this file: opacity-only stays compositor-only and never forces a
    repaint of the video underneath). */
 .tile-dimmed::after{content:'';position:absolute;inset:0;background:#000;opacity:.5;pointer-events:none;z-index:1;transition:opacity .3s ease}
+/* A sealed tile actually looks locked - its own dim class (not shared
+   with tile-dimmed above) so the mega-barrage dim and this one can
+   never fight over clearing the same class on the same tile. Paired
+   with a genuine 25% playback slowdown (see activateSealedTile). */
+.tile-sealed-dim::after{content:'';position:absolute;inset:0;background:#000;opacity:.4;pointer-events:none;z-index:1;transition:opacity .3s ease}
 .tile.mystery-tile video{filter:blur(14px)}
 .tile.mystery-reveal video{transition:filter .3s ease}
 #anticipation-meter{position:fixed;top:0;left:0;width:100%;height:4px;z-index:18;background:rgba(255,255,255,.05);pointer-events:none}
@@ -283,6 +288,16 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .tile-actions .thumb.pop{animation:thumb-pop .35s ease-out}
 @keyframes thumb-pop{0%{transform:scale(1)}40%{transform:scale(1.4)}100%{transform:scale(1)}}
 .hint{font-size:11px;color:#8e8e93;margin:0}
+/* Every section's explainer paragraph collapsed behind a native
+   <details>/<summary> disclosure by default - "flooding the menu with
+   text" was the actual complaint, not that the text itself was wrong. */
+.hint-details{font-size:.7rem}
+.hint-details summary{cursor:pointer;color:#8a7aa8;list-style:none;display:flex;align-items:center;gap:4px;user-select:none}
+.hint-details summary::-webkit-details-marker{display:none}
+.hint-details summary::before{content:'▸';display:inline-block;transition:transform .15s ease;font-size:.65rem}
+.hint-details[open] summary::before{transform:rotate(90deg)}
+.hint-details summary:hover{color:#c999ff}
+.hint-details .hint{margin-top:6px}
 .panel{position:fixed;top:0;right:0;width:min(400px,92vw);height:100vh;height:100dvh;background:linear-gradient(180deg,#0e0720,#0a0515 40%);border-left:1px solid #2a1540;box-shadow:-10px 0 30px rgba(0,0,0,.5);padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;overflow-y:auto;z-index:25;transform:translateX(0);transition:transform .25s ease}
 /* Tabs group what used to be one long scroll into a handful of pages -
    Display / Engagement / Audio / More - so finding a given option means
