@@ -62,6 +62,8 @@ const TUNING_DEFAULTS = {
   PATIENCE_CHECK_MS: 15000,
   PATIENCE_HOLD_MS: 90000,
   PATIENCE_XP: 15,
+  HOLD_TO_HEART_MS: 550,
+  HOLD_TO_HEART_STRENGTH: 3,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -155,6 +157,7 @@ const TUNING_GROUPS = [
   { label: 'Mystery Tile & Due-Aura', keys: ['MYSTERY_TILE_PROBABILITY', 'MYSTERY_TILE_CHECK_MS', 'MYSTERY_TILE_DURATION_MS', 'DUE_AURA_THRESHOLD_MS', 'DUE_AURA_MIN_HOLD_MS'] },
   { label: 'Spin & Spawning', keys: ['SPIN_COOLDOWN_MS', 'AMBIENT_SPAWN_SEPARATION_MS'] },
   { label: 'Patience Hold', keys: ['PATIENCE_CHECK_MS', 'PATIENCE_HOLD_MS', 'PATIENCE_XP'] },
+  { label: 'Hold-to-Heart', keys: ['HOLD_TO_HEART_MS', 'HOLD_TO_HEART_STRENGTH'] },
   { label: 'Multipliers & XP', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
 ];
 const TUNING_META = {
@@ -200,6 +203,8 @@ const TUNING_META = {
   PATIENCE_CHECK_MS: { label: 'Patience check interval', unit: 's', min: 5000, max: 60000, step: 1000 },
   PATIENCE_HOLD_MS: { label: 'Patience hold (no-touch threshold)', unit: 's', min: 20000, max: 300000, step: 5000 },
   PATIENCE_XP: { label: 'Patience bonus XP', unit: 'n', min: 5, max: 60, step: 1 },
+  HOLD_TO_HEART_MS: { label: 'Hold-to-Heart press duration', unit: 's', min: 200, max: 2000, step: 50 },
+  HOLD_TO_HEART_STRENGTH: { label: 'Hold-to-Heart strength', unit: 'n', min: 2, max: 5, step: 1 },
   JACKPOT_HEAT_DECAY_PER_TICK: { label: 'Jackpot-heat decay (per 5s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   HEART_MULT_DECAY_PER_TICK: { label: 'Heart-multiplier decay (per 6s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   GOLDEN_HOUR_MULTIPLIER: { label: 'Golden Hour odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
@@ -2457,6 +2462,32 @@ function ensureTiles(count) {
     const vid = tile.querySelector('#screen-' + i);
     vid.addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
     vid.addEventListener('loadedmetadata', () => onAspectKnown(i));
+    // Hold-to-Heart: holding the heart button past a threshold fires one
+    // amplified heart instead of waiting for a plain tap - a deliberate,
+    // heavier gesture for "I really mean this one," distinct from a quick
+    // tap. Fires once, right at the threshold (not on release), and marks
+    // the button so the pointerup's own click doesn't also fire a normal
+    // heart on top of it.
+    const upBtn = tile.querySelector('.up.thumb');
+    let holdTimer = null;
+    upBtn.addEventListener('pointerdown', () => {
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => {
+        // Fire first, flag after - this call must go through normally
+        // (it's the hold itself); the flag is only for the click event
+        // that fires afterward once the finger/mouse actually lifts.
+        rateScreen(i, 'up', upBtn, TUNING.HOLD_TO_HEART_STRENGTH);
+        upBtn.dataset.holdFired = '1';
+        // Safety net: if that click never arrives for any reason (some
+        // touch/pointer edge case), don't leave the flag set forever -
+        // that would silently swallow the viewer's next *real* tap.
+        setTimeout(() => { upBtn.dataset.holdFired = ''; }, 500);
+      }, TUNING.HOLD_TO_HEART_MS);
+    });
+    const cancelHold = () => clearTimeout(holdTimer);
+    upBtn.addEventListener('pointerup', cancelHold);
+    upBtn.addEventListener('pointerleave', cancelHold);
+    upBtn.addEventListener('pointercancel', cancelHold);
     const ambientEl = tile.querySelector('.tile-ambient-fx');
     ambientEl.addEventListener('click', () => {
       markInteraction();
@@ -2603,12 +2634,20 @@ function pace(v, quiet) {
   fetch('/api/pace?mode=' + v).then(() => { if (!quiet) toast('Pace updated'); });
 }
 function vec(k, v) { fetch('/api/vector?key=' + k + '&val=' + v); }
-function rateScreen(i, dir, btn) {
+function rateScreen(i, dir, btn, strength) {
+  // Hold-to-Heart already fired an amplified heart for this same press -
+  // the subsequent click (pointerup naturally fires one) would otherwise
+  // double-count it as a second, separate heart.
+  if (dir === 'up' && btn && btn.dataset.holdFired === '1') {
+    btn.dataset.holdFired = '';
+    return;
+  }
+  strength = strength || 1;
   markInteraction();
   if (dir === 'up') {
     claimBonusTile(i);
     bumpHeartMultiplier();
-    statsLifetimeHearts++;
+    statsLifetimeHearts += strength;
     saveStats();
     updateStatsUi();
     checkTrophies();
@@ -2622,7 +2661,7 @@ function rateScreen(i, dir, btn) {
     }
   }
   const mult = registerCombo();
-  awardXp(Math.round(TUNING.RATE_XP_BASE * mult));
+  awardXp(Math.round(TUNING.RATE_XP_BASE * mult * strength));
   incrementQuestMetric('rates', 1);
   tileLastRatedAt[i] = Date.now();
   pulseTileGlow(i, mult, dir !== 'up');
@@ -2631,12 +2670,13 @@ function rateScreen(i, dir, btn) {
     void btn.offsetWidth;
     btn.classList.add('pop');
   }
-  fetch('/api/rate?screen=' + i + '&dir=' + dir)
+  const strengthParam = dir === 'up' && strength > 1 ? '&strength=' + strength : '';
+  fetch('/api/rate?screen=' + i + '&dir=' + dir + strengthParam)
     .then((r) => r.json())
     .then((data) => {
-      toast(dir === 'up' ? '❤️ Reinforced' : '👎 Penalized', dir !== 'up');
+      toast(dir === 'up' ? (strength > 1 ? '💞 Deep Heart!' : '❤️ Reinforced') : '👎 Penalized', dir !== 'up');
       if (data && data.heart && data.heart.heart_count >= 2) {
-        showClaimRewardLabel(i, '💗 Heart Streak x' + data.heart.heart_count);
+        showClaimRewardLabel(i, (strength > 1 ? '💞 Deep Heart x' : '💗 Heart Streak x') + data.heart.heart_count);
         pulseWarmGlow(i, data.heart.heart_count);
       }
     })

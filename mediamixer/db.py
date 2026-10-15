@@ -168,10 +168,12 @@ class Database:
         ).fetchall()
         return [r["video_path"] for r in rows]
 
-    def bump_heart(self, path: str) -> Optional[dict]:
+    def bump_heart(self, path: str, amount: int = 1) -> Optional[dict]:
         """Record a heart (upvote) on a video: bump its count and track the
         earliest/latest heart timestamps, which Custom Loop Point and the
-        Heart Streak Badge both key off of."""
+        Heart Streak Badge both key off of. `amount` > 1 is Hold-to-Heart's
+        amplified press - still one heart *event* (one first/last_heart_at
+        stamp), just worth more toward heart_count."""
         now = time.time()
         conn = self._connect()
         row = conn.execute(
@@ -181,7 +183,7 @@ class Database:
         if row is None:
             return None
 
-        new_count = row["heart_count"] + 1
+        new_count = row["heart_count"] + amount
         first_heart_at = row["first_heart_at"] if row["first_heart_at"] is not None else now
         conn.execute(
             "UPDATE video_weights SET heart_count=?, first_heart_at=?, last_heart_at=? WHERE video_path=?",

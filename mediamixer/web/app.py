@@ -359,7 +359,11 @@ def create_app(ctx: AppContext) -> Flask:
         reward = config.rate_up_reward if is_up else config.rate_down_reward
         path = session.state.current_path(index)
         library.reward_video(db, config, path, reward)
-        heart = library.heart_video(db, path) if is_up else None
+        try:
+            strength = max(1, min(5, int(request.args.get("strength", 1))))
+        except (TypeError, ValueError):
+            strength = 1
+        heart = library.heart_video(db, path, amount=strength) if is_up else None
         return jsonify(ok=True, heart=heart)
 
     @app.route("/api/rate_audio")
