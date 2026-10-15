@@ -59,6 +59,9 @@ const TUNING_DEFAULTS = {
   GOLDEN_HOUR_MULTIPLIER: 2.5,
   SURGE_MULTIPLIER: 2.0,
   SPIN_COOLDOWN_MS: 45000,
+  PATIENCE_CHECK_MS: 15000,
+  PATIENCE_HOLD_MS: 90000,
+  PATIENCE_XP: 15,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -104,7 +107,7 @@ function restartAllTunableIntervals() {
   startTunableInterval('MYSTERY_TILE_CHECK_MS', maybeTriggerMysteryTile);
 }
 
-const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS', 'MYSTERY_TILE_CHECK_MS'];
+const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS', 'MYSTERY_TILE_CHECK_MS', 'PATIENCE_CHECK_MS'];
 
 function setTuning(key, value) {
   TUNING[key] = value;
@@ -151,6 +154,7 @@ const TUNING_GROUPS = [
   { label: 'Color Rush / Splash', keys: ['COLOR_RUSH_PROBABILITY', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_PROBABILITY', 'COLOR_SPLASH_CHECK_MS'] },
   { label: 'Mystery Tile & Due-Aura', keys: ['MYSTERY_TILE_PROBABILITY', 'MYSTERY_TILE_CHECK_MS', 'MYSTERY_TILE_DURATION_MS', 'DUE_AURA_THRESHOLD_MS', 'DUE_AURA_MIN_HOLD_MS'] },
   { label: 'Spin & Spawning', keys: ['SPIN_COOLDOWN_MS', 'AMBIENT_SPAWN_SEPARATION_MS'] },
+  { label: 'Patience Hold', keys: ['PATIENCE_CHECK_MS', 'PATIENCE_HOLD_MS', 'PATIENCE_XP'] },
   { label: 'Multipliers & XP', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
 ];
 const TUNING_META = {
@@ -193,6 +197,9 @@ const TUNING_META = {
   DUE_AURA_MIN_HOLD_MS: { label: 'Due-aura min hold (before handoff)', unit: 's', min: 2000, max: 60000, step: 1000 },
   SPIN_COOLDOWN_MS: { label: 'Spin cooldown', unit: 's', min: 5000, max: 120000, step: 5000 },
   AMBIENT_SPAWN_SEPARATION_MS: { label: 'Ambient-spawn separation', unit: 's', min: 0, max: 10000, step: 250 },
+  PATIENCE_CHECK_MS: { label: 'Patience check interval', unit: 's', min: 5000, max: 60000, step: 1000 },
+  PATIENCE_HOLD_MS: { label: 'Patience hold (no-touch threshold)', unit: 's', min: 20000, max: 300000, step: 5000 },
+  PATIENCE_XP: { label: 'Patience bonus XP', unit: 'n', min: 5, max: 60, step: 1 },
   JACKPOT_HEAT_DECAY_PER_TICK: { label: 'Jackpot-heat decay (per 5s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   HEART_MULT_DECAY_PER_TICK: { label: 'Heart-multiplier decay (per 6s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   GOLDEN_HOUR_MULTIPLIER: { label: 'Golden Hour odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
@@ -1469,6 +1476,74 @@ function updateComboUi() {
   el.innerText = comboCount > 1 && Date.now() < comboExpireAt ? ('x' + comboMultiplier().toFixed(2) + ' combo') : '';
 }
 
+// Patience Hold: a slower-paced counterpart to the combo/chase mechanics
+// above, which all reward rapid activity - this rewards the opposite,
+// a sustained stretch of NOT touching any control while still actually
+// watching (tab visible). Session-wide, not per-tile, since the point is
+// "you've been calmly present for a while," not tied to any one clip.
+let lastAnyInteractionAt = Date.now();
+let patienceAwardedAt = Date.now();
+
+function markInteraction() { lastAnyInteractionAt = Date.now(); }
+
+function maybeAwardPatience() {
+  if (document.hidden) return; // can't call it "patiently watching" from a backgrounded tab
+  const now = Date.now();
+  if (now - lastAnyInteractionAt >= TUNING.PATIENCE_HOLD_MS && now - patienceAwardedAt >= TUNING.PATIENCE_HOLD_MS) {
+    patienceAwardedAt = now;
+    awardXp(TUNING.PATIENCE_XP);
+    toast('🧘 Patience +' + TUNING.PATIENCE_XP + 'xp');
+  }
+}
+startTunableInterval('PATIENCE_CHECK_MS', maybeAwardPatience);
+
+// Nudge: a subtle visual cue pulling attention back to Spin specifically
+// when it's been sitting ready and unused for a while - the one control
+// that's purely player-initiated with no passive trigger of its own, so
+// it's the one most likely to go unnoticed once the ambient mechanics
+// are already keeping things busy.
+const NUDGE_CHECK_MS = 60000;
+const NUDGE_IDLE_MS = 120000;
+
+function maybeNudgeSpin() {
+  if (document.hidden) return;
+  const btn = document.getElementById('spin-btn');
+  if (!btn) return;
+  const now = Date.now();
+  if (now >= spinReadyAt && now - Math.max(spinReadyAt, sessionStartedAt) > NUDGE_IDLE_MS) {
+    btn.classList.remove('spin-nudge');
+    void btn.offsetWidth;
+    btn.classList.add('spin-nudge');
+    setTimeout(() => btn.classList.remove('spin-nudge'), 1200);
+  }
+}
+setInterval(maybeNudgeSpin, NUDGE_CHECK_MS);
+
+// Welcome Back Bonus: a one-time-per-return bonus scaled with how long
+// you were away (capped), checked once at load against a timestamp left
+// behind by the last visit - purely a "glad you're back" moment, not
+// something that can be farmed by reloading the page repeatedly, since
+// the gap has to actually clear the minimum threshold each time.
+const WELCOME_BACK_KEY = 'mm_last_visit';
+const WELCOME_BACK_MIN_GAP_MS = 4 * 60 * 60 * 1000; // 4h+ away counts as "back"
+const WELCOME_BACK_MAX_GAP_MS = 72 * 60 * 60 * 1000; // gap beyond this doesn't earn more
+const WELCOME_BACK_MIN_XP = 10;
+const WELCOME_BACK_MAX_XP = 50;
+
+function checkWelcomeBackBonus() {
+  try {
+    const last = Number(localStorage.getItem(WELCOME_BACK_KEY)) || 0;
+    const now = Date.now();
+    if (last && now - last >= WELCOME_BACK_MIN_GAP_MS) {
+      const frac = Math.min(1, (now - last) / WELCOME_BACK_MAX_GAP_MS);
+      const bonus = Math.round(WELCOME_BACK_MIN_XP + frac * (WELCOME_BACK_MAX_XP - WELCOME_BACK_MIN_XP));
+      awardXp(bonus);
+      toast('👋 Welcome back! +' + bonus + 'xp');
+    }
+  } catch (e) {}
+  try { localStorage.setItem(WELCOME_BACK_KEY, String(Date.now())); } catch (e) {}
+}
+
 // Personal bests: lifetime stats that only ever improve, persisted across
 // sessions - self-competition against your own history rather than a
 // social leaderboard.
@@ -2384,6 +2459,7 @@ function ensureTiles(count) {
     vid.addEventListener('loadedmetadata', () => onAspectKnown(i));
     const ambientEl = tile.querySelector('.tile-ambient-fx');
     ambientEl.addEventListener('click', () => {
+      markInteraction();
       if (i === bonusWindowTileIndex) claimBonusTile(i);
       else if (i === chaseFlashTileIndex) catchChaseFlash(i);
       else if (i === sealedTileIndex) openSealedTile(i);
@@ -2528,6 +2604,7 @@ function pace(v, quiet) {
 }
 function vec(k, v) { fetch('/api/vector?key=' + k + '&val=' + v); }
 function rateScreen(i, dir, btn) {
+  markInteraction();
   if (dir === 'up') {
     claimBonusTile(i);
     bumpHeartMultiplier();
@@ -3349,6 +3426,7 @@ const SPIN_REEL_TICK_MS = 110;
 const SPIN_REEL_SYMBOLS = ['🎰 JACKPOT', '😤 SO CLOSE', '✨ BONUS', '🎉 XP', '💨 NOTHING'];
 
 function spin() {
+  markInteraction();
   const now = Date.now();
   if (now < spinReadyAt) {
     toast('🎰 Still cooling down (' + Math.ceil((spinReadyAt - now) / 1000) + 's)');
@@ -3470,6 +3548,7 @@ window.onload = () => {
   loadStats();
   loadTrophies();
   loadQuests();
+  checkWelcomeBackBonus();
   lastAnyPayoffAt = sessionStartedAt;
   overlayEl = document.getElementById('overlay-audio');
   loadVolumePrefs();
