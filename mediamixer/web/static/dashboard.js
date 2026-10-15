@@ -2560,6 +2560,7 @@ function rateScreen(i, dir, btn) {
       toast(dir === 'up' ? '❤️ Reinforced' : '👎 Penalized', dir !== 'up');
       if (data && data.heart && data.heart.heart_count >= 2) {
         showClaimRewardLabel(i, '💗 Heart Streak x' + data.heart.heart_count);
+        pulseWarmGlow(i, data.heart.heart_count);
       }
     })
     .catch(() => {});
@@ -3282,6 +3283,26 @@ function triggerMiniPayoff(idx) {
 }
 
 const CLAIM_REWARD_LABEL_MS = 1400;
+
+// Warm Glow Aging: intensity is a diminishing curve of this specific
+// video's lifetime heart count (asymptotic toward 1, never reaching it),
+// capped to a modest peak opacity - so a video hearted 2 times and one
+// hearted 50 times both get a warm bloom, but the 50-heart one doesn't
+// get a 25x-brighter flash. Directly answers the "would a big glow each
+// time taint a really-liked video over time?" concern: it can't, because
+// the curve flattens hard after the first few hearts instead of scaling
+// linearly with count forever.
+function pulseWarmGlow(idx, heartCount) {
+  const el = tileClaimEls[idx];
+  if (!el) return;
+  const curve = 1 - Math.exp(-heartCount / 6); // 0 at 0, ~0.37 at count=3, ~0.78 at count=10, asymptotic to 1
+  const peak = Math.min(0.55, 0.2 + curve * 0.4); // capped peak opacity, never a full-white flash
+  el.style.setProperty('--warm-peak', peak.toFixed(2));
+  el.classList.remove('warm-glow');
+  void el.offsetWidth;
+  el.classList.add('warm-glow');
+  setTimeout(() => el.classList.remove('warm-glow'), 1600);
+}
 
 function showClaimRewardLabel(idx, text) {
   const el = tileClaimEls[idx];
