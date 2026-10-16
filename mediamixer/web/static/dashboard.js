@@ -2363,6 +2363,38 @@ function maybeTriggerFakeNearMiss() {
 // but per explicit feedback Auto-Pilot no longer gets to flip it; it
 // stays exactly wherever the viewer last set it manually.
 const AUTOPILOT_TICK_MS = 4000;
+// Polyrhythm: fx and ambient ride their own cycle length instead of the
+// exact same one pace/barrage/jackpot/novelty share, so the combined
+// texture keeps evolving cycle to cycle instead of everything peaking
+// and bottoming out in lockstep every single time.
+const FX_PERIOD_MULT = 1.3;
+const AMBIENT_PERIOD_MULT = 0.7;
+// Cycle length itself drifts slowly within +/-20% of the slider value
+// instead of being perfectly constant, so the macro tempo doesn't feel
+// metronomically exact either. A deliberately non-round drift period
+// (17 real minutes) so the drift's own rhythm doesn't line up neatly
+// with the cycle length a typical viewer would pick.
+const CYCLE_DRIFT_FRAC = 0.2;
+const CYCLE_DRIFT_PERIOD_MS = 17 * 60000;
+// A rare, brief head-fake while climbing toward a climax - not just
+// surface flourish, an actual temporary dip in the real curve.
+const FAKEOUT_PROBABILITY_PER_TICK = 0.015;
+const FAKEOUT_DURATION_MS = 6000;
+const FAKEOUT_MULT = 0.3;
+// Multi-cycle "season": every 3rd cycle gets a raised ceiling, but only
+// once the library's actually accumulated some real hearted history
+// (statsLifetimeHearts) - ties the meta-arc to actual content-layer
+// progress instead of being pure abstract timing.
+const SEASON_EVERY_N = 3;
+const SEASON_CEILING_MULT = 1.3;
+const SEASON_CONTENT_THRESHOLD = 5;
+
+let autopilotLastMainFrac = 0;
+let autopilotCycleCount = 0;
+let autopilotToneFiredThisCycle = false;
+let autopilotFakeoutActive = false;
+let autopilotFakeoutUntil = 0;
+let autopilotCurrentStatusPhrase = '';
 // "ambient" ramps every client-only passive-spawn system added since this
 // arc was first written (bonus window, chase flash, near-miss, spiral-
 // from-hearts) via autopilotAmbientBoost below - previously those all sat
@@ -2377,6 +2409,32 @@ const AUTOPILOT_KEYFRAMES = [
   { t: 0.85, pace: 1, barrage: 0.08, jackpot: 0.15, fx: 3, novelty: 0.30, ambient: 0.4 },
   { t: 1.00, pace: 3, barrage: 0.01, jackpot: 0.02, fx: 1, novelty: 0.10, ambient: 0.0 },
 ];
+// Jittered per-cycle (see regenerateJitteredKeyframes) so no two cycles
+// climax at exactly the same relative moment - the live table tick
+// actually reads; AUTOPILOT_KEYFRAMES above stays the pristine source.
+let autopilotJitteredKeyframes = AUTOPILOT_KEYFRAMES;
+
+function regenerateJitteredKeyframes() {
+  const jitterAmt = 0.03;
+  autopilotJitteredKeyframes = AUTOPILOT_KEYFRAMES.map((kf, i) => {
+    if (i === 0 || i === AUTOPILOT_KEYFRAMES.length - 1) return kf; // keep the endpoints anchored
+    return Object.assign({}, kf, { t: Math.max(0.01, Math.min(0.99, kf.t + (Math.random() * 2 - 1) * jitterAmt)) });
+  });
+}
+
+// Per-axis easing applied to the lerp fraction before interpolating -
+// previously every axis moved through the exact same linear fraction,
+// so everything rose and fell in lockstep. barrage/jackpot now ease in
+// (slow start, sharp rise) for a punchier-feeling climb; ambient eases
+// out (quick rise, long settle); fx/novelty/pace stay linear.
+const AUTOPILOT_AXIS_EASING = {
+  barrage: (lf) => Math.pow(lf, 1.4),
+  jackpot: (lf) => Math.pow(lf, 1.4),
+  ambient: (lf) => 1 - Math.pow(1 - lf, 1.6),
+  fx: (lf) => lf,
+  novelty: (lf) => lf,
+  pace: (lf) => lf,
+};
 
 let autopilotAmbientBoost = 0;
 let autopilotEnabled = false;
@@ -2401,20 +2459,44 @@ let autopilotLastPace = null;
 // 'low' = few tiles (vault's patient sealed-tile hunting wants focus),
 // 'high' = many tiles (jackpot/color's spectacle wants breadth), 'mid'
 // = chase's reflexive middle ground.
+// curveBias reshapes the *arc's* own lf for however long this zone is
+// running - zones aren't just different odds tables anymore, they're
+// different-feeling rides. >1 stretches the climb out (vault's patient
+// build), <1 sharpens it into a faster spike (jackpot's punch).
 const AUTOPILOT_ZONES = {
-  chase: { label: 'Chase Zone', chase: 1.9, bonus: 1.3, sealed: 0.6, colorRush: 0.5, barrage: 1.0, tileBias: 'mid' },
-  color: { label: 'Color Zone', chase: 0.6, bonus: 0.8, sealed: 0.8, colorRush: 2.4, barrage: 1.0, tileBias: 'high' },
-  jackpot: { label: 'Jackpot Zone', chase: 0.7, bonus: 0.9, sealed: 1.0, colorRush: 0.7, barrage: 1.6, tileBias: 'high' },
-  vault: { label: 'Vault Zone', chase: 0.6, bonus: 0.7, sealed: 2.2, colorRush: 0.6, barrage: 0.9, tileBias: 'low' },
+  chase: { label: 'Chase Zone', chase: 1.9, bonus: 1.3, sealed: 0.6, colorRush: 0.5, barrage: 1.0, tileBias: 'mid', curveBias: 1.0 },
+  color: { label: 'Color Zone', chase: 0.6, bonus: 0.8, sealed: 0.8, colorRush: 2.4, barrage: 1.0, tileBias: 'high', curveBias: 0.85 },
+  jackpot: { label: 'Jackpot Zone', chase: 0.7, bonus: 0.9, sealed: 1.0, colorRush: 0.7, barrage: 1.6, tileBias: 'high', curveBias: 0.7 },
+  vault: { label: 'Vault Zone', chase: 0.6, bonus: 0.7, sealed: 2.2, colorRush: 0.6, barrage: 0.9, tileBias: 'low', curveBias: 1.4 },
 };
 const AUTOPILOT_ZONE_NAMES = Object.keys(AUTOPILOT_ZONES);
 let autopilotZone = null;
 let autopilotZoneStartedAt = 0;
+let autopilotPrevZone = null; // for crossfade and transition-chemistry recording
+let autopilotZoneChangedAt = 0;
+const ZONE_CROSSFADE_MS = 15000;
 
 // Falls back to 1 (no-op) whenever Auto-Pilot is off, so manual play is
-// never affected by zone weighting at all.
+// never affected by zone weighting at all. Crossfades from the previous
+// zone's multiplier over ZONE_CROSSFADE_MS instead of an instant snap
+// the moment a new zone is picked, so a zone change doesn't yank every
+// odds table to its new value in one tick.
 function autopilotZoneMultiplier(key) {
-  return autopilotZone ? AUTOPILOT_ZONES[autopilotZone][key] : 1;
+  if (!autopilotZone) return 1;
+  const current = AUTOPILOT_ZONES[autopilotZone][key];
+  if (!autopilotPrevZone) return current;
+  const age = Date.now() - autopilotZoneChangedAt;
+  if (age >= ZONE_CROSSFADE_MS) return current;
+  return lerp(AUTOPILOT_ZONES[autopilotPrevZone][key], current, age / ZONE_CROSSFADE_MS);
+}
+
+// A small, short-lived boost layered on top of the slow zone-satiation
+// clock - current combo heat (rapid rating/catches) nudges the odds up
+// a bit further right now, so a zone has its own faster ripples riding
+// on top of its own slower wave instead of everything moving only on
+// the satiation timescale.
+function autopilotMicroBoost() {
+  return 1 + Math.min(0.3, (comboMultiplier() - 1) * 0.15);
 }
 
 // ---- Engagement signal ----
@@ -2455,6 +2537,19 @@ function readEngagement() {
   return engagementScore;
 }
 
+// A much slower session-scale EMA of the same engagement readings,
+// separate from the fast-decaying one above - this is what lets a
+// climax's own ceiling scale with "has this session, as a whole, been
+// genuinely engaged" rather than just this moment's reading. A session
+// that's been consistently engaged earns a slightly higher barrage/
+// jackpot ceiling at its peaks; a flatter one gets gently capped lower
+// instead of being thrown full-intensity peaks it hasn't responded to.
+let sessionTrust = 1.0;
+function updateSessionTrust(engagement) {
+  const alpha = 0.02;
+  sessionTrust = (1 - alpha) * sessionTrust + alpha * engagement;
+}
+
 // ---- Zone bandit ----
 // Zones used to just rotate on a fixed timer, excluding only the last
 // one used - no memory of which ones actually land for this viewer.
@@ -2467,34 +2562,83 @@ function readEngagement() {
 // exploration pressure is indistinguishable from repetition.
 let zonePayoff = { chase: 1.0, color: 1.0, jackpot: 1.0, vault: 1.0 };
 let zoneRecentUse = { chase: 3, color: 3, jackpot: 3, vault: 3 };
+let zoneTimesPicked = { chase: 0, color: 0, jackpot: 0, vault: 0 };
+// 'fromZone>toZone' -> learned engagement EMA for that specific sequence,
+// not just the destination zone in isolation - order can matter as much
+// as choice (does engagement tend to rise more after Vault->Chase than
+// after Vault->Color?).
+let zoneTransitionPayoff = {};
+const COLD_ZONE_INSURANCE_PROBABILITY = 0.12;
 
 function loadZonePayoffPrefs() {
   try {
     const saved = JSON.parse(localStorage.getItem('mm_zone_payoff') || '{}');
     AUTOPILOT_ZONE_NAMES.forEach((z) => { if (Number.isFinite(saved[z])) zonePayoff[z] = saved[z]; });
   } catch (e) {}
+  try {
+    const saved = JSON.parse(localStorage.getItem('mm_zone_transitions') || '{}');
+    Object.keys(saved).forEach((k) => { if (Number.isFinite(saved[k])) zoneTransitionPayoff[k] = saved[k]; });
+  } catch (e) {}
 }
 
-function recordZonePayoff(zoneName, engagement) {
+// wasDisengagedCut marks a zone that got cut short specifically because
+// engagement actively dropped, not one that simply ran its course or
+// hit the hard ceiling - that's a real "this didn't land" signal, worth
+// remembering as worse than the instantaneous engagement reading alone
+// might suggest, so a genuine miss doesn't wash out as quickly as an
+// ordinary so-so showing would.
+function recordZonePayoff(zoneName, engagement, wasDisengagedCut, fromZone) {
   if (!zoneName) return;
-  const alpha = 0.3; // how much one zone's outcome moves its learned preference
-  zonePayoff[zoneName] = (1 - alpha) * zonePayoff[zoneName] + alpha * engagement;
+  const alpha = wasDisengagedCut ? 0.5 : 0.3;
+  const effective = wasDisengagedCut ? Math.min(engagement, 0.5) : engagement;
+  zonePayoff[zoneName] = (1 - alpha) * zonePayoff[zoneName] + alpha * effective;
   try { localStorage.setItem('mm_zone_payoff', JSON.stringify(zonePayoff)); } catch (e) {}
+  if (fromZone) {
+    const key = fromZone + '>' + zoneName;
+    const prev = Number.isFinite(zoneTransitionPayoff[key]) ? zoneTransitionPayoff[key] : 1.0;
+    zoneTransitionPayoff[key] = 0.7 * prev + 0.3 * effective;
+    try { localStorage.setItem('mm_zone_transitions', JSON.stringify(zoneTransitionPayoff)); } catch (e) {}
+  }
   AUTOPILOT_ZONE_NAMES.forEach((z) => { zoneRecentUse[z] = (z === zoneName) ? 0 : zoneRecentUse[z] + 1; });
 }
 
-function pickAutopilotZone(excludeName) {
+// Derives a rough "what this viewer responds to" read from the learned
+// zone weights - not surfaced as a standalone feature, just available
+// for the status readout below.
+function autopilotTemperament() {
+  let best = AUTOPILOT_ZONE_NAMES[0];
+  AUTOPILOT_ZONE_NAMES.forEach((z) => { if (zonePayoff[z] > zonePayoff[best]) best = z; });
+  return AUTOPILOT_ZONES[best].label;
+}
+
+function pickAutopilotZone(excludeName, fromZone) {
   const names = AUTOPILOT_ZONE_NAMES.filter((z) => z !== excludeName);
+  // Cold-zone insurance: occasionally ignore every learned weight and
+  // just give whichever zone has been picked least this session a fair
+  // shot - otherwise an unlucky first impression could bury a zone
+  // under a low EMA score it then never gets picked often enough to
+  // recover from.
+  if (Math.random() < COLD_ZONE_INSURANCE_PROBABILITY) {
+    const minPicks = Math.min(...names.map((z) => zoneTimesPicked[z]));
+    const coldest = names.filter((z) => zoneTimesPicked[z] === minPicks);
+    const picked = coldest[Math.floor(Math.random() * coldest.length)];
+    zoneTimesPicked[picked]++;
+    return picked;
+  }
   const weights = names.map((z) => {
     const recencyMult = Math.min(1, zoneRecentUse[z] / 3); // ramps back to full weight over ~3 rotations
-    return Math.max(0.05, zonePayoff[z] * (0.3 + 0.7 * recencyMult));
+    const transKey = (fromZone || 'none') + '>' + z;
+    const transPayoff = Number.isFinite(zoneTransitionPayoff[transKey]) ? zoneTransitionPayoff[transKey] : 1.0;
+    const blended = zonePayoff[z] * 0.7 + transPayoff * 0.3; // mostly per-zone preference, sequence chemistry as a secondary nudge
+    return Math.max(0.05, blended * (0.3 + 0.7 * recencyMult));
   });
   const total = weights.reduce((sum, w) => sum + w, 0);
   let roll = Math.random() * total;
   for (let i = 0; i < names.length; i++) {
     roll -= weights[i];
-    if (roll <= 0) return names[i];
+    if (roll <= 0) { zoneTimesPicked[names[i]]++; return names[i]; }
   }
+  zoneTimesPicked[names[names.length - 1]]++;
   return names[names.length - 1];
 }
 
@@ -2518,26 +2662,84 @@ function maybeReleaseBoredomDebt() {
   else if (tileElements.length) fetch('/api/true_mystery?screen=' + Math.floor(Math.random() * tileElements.length)).then((r) => r.json()).then((d) => { if (d && d.picked) markNoveltyHappened(); });
 }
 
-// ---- Session phase ----
-// A slow, session-scale modifier on top of the fast cycle-scale zone
-// logic below - a 10-minute sitting and a 90-minute one shouldn't get
-// the identical treatment. Purely a nudge on novelty bias, not a
-// parallel system: 'opening' leans discovery (the content bandit still
-// needs data), 'deepening' stays neutral (let the Vibe Dial and the arc
-// itself drive it), and 'late' either keeps leaning in (engagement still
-// climbing this far in has earned it) or eases toward familiar/calm
-// instead of forcing the same shape a short session gets.
-function autopilotSessionPhase() {
-  const elapsedMin = (Date.now() - sessionStartedAt) / 60000;
-  if (elapsedMin < 10) return 'opening';
-  if (elapsedMin < 45) return 'deepening';
-  return 'late';
+// ---- Step-off prediction + retention beat ----
+// Deliberately has NO fixed time anchor anywhere, not even a personalized-
+// but-fixed one - per explicit feedback, a session ending shouldn't feel
+// like it hits a scheduled "late mode." Instead this learns roughly how
+// long THIS viewer's sessions actually tend to run (an EMA of real past
+// session lengths, persisted across visits) and watches for the real
+// signature of someone about to step away - engagement trending down as
+// that learned point approaches - rather than switching phases on a
+// clock. When that signature shows up, it runs a deliberate down-then-up
+// beat: ease off for a bit (a genuine breather, not a cliff), then push
+// a fresh novelty injection and faster pace to try to re-hook interest -
+// an attempt to extend the session, not a graceful acceptance that it's
+// ending. Because typicalSessionLenMs itself keeps growing with every
+// longer session, "how close to stepping off" is always relative to
+// this viewer's own actual pattern, never a constant.
+let typicalSessionLenMs = 25 * 60000; // seed guess, overwritten fast by real history
+let sessionRetentionBeatPhase = null; // null | 'down' | 'up'
+let sessionRetentionBeatStartedAt = 0;
+const RETENTION_DOWN_MS = 25000;
+const RETENTION_UP_MS = 35000;
+
+function loadSessionLengthHistory() {
+  try {
+    const saved = parseFloat(localStorage.getItem('mm_typical_session_ms'));
+    if (Number.isFinite(saved) && saved > 60000) typicalSessionLenMs = saved;
+  } catch (e) {}
 }
 
-function autopilotNoveltyBiasForPhase(phase, trendingUp) {
-  if (phase === 'opening') return 0.5;
-  if (phase === 'deepening') return 0.0;
-  return trendingUp ? 0.1 : -0.3;
+// Fired on an actual step-away signal (tab backgrounded/closed) rather
+// than a timer - a bounce under a minute isn't a real session and
+// shouldn't drag the learned average down.
+function recordSessionEnded() {
+  const actualLenMs = Date.now() - sessionStartedAt;
+  if (actualLenMs < 60000) return;
+  const alpha = 0.25;
+  typicalSessionLenMs = (1 - alpha) * typicalSessionLenMs + alpha * actualLenMs;
+  try { localStorage.setItem('mm_typical_session_ms', typicalSessionLenMs); } catch (e) {}
+}
+
+function stepOffProximity() {
+  const elapsed = Date.now() - sessionStartedAt;
+  return Math.min(1.5, elapsed / Math.max(60000, typicalSessionLenMs));
+}
+
+// Call once per autopilot tick. Advances the beat state machine; the
+// actual "ramp back up" push (fresh novelty, not left to chance) fires
+// the moment it enters the 'up' phase.
+function updateRetentionBeat(proximity, trendingDown) {
+  const now = Date.now();
+  if (!sessionRetentionBeatPhase) {
+    if (proximity > 0.75 && trendingDown) {
+      sessionRetentionBeatPhase = 'down';
+      sessionRetentionBeatStartedAt = now;
+    }
+    return;
+  }
+  const age = now - sessionRetentionBeatStartedAt;
+  if (sessionRetentionBeatPhase === 'down' && age > RETENTION_DOWN_MS) {
+    sessionRetentionBeatPhase = 'up';
+    sessionRetentionBeatStartedAt = now;
+    fetch('/api/double_feature').catch(() => {});
+    markNoveltyHappened();
+  } else if (sessionRetentionBeatPhase === 'up' && age > RETENTION_UP_MS) {
+    sessionRetentionBeatPhase = null; // one full beat per approach; proximity keeps climbing if they're still here after
+  }
+}
+
+// Continuous proximity bands, not discrete phases - 'opening' and
+// 'deepening' are still here in spirit (low proximity leans discovery
+// since the content bandit still needs data; mid proximity stays
+// neutral) but there's no hard switch between them, and the retention
+// beat (when active) overrides both outright.
+function autopilotNoveltyBias(proximity, beatPhase, trendingUp) {
+  if (beatPhase === 'down') return -0.1;
+  if (beatPhase === 'up') return 0.6;
+  if (proximity < 0.3) return 0.5;
+  if (proximity < 0.8) return 0.0;
+  return trendingUp ? 0.1 : -0.2;
 }
 
 function loadAutopilotPrefs() {
@@ -2554,8 +2756,8 @@ function loadAutopilotPrefs() {
 
 function lerp(a, b, t) { return a + (b - a) * t; }
 
-function autopilotPhaseAt(frac) {
-  const kfs = AUTOPILOT_KEYFRAMES;
+function autopilotPhaseAt(frac, kfs) {
+  kfs = kfs || autopilotJitteredKeyframes;
   for (let i = 0; i < kfs.length - 1; i++) {
     if (frac >= kfs[i].t && frac <= kfs[i + 1].t) {
       const span = kfs[i + 1].t - kfs[i].t || 1;
@@ -2567,22 +2769,43 @@ function autopilotPhaseAt(frac) {
 
 function autopilotTick() {
   if (!autopilotEnabled) return;
-  const cycleS = Math.max(30, autopilotCycleMinutes * 60);
-  const elapsed = (Date.now() - autopilotStartTime) / 1000;
-  const frac = (elapsed % cycleS) / cycleS;
-  const { a, b, lf } = autopilotPhaseAt(frac);
-  const engagement = readEngagement();
-
-  // Zone duration is now engagement-aware instead of a fixed wrap-the-
-  // cycle timer - see the satiation/bandit comments above. A zone
-  // extends itself while it's genuinely working, but the bar to keep
-  // extending rises the longer it's already run, with a hard ceiling
-  // that fires regardless of engagement - "enough of a good thing" is a
-  // real limit, not just a suggestion.
   const now = Date.now();
+
+  // Drifting cycle length: wanders slowly within +/-20% of the slider
+  // value instead of being perfectly constant.
+  const baseS = Math.max(30, autopilotCycleMinutes * 60);
+  const driftPhase = ((now - autopilotStartTime) % CYCLE_DRIFT_PERIOD_MS) / CYCLE_DRIFT_PERIOD_MS;
+  const cycleS = baseS * (1 + CYCLE_DRIFT_FRAC * Math.sin(driftPhase * Math.PI * 2));
+
+  const elapsedS = (now - autopilotStartTime) / 1000;
+  const mainFrac = (elapsedS % cycleS) / cycleS;
+  if (mainFrac < autopilotLastMainFrac) {
+    // Cycle wrapped - fresh jitter for the next lap, and count it for seasons.
+    regenerateJitteredKeyframes();
+    autopilotCycleCount++;
+    autopilotToneFiredThisCycle = false;
+  }
+  autopilotLastMainFrac = mainFrac;
+
+  const engagement = readEngagement();
+  updateSessionTrust(engagement);
+  const trendingUp = engagement > engagementPrevForTrend + 0.02;
+  const trendingDown = engagement < engagementPrevForTrend - 0.02;
+  engagementPrevForTrend = engagement;
+
+  const proximity = stepOffProximity();
+  updateRetentionBeat(proximity, trendingDown);
+
+  // Zone duration is engagement-aware instead of a fixed wrap-the-cycle
+  // timer - see the satiation/bandit comments above. A zone extends
+  // itself while it's genuinely working, but the bar to keep extending
+  // rises the longer it's already run, with a hard ceiling that fires
+  // regardless of engagement - "enough of a good thing" is a real
+  // limit, not just a suggestion.
   if (!autopilotZone) {
-    autopilotZone = pickAutopilotZone(null);
+    autopilotZone = pickAutopilotZone(null, autopilotPrevZone);
     autopilotZoneStartedAt = now;
+    autopilotZoneChangedAt = now;
     maybeApplyZoneDrivenMosaic(autopilotZone);
     markNoveltyHappened();
   } else {
@@ -2595,25 +2818,101 @@ function autopilotTick() {
     const disengaged = engagement < 0.6 && zoneAgeMs > naturalMs * 0.4; // don't cut absurdly early on a brief dip
     const naturallyDue = zoneAgeMs > naturalMs && engagement < stayThreshold;
     if (pastHardCeiling || disengaged || naturallyDue) {
-      recordZonePayoff(autopilotZone, engagement);
-      autopilotZone = pickAutopilotZone(autopilotZone);
+      const endingZone = autopilotZone;
+      recordZonePayoff(endingZone, engagement, disengaged && !pastHardCeiling, autopilotPrevZone);
+      // Guaranteed de-escalation: a genuine disengagement cut picks a
+      // calming zone directly rather than leaving it to the bandit's
+      // roll, which could unluckily land on another intense one.
+      const nextZone = (disengaged && !pastHardCeiling && endingZone !== 'vault')
+        ? 'vault'
+        : pickAutopilotZone(endingZone, endingZone);
+      if (disengaged && !pastHardCeiling) fetch('/api/double_feature').catch(() => {}); // deliberate recovery, not left to boredom debt's own schedule
+      autopilotPrevZone = endingZone;
+      autopilotZone = nextZone;
       autopilotZoneStartedAt = now;
+      autopilotZoneChangedAt = now;
       maybeApplyZoneDrivenMosaic(autopilotZone);
       markNoveltyHappened();
     }
   }
+
+  autopilotCurrentStatusPhrase =
+    sessionRetentionBeatPhase === 'down' ? '😌 Easing back' :
+    sessionRetentionBeatPhase === 'up' ? '✨ Mixing it up' :
+    trendingDown ? '🔄 Recalibrating feel' :
+    trendingUp ? '📈 Leaning in' : '';
   updateAutopilotZoneUi();
   maybeReleaseBoredomDebt();
 
-  const barrageP = lerp(a.barrage, b.barrage, lf) * autopilotZoneMultiplier('barrage');
-  const jackpotP = lerp(a.jackpot, b.jackpot, lf) * autopilotZoneMultiplier('barrage');
-  const phase = autopilotSessionPhase();
-  const trendingUp = engagement > engagementPrevForTrend + 0.02;
-  engagementPrevForTrend = engagement;
-  const noveltyBonus = Math.max(0, lerp(a.novelty, b.novelty, lf) + autopilotNoveltyBiasForPhase(phase, trendingUp));
-  const fxTarget = Math.round(lerp(a.fx, b.fx, lf));
-  const targetPace = lf < 0.5 ? a.pace : b.pace;
-  autopilotAmbientBoost = lerp(a.ambient, b.ambient, lf);
+  // Per-zone curveBias reshapes the arc's own progress through itself -
+  // a zone isn't just a different odds table, it's a different-feeling
+  // ride (vault stretches the climb out, jackpot sharpens it).
+  const curveBias = autopilotZone ? AUTOPILOT_ZONES[autopilotZone].curveBias : 1.0;
+  const mainCurvedFrac = Math.pow(mainFrac, curveBias);
+  const { a, b, lf } = autopilotPhaseAt(mainCurvedFrac);
+
+  // fx/ambient ride their own polyrhythm period, each getting their own
+  // phase lookup instead of sharing the main lf.
+  const fxCycleS = cycleS * FX_PERIOD_MULT;
+  const fxFrac = (elapsedS % fxCycleS) / fxCycleS;
+  const { a: fxA, b: fxB, lf: fxLf } = autopilotPhaseAt(fxFrac);
+  const ambientCycleS = cycleS * AMBIENT_PERIOD_MULT;
+  const ambientFrac = (elapsedS % ambientCycleS) / ambientCycleS;
+  const { a: ambA, b: ambB, lf: ambLf } = autopilotPhaseAt(ambientFrac);
+
+  // Rare head-fake while climbing: a brief real dip, not just a visual flourish.
+  if (!autopilotFakeoutActive && lf > 0.3 && lf < 0.65 && Math.random() < FAKEOUT_PROBABILITY_PER_TICK) {
+    autopilotFakeoutActive = true;
+    autopilotFakeoutUntil = now + FAKEOUT_DURATION_MS;
+  }
+  if (autopilotFakeoutActive && now > autopilotFakeoutUntil) autopilotFakeoutActive = false;
+  const fakeoutMult = autopilotFakeoutActive ? FAKEOUT_MULT : 1;
+
+  // Multi-cycle season: every Nth cycle gets a raised ceiling, gated on
+  // the library actually having accumulated some real hearted history.
+  const isBigSeason = (autopilotCycleCount % SEASON_EVERY_N === SEASON_EVERY_N - 1) && statsLifetimeHearts >= SEASON_CONTENT_THRESHOLD;
+  const seasonMult = isBigSeason ? SEASON_CEILING_MULT : 1;
+
+  // Session trust: a session that's been consistently engaged overall
+  // earns a slightly higher ceiling at its peaks than a flatter one.
+  const trustMult = 0.85 + Math.min(1.5, sessionTrust) * 0.2;
+
+  // Retention beat directly scales intensity too, not just novelty -
+  // ease off for real during 'down', then genuinely push pace/odds back
+  // up during 'up' instead of only nudging content novelty.
+  const retentionMult = sessionRetentionBeatPhase === 'up' ? 1.4 : sessionRetentionBeatPhase === 'down' ? 0.7 : 1;
+
+  const barrageEasedLf = AUTOPILOT_AXIS_EASING.barrage(lf);
+  const jackpotEasedLf = AUTOPILOT_AXIS_EASING.jackpot(lf);
+  const comboMicroBoost = autopilotMicroBoost();
+  const intensityMult = autopilotZoneMultiplier('barrage') * comboMicroBoost * fakeoutMult * seasonMult * trustMult * retentionMult;
+  const barrageP = lerp(a.barrage, b.barrage, barrageEasedLf) * intensityMult;
+  const jackpotP = lerp(a.jackpot, b.jackpot, jackpotEasedLf) * intensityMult;
+
+  const noveltyLean = autopilotNoveltyBias(proximity, sessionRetentionBeatPhase, trendingUp);
+  const noveltyBonus = Math.max(0, lerp(a.novelty, b.novelty, AUTOPILOT_AXIS_EASING.novelty(lf)) + noveltyLean);
+  const fxTarget = Math.round(lerp(fxA.fx, fxB.fx, AUTOPILOT_AXIS_EASING.fx(fxLf)));
+  autopilotAmbientBoost = lerp(ambA.ambient, ambB.ambient, AUTOPILOT_AXIS_EASING.ambient(ambLf));
+
+  // Pace decoupled from the intensity curve: still arc-driven as a base,
+  // but nudged further by novelty-lean (discovery wants faster sampling,
+  // familiar wants slower savoring) and by the retention beat directly
+  // ("more pace" is explicitly part of the re-hook push).
+  let targetPace = lf < 0.5 ? a.pace : b.pace;
+  if (sessionRetentionBeatPhase === 'up') targetPace = 0;
+  else if (sessionRetentionBeatPhase === 'down') targetPace = Math.min(3, targetPace + 1);
+  else if (noveltyLean > 0.2) targetPace = Math.max(0, targetPace - 1);
+  else if (noveltyLean < -0.15) targetPace = Math.min(3, targetPace + 1);
+
+  // A quiet audio tell right as a climax resolves into its taper, once
+  // per cycle - compared against this cycle's own jittered keyframe
+  // object (what autopilotPhaseAt actually hands back), not the
+  // pristine source table, since jitter rebuilds fresh objects for
+  // every middle keyframe each cycle.
+  if (!autopilotToneFiredThisCycle && a === autopilotJitteredKeyframes[3] && lf > 0.05) {
+    autopilotToneFiredThisCycle = true;
+    cycleTone();
+  }
 
   fetch('/api/intensity?barrage=' + barrageP.toFixed(3) + '&jackpot=' + jackpotP.toFixed(3));
   fetch('/api/novelty?bonus=' + noveltyBonus.toFixed(3));
@@ -2624,7 +2923,7 @@ function autopilotTick() {
 function updateAutopilotZoneUi() {
   const el = document.getElementById('l-autopilot-zone');
   const row = document.getElementById('autopilot-zone-row');
-  if (el) el.innerText = autopilotZone ? AUTOPILOT_ZONES[autopilotZone].label : '';
+  if (el) el.innerText = autopilotZone ? (AUTOPILOT_ZONES[autopilotZone].label + (autopilotCurrentStatusPhrase ? ' · ' + autopilotCurrentStatusPhrase : '')) : '';
   if (row) row.style.display = autopilotZone ? 'flex' : 'none';
 }
 
@@ -2730,7 +3029,15 @@ function startAutopilot() {
   autopilotStartTime = Date.now();
   autopilotLastPace = null;
   autopilotZone = null;
+  autopilotPrevZone = null;
   autopilotZoneStartedAt = 0;
+  autopilotZoneChangedAt = 0;
+  autopilotLastMainFrac = 0;
+  autopilotCycleCount = 0;
+  autopilotToneFiredThisCycle = false;
+  autopilotFakeoutActive = false;
+  sessionRetentionBeatPhase = null;
+  regenerateJitteredKeyframes();
   ticksSinceNovelty = 0;
   if (!fxEnabled) toggleFx();
   autopilotTick();
@@ -2741,8 +3048,9 @@ function stopAutopilot() {
   clearInterval(autopilotTimer);
   autopilotTimer = null;
   autopilotAmbientBoost = 0;
-  if (autopilotZone) recordZonePayoff(autopilotZone, readEngagement()); // learn from however long this one actually ran, even cut short
+  if (autopilotZone) recordZonePayoff(autopilotZone, readEngagement(), false, autopilotPrevZone); // learn from however long this one actually ran, even cut short
   autopilotZone = null;
+  autopilotCurrentStatusPhrase = '';
   updateAutopilotZoneUi();
   // Auto-Pilot's arc drives novelty/exploration on its own curve while
   // running (see the ARC table's `novelty` column) - handing it back to
@@ -2815,6 +3123,10 @@ function recalibrate() {
   toast('🔄 Recalibrating - mixing it up');
   nudgeEngagement(-0.3); // a clear rejection signal - three dislikes in a row is not "flat," it's actively not landing
   fetch('/api/skip');
+  // Deliberate recovery, not just a reroll: an active rejection gets a
+  // real attempt at a palate-cleanser right now instead of waiting on
+  // boredom debt's own unrelated schedule to maybe deliver one.
+  fetch('/api/double_feature').catch(() => {});
   if (!autopilotEnabled) {
     applyVibeDial(Math.max(vibeDialValue, RECALIBRATE_DISCOVERY_BONUS));
     setTimeout(() => { if (!autopilotEnabled) applyVibeDial(vibeDialValue); }, RECALIBRATE_DISCOVERY_HOLD_MS);
@@ -4323,6 +4635,9 @@ window.onload = () => {
   loadManualSpeedPref();
   loadDynamicMosaicPrefs();
   loadZonePayoffPrefs();
+  loadSessionLengthHistory();
+  document.addEventListener('visibilitychange', () => { if (document.hidden) recordSessionEnded(); });
+  window.addEventListener('beforeunload', recordSessionEnded);
   loadTileAudioVolumePref();
   loadSessionTimerPref();
   applyColorTheme(0);
