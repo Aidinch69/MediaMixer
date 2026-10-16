@@ -27,7 +27,7 @@ const TUNING_DEFAULTS = {
   SEALED_CHECK_MS: 35000,
   SEALED_PROBABILITY: 0.10,
   SEALED_DURATION_MS: 6000,
-  SEALED_LOCK_SPEED_MULT: 0.60,
+  SEALED_LOCK_SPEED_MULT: 0.51,
   SEALED_MISS_HOLD_MS: 15000,
   SEALED_MISS_FADE_MS: 5000,
   SEALED_UNLOCK_FADE_MS: 3000,
@@ -80,6 +80,7 @@ const TUNING_DEFAULTS = {
   DOUBLE_FEATURE_PROBABILITY: 0.12,
   LAYOUT_FADE_MS: 350,
   LAYOUT_FADE_HOLD_MS: 450,
+  LAYOUT_CHANGE_COOLDOWN_MS: 12000,
   DYNAMIC_MOSAIC_CHECK_MS: 45000,
   DYNAMIC_MOSAIC_DRIFT_PROBABILITY: 0.4,
 };
@@ -180,7 +181,7 @@ const TUNING_GROUPS = [
   { label: 'Choice Moments', keys: ['CHOICE_MOMENT_CHECK_MS', 'CHOICE_MOMENT_PROBABILITY', 'CHOICE_MOMENT_WINDOW_MS', 'CHOICE_MOMENT_XP'] },
   { label: 'Lock Slowdown', keys: ['LOCK_SLOWDOWN_MULT'] },
   { label: 'Double Feature', keys: ['DOUBLE_FEATURE_CHECK_MS', 'DOUBLE_FEATURE_PROBABILITY'] },
-  { label: 'Layout Fade / Dynamic Mosaic', keys: ['LAYOUT_FADE_MS', 'LAYOUT_FADE_HOLD_MS', 'DYNAMIC_MOSAIC_CHECK_MS', 'DYNAMIC_MOSAIC_DRIFT_PROBABILITY'] },
+  { label: 'Layout Fade / Dynamic Mosaic', keys: ['LAYOUT_FADE_MS', 'LAYOUT_FADE_HOLD_MS', 'LAYOUT_CHANGE_COOLDOWN_MS', 'DYNAMIC_MOSAIC_CHECK_MS', 'DYNAMIC_MOSAIC_DRIFT_PROBABILITY'] },
   { label: 'Multipliers & XP', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
 ];
 const TUNING_META = {
@@ -244,6 +245,7 @@ const TUNING_META = {
   DOUBLE_FEATURE_PROBABILITY: { label: 'Double Feature odds', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
   LAYOUT_FADE_MS: { label: 'Layout fade (one-way)', unit: 's', min: 0, max: 1500, step: 50 },
   LAYOUT_FADE_HOLD_MS: { label: 'Layout fade hold (dimmed)', unit: 's', min: 0, max: 2000, step: 50 },
+  LAYOUT_CHANGE_COOLDOWN_MS: { label: 'Layout change cooldown (automatic only)', unit: 's', min: 0, max: 60000, step: 2000 },
   DYNAMIC_MOSAIC_CHECK_MS: { label: 'Dynamic Mosaic check interval', unit: 's', min: 10000, max: 180000, step: 5000 },
   DYNAMIC_MOSAIC_DRIFT_PROBABILITY: { label: 'Dynamic Mosaic drift odds (per check)', unit: 'pct', min: 0, max: 1, step: 0.05 },
   JACKPOT_HEAT_DECAY_PER_TICK: { label: 'Jackpot-heat decay (per 5s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
@@ -2403,19 +2405,34 @@ let autopilotToneFiredThisCycle = false;
 let autopilotFakeoutActive = false;
 let autopilotFakeoutUntil = 0;
 let autopilotCurrentStatusPhrase = '';
+let autopilotStatusPhraseSetAt = 0;
+// The underlying trendingUp/trendingDown read is genuinely noisy tick to
+// tick (engagement fluctuates in small, normal ways even when nothing
+// meaningful changed) - fine for the subtle bias nudges it also drives,
+// but displayed as text it read as "uncertainly hunting between states"
+// (real feedback). Trend-derived phrases get a minimum hold before the
+// display is allowed to change again; retention-beat phrases are real,
+// deliberate state transitions (driven by their own timing, not tick
+// noise) and always take over immediately regardless of the hold.
+const STATUS_PHRASE_MIN_HOLD_MS = 12000;
 // "ambient" ramps every client-only passive-spawn system added since this
 // arc was first written (bonus window, chase flash, near-miss, spiral-
 // from-hearts) via autopilotAmbientBoost below - previously those all sat
 // at their own constant background rate no matter what phase the arc was
 // in, so a "climax" only ever meant more barrages/floaters, never more of
 // these. Shaped like the existing barrage/jackpot curve.
+// novelty baseline nudged up ~0.1 across the board (shape unchanged,
+// still calm->peak->calm) per explicit feedback that discovery content
+// felt a bit light - this is what Auto-Pilot itself computes from while
+// running, separate from VIBE_DIAL_DEFAULT (which only governs manual
+// use and what Auto-Pilot hands back on stop).
 const AUTOPILOT_KEYFRAMES = [
-  { t: 0.00, pace: 3, barrage: 0.01, jackpot: 0.02, fx: 1, novelty: 0.10, ambient: 0.0 },
-  { t: 0.35, pace: 2, barrage: 0.03, jackpot: 0.06, fx: 2, novelty: 0.15, ambient: 0.2 },
-  { t: 0.60, pace: 1, barrage: 0.10, jackpot: 0.18, fx: 4, novelty: 0.30, ambient: 0.5 },
-  { t: 0.75, pace: 0, barrage: 0.22, jackpot: 0.35, fx: 6, novelty: 0.50, ambient: 0.9 },
-  { t: 0.85, pace: 1, barrage: 0.08, jackpot: 0.15, fx: 3, novelty: 0.30, ambient: 0.4 },
-  { t: 1.00, pace: 3, barrage: 0.01, jackpot: 0.02, fx: 1, novelty: 0.10, ambient: 0.0 },
+  { t: 0.00, pace: 3, barrage: 0.01, jackpot: 0.02, fx: 1, novelty: 0.20, ambient: 0.0 },
+  { t: 0.35, pace: 2, barrage: 0.03, jackpot: 0.06, fx: 2, novelty: 0.25, ambient: 0.2 },
+  { t: 0.60, pace: 1, barrage: 0.10, jackpot: 0.18, fx: 4, novelty: 0.40, ambient: 0.5 },
+  { t: 0.75, pace: 0, barrage: 0.22, jackpot: 0.35, fx: 6, novelty: 0.60, ambient: 0.9 },
+  { t: 0.85, pace: 1, barrage: 0.08, jackpot: 0.15, fx: 3, novelty: 0.40, ambient: 0.4 },
+  { t: 1.00, pace: 3, barrage: 0.01, jackpot: 0.02, fx: 1, novelty: 0.20, ambient: 0.0 },
 ];
 // Jittered per-cycle (see regenerateJitteredKeyframes) so no two cycles
 // climax at exactly the same relative moment - the live table tick
@@ -2844,11 +2861,19 @@ function autopilotTick() {
     }
   }
 
-  autopilotCurrentStatusPhrase =
-    sessionRetentionBeatPhase === 'down' ? '😌 Easing back' :
-    sessionRetentionBeatPhase === 'up' ? '✨ Mixing it up' :
-    trendingDown ? '🔄 Recalibrating feel' :
-    trendingUp ? '📈 Leaning in' : '';
+  if (sessionRetentionBeatPhase === 'down') {
+    autopilotCurrentStatusPhrase = '😌 Easing back';
+    autopilotStatusPhraseSetAt = now;
+  } else if (sessionRetentionBeatPhase === 'up') {
+    autopilotCurrentStatusPhrase = '✨ Mixing it up';
+    autopilotStatusPhraseSetAt = now;
+  } else {
+    const desiredTrendPhrase = trendingDown ? '🔄 Recalibrating feel' : trendingUp ? '📈 Leaning in' : '';
+    if (desiredTrendPhrase !== autopilotCurrentStatusPhrase && now - autopilotStatusPhraseSetAt > STATUS_PHRASE_MIN_HOLD_MS) {
+      autopilotCurrentStatusPhrase = desiredTrendPhrase;
+      autopilotStatusPhraseSetAt = now;
+    }
+  }
   updateAutopilotZoneUi();
   maybeReleaseBoredomDebt();
 
@@ -3109,6 +3134,7 @@ function stopAutopilot() {
   if (autopilotZone) recordZonePayoff(autopilotZone, readEngagement(), false, autopilotPrevZone); // learn from however long this one actually ran, even cut short
   autopilotZone = null;
   autopilotCurrentStatusPhrase = '';
+  autopilotStatusPhraseSetAt = 0;
   updateAutopilotZoneUi();
   // Auto-Pilot's arc drives novelty/exploration on its own curve while
   // running (see the ARC table's `novelty` column) - handing it back to
@@ -3143,7 +3169,7 @@ function setAutopilotMinutes(v) {
 // *manual* half: your own resting preference, which Auto-Pilot temporarily
 // overrides while active and hands back to on stop (see stopAutopilot).
 const VIBE_DIAL_KEY = 'mm_vibe_dial';
-const VIBE_DIAL_DEFAULT = 0.35; // matches config.exploration_bonus_c's shipped default
+const VIBE_DIAL_DEFAULT = 0.50; // matches config.exploration_bonus_c's shipped default - nudged up for a bit more default discovery
 let vibeDialValue = VIBE_DIAL_DEFAULT;
 
 function applyVibeDial(value) {
@@ -3613,7 +3639,18 @@ function fadeTransition(changeFn) {
   }, TUNING.LAYOUT_FADE_MS);
 }
 
+let lastLayoutChangeAt = 0;
+
+// `quiet` is the same flag Dynamic Mosaic's zone-driven/drift triggers
+// already pass for automatic changes - a manual click always goes
+// through immediately, but automatic triggers respect a cooldown since
+// the actual reported problem (several tile-count changes landing back
+// to back - zone-driven and drift can both fire independently) only
+// ever came from that side, not from someone manually clicking fast.
 function setLayout(mode, quiet) {
+  const now = Date.now();
+  if (quiet && now - lastLayoutChangeAt < TUNING.LAYOUT_CHANGE_COOLDOWN_MS) return;
+  lastLayoutChangeAt = now;
   fadeTransition(() => {
     fetch('/api/layout?mode=' + mode).then(() => { if (!quiet) toast('Layout: ' + mode.toUpperCase()); });
   });
@@ -3959,6 +3996,15 @@ function missSealedTile(idx) {
   const el = tileAmbientEls[idx];
   if (el) el.classList.remove('sealed-tile'); // no longer tappable - the pulse/badge goes immediately
   sealedTileIndex = -1;
+  // The original lock burst (from activateSealedTile) only ever covered
+  // SEALED_DURATION_MS - without re-extending it here, it would expire
+  // on its own partway through this hold and render()'s own guard would
+  // silently resume server-driven (normal) speed well before the dim
+  // visually clears, desyncing the two exactly as reported: the tile
+  // looked locked but had already sped back up underneath. Holding the
+  // burst window open for the full miss-hold keeps the locked speed
+  // genuinely locked until the fade below actually starts.
+  tileSpeedBurstUntil[idx] = Date.now() + TUNING.SEALED_MISS_HOLD_MS;
   setTimeout(() => {
     if (sealedTileIndex === idx) return; // this tile got sealed again before the old hold finished - don't fade it out from under the new one
     fadeSealedDim(idx, TUNING.SEALED_MISS_FADE_MS);

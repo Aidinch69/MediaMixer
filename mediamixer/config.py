@@ -135,7 +135,7 @@ class Config:
     # but tuned too conservatively for a library this size).
     softmax_temp: float = 0.60
     decay_halflife_s: float = 1800.0
-    exploration_bonus_c: float = 0.35  # UCB-style bonus so rarely-played clips stay in rotation
+    exploration_bonus_c: float = 0.50  # UCB-style bonus so rarely-played clips stay in rotation - nudged up for a bit more default discovery
 
     skip_penalty: float = -0.25
     lock_reward: float = 0.8
