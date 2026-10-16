@@ -314,10 +314,17 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    actual favorited content (heart_count >= FEATURED_HEART_THRESHOLD),
    not a one-shot celebration - transition, not animation, since this is
    a toggled state that can stay on for as long as that clip is showing.
-   Scales slightly and lifts above its grid neighbors (z-index) rather
-   than spanning extra grid cells, so it doesn't fight Mosaic Fit's own
-   aspect-driven sizing/reflow logic. */
-.tile-featured{transform:scale(1.045);z-index:3;box-shadow:0 0 0 3px rgba(255,212,59,.85),0 8px 28px rgba(0,0,0,.6)}
+   Deliberately an INSET box-shadow only, no transform:scale/z-index -
+   an earlier version scaled the tile up and raised it above its
+   neighbors, which looked fine with at most one featured tile but broke
+   badly with several at once (a real reported bug: "larger tiles than
+   they should be, overlapping others, zoomed in"). More than one tile
+   can be featured at a time (there's no "only one at once" guard here,
+   unlike Focus Mode), and Dynamic Mosaic's denser grids make that
+   genuinely common, not a rare edge case - so this has to stay fully
+   inside its own cell no matter how many tiles have it at once. inset
+   keeps it there by construction. */
+.tile-featured{box-shadow:inset 0 0 0 3px rgba(255,212,59,.85),inset 0 0 24px rgba(255,212,59,.25)}
 /* Focus Mode: the focused tile takes over the whole theater (fixed,
    inset:0, above the fade overlay) while every other tile just dims and
    stops accepting clicks - still visible, not hidden outright, so the
