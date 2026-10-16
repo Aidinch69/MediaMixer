@@ -164,6 +164,15 @@ def reward_video(db: Database, config: Config, path: Optional[str], reward: floa
     db.apply_video_reward(path, reward, config.decay_halflife_s, config.reward_ema_alpha, played=played)
 
 
+def pick_unplayed_video(db: Database, folder: Optional[str] = None) -> Optional[str]:
+    """True Mystery Tile: a clip that's never been shown by rotation at
+    all, not just an ordinary low-reward/rarely-played pick - deliberately
+    searches the whole library (folder=None) rather than just the current
+    folder, since "something you've truly never seen" shouldn't be scoped
+    to whatever's rotating today."""
+    return db.random_unplayed_video(folder)
+
+
 def bump_loop_anchor(db: Database, path: Optional[str], position: Optional[float]) -> Optional[dict]:
     """Widen `path`'s hearted-position range to include `position`
     (seconds into the clip) - feeds Custom Loop Point, which computes
@@ -178,6 +187,15 @@ def get_loop_anchor(db: Database, path: Optional[str]) -> Optional[dict]:
     if not path:
         return None
     return db.get_loop_anchor(path)
+
+
+def get_video_meta(db: Database, path: Optional[str]) -> dict:
+    """heart_count + loop_anchor for one specific clip, in one lookup -
+    feeds both Custom Loop Point and Featured Tile from the single
+    request a tile already makes when its clip changes."""
+    if not path:
+        return {"heart_count": 0, "loop_anchor": None}
+    return db.get_video_meta(path)
 
 
 def heart_video(db: Database, path: Optional[str], amount: int = 1) -> Optional[dict]:

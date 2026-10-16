@@ -154,6 +154,27 @@ class RotationEngine:
         self._state.set_screen(index, picked, nxt, time.time() + expires_in)
         return picked
 
+    def force_screen(self, index: int, path: str) -> bool:
+        """Directly place `path` on `index`, bypassing the normal bandit
+        pick entirely - used by True Mystery Tile to show one specific,
+        deliberately-chosen clip (a never-before-played one) instead of
+        whatever reward-weighted selection would have picked. Still goes
+        through the same lock and leaves the same trail (reward_video's
+        play_count bump, a real preloaded `next`) as an ordinary rotation,
+        so nothing downstream has to treat this as a special case."""
+        with self._rotate_lock:
+            cfg = self._config
+            pace_idx, folder, _played, current_paths, _next_paths = self._state.rotation_context()
+            if path in current_paths:
+                return False  # already showing somewhere else - don't duplicate it
+            lo, hi, _label = cfg.pace_presets[pace_idx]
+            expires_in = random.randint(lo, hi)
+            library.reward_video(self._db, cfg, path, 0.0, played=True)
+            bonus = self._state.get_exploration_bonus()
+            nxt = library.pick_video(self._db, cfg, folder, exclude={path}, exploration_bonus=bonus) or path
+            self._state.set_screen(index, path, nxt, time.time() + expires_in)
+            return True
+
     def tick(self):
         """One control-loop iteration: barrage hype, tension/time-dilation,
         plus expiry-based rotation.

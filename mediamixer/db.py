@@ -172,6 +172,25 @@ class Database:
         ).fetchall()
         return [r["video_path"] for r in rows]
 
+    # -- true mystery tile --
+    def random_unplayed_video(self, folder: Optional[str] = None) -> Optional[str]:
+        """A clip with play_count=0 - genuinely never selected by rotation
+        yet, not just rarely played. True Mystery Tile's whole point is
+        "you've never seen this before," which only this (not low
+        ema_reward or low play_count generally) can actually promise."""
+        conn = self._connect()
+        if folder:
+            row = conn.execute(
+                "SELECT video_path FROM video_weights WHERE folder_name=? AND play_count=0 "
+                "ORDER BY RANDOM() LIMIT 1",
+                (folder,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT video_path FROM video_weights WHERE play_count=0 ORDER BY RANDOM() LIMIT 1"
+            ).fetchone()
+        return row["video_path"] if row else None
+
     # -- custom loop point --
     def get_loop_anchor(self, path: str) -> Optional[dict]:
         row = self._connect().execute(
@@ -180,6 +199,23 @@ class Database:
         if row is None or row["loop_anchor_min"] is None or row["loop_anchor_max"] is None:
             return None
         return {"min": row["loop_anchor_min"], "max": row["loop_anchor_max"]}
+
+    def get_video_meta(self, path: str) -> dict:
+        """One-row lookup for everything a tile's own client-side lookup
+        needs about its *current* clip specifically - loop anchor (Custom
+        Loop Point) and heart_count (Featured Tile's "is this actually a
+        favorite" check) - so a tile only has to make one request per clip
+        load instead of one per feature that wants to know something about
+        it."""
+        row = self._connect().execute(
+            "SELECT heart_count, loop_anchor_min, loop_anchor_max FROM video_weights WHERE video_path=?", (path,)
+        ).fetchone()
+        if row is None:
+            return {"heart_count": 0, "loop_anchor": None}
+        loop_anchor = None
+        if row["loop_anchor_min"] is not None and row["loop_anchor_max"] is not None:
+            loop_anchor = {"min": row["loop_anchor_min"], "max": row["loop_anchor_max"]}
+        return {"heart_count": row["heart_count"], "loop_anchor": loop_anchor}
 
     def bump_loop_anchor(self, path: str, position: float) -> Optional[dict]:
         """Widen (never narrow) this video's hearted-position range to

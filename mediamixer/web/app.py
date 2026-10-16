@@ -388,17 +388,32 @@ def create_app(ctx: AppContext) -> Flask:
             loop_anchor = library.bump_loop_anchor(db, path, position)
         return jsonify(ok=True, heart=heart, loop_anchor=loop_anchor)
 
-    @app.route("/api/loop_anchor")
-    def api_loop_anchor():
+    @app.route("/api/true_mystery")
+    def api_true_mystery():
+        # Searches the whole library, not just the current folder/session -
+        # "something you've truly never seen" shouldn't be scoped to
+        # whatever happens to be rotating today.
+        try:
+            index = int(request.args.get("screen", ""))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="invalid screen index"), 400
+        picked = library.pick_unplayed_video(db)
+        if not picked:
+            return jsonify(ok=True, picked=False)
+        placed = g.session.rotation.force_screen(index, picked)
+        return jsonify(ok=True, picked=placed)
+
+    @app.route("/api/video_meta")
+    def api_video_meta():
         # Called once per clip load (not on the hot /api/stream snapshot -
-        # most videos never have one, and this only needs to be known
-        # right as a tile's video actually loads, not on every 0.3s poll).
-        # The client only ever sees the relativized path (see
+        # most videos have nothing special here, and this only needs to be
+        # known right as a tile's video actually loads, not on every 0.3s
+        # poll). The client only ever sees the relativized path (see
         # _relative_media_path in build_status) - video_path in the DB is
         # absolute, so this has to convert back before looking it up.
         rel_path = request.args.get("path", "")
         abs_path = _absolute_media_path(config, rel_path)
-        return jsonify(ok=True, loop_anchor=library.get_loop_anchor(db, abs_path))
+        return jsonify(ok=True, **library.get_video_meta(db, abs_path))
 
     @app.route("/api/rate_audio")
     def api_rate_audio():

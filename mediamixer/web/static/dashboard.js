@@ -71,6 +71,7 @@ const TUNING_DEFAULTS = {
   CHOICE_MOMENT_WINDOW_MS: 8000,
   CHOICE_MOMENT_XP: 10,
   LOCK_SLOWDOWN_MULT: 0.70,
+  TRUE_MYSTERY_PROBABILITY: 0.35,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -161,7 +162,7 @@ const TUNING_GROUPS = [
   { label: 'Chase', keys: ['CHASE_PROBABILITY', 'CHASE_CHECK_MS', 'CHASE_FLASH_START_MS', 'CHASE_FLASH_MIN_MS', 'CHASE_HOP_DELAY_MS', 'CHASE_CAUGHT_MAX_PULSES', 'CHASE_XP_BASE', 'CHASE_XP_PER_CATCH'] },
   { label: 'Bonus Window', keys: ['BONUS_WINDOW_PROBABILITY', 'BONUS_WINDOW_CHECK_MS', 'BONUS_WINDOW_DURATION_MS'] },
   { label: 'Color Rush / Splash', keys: ['COLOR_RUSH_PROBABILITY', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_PROBABILITY', 'COLOR_SPLASH_CHECK_MS'] },
-  { label: 'Mystery Tile & Due-Aura', keys: ['MYSTERY_TILE_PROBABILITY', 'MYSTERY_TILE_CHECK_MS', 'MYSTERY_TILE_DURATION_MS', 'DUE_AURA_THRESHOLD_MS', 'DUE_AURA_MIN_HOLD_MS'] },
+  { label: 'Mystery Tile & Due-Aura', keys: ['MYSTERY_TILE_PROBABILITY', 'MYSTERY_TILE_CHECK_MS', 'MYSTERY_TILE_DURATION_MS', 'TRUE_MYSTERY_PROBABILITY', 'DUE_AURA_THRESHOLD_MS', 'DUE_AURA_MIN_HOLD_MS'] },
   { label: 'Spin & Spawning', keys: ['SPIN_COOLDOWN_MS', 'AMBIENT_SPAWN_SEPARATION_MS'] },
   { label: 'Patience Hold', keys: ['PATIENCE_CHECK_MS', 'PATIENCE_HOLD_MS', 'PATIENCE_XP'] },
   { label: 'Hold-to-Heart', keys: ['HOLD_TO_HEART_MS', 'HOLD_TO_HEART_STRENGTH'] },
@@ -206,6 +207,7 @@ const TUNING_META = {
   MYSTERY_TILE_PROBABILITY: { label: 'Mystery-tile odds', unit: 'pct', min: 0, max: 0.6, step: 0.01 },
   MYSTERY_TILE_CHECK_MS: { label: 'Mystery-tile check interval', unit: 's', min: 5000, max: 90000, step: 1000 },
   MYSTERY_TILE_DURATION_MS: { label: 'Mystery-tile duration', unit: 's', min: 500, max: 5000, step: 100 },
+  TRUE_MYSTERY_PROBABILITY: { label: 'True Mystery odds (of a trigger)', unit: 'pct', min: 0, max: 1, step: 0.05 },
   DUE_AURA_THRESHOLD_MS: { label: 'Due-aura idle threshold', unit: 's', min: 10000, max: 180000, step: 5000 },
   DUE_AURA_MIN_HOLD_MS: { label: 'Due-aura min hold (before handoff)', unit: 's', min: 2000, max: 60000, step: 1000 },
   SPIN_COOLDOWN_MS: { label: 'Spin cooldown', unit: 's', min: 5000, max: 120000, step: 5000 },
@@ -385,18 +387,41 @@ function applyLoopAnchorIfReady(i, path) {
   tileLoopBounds[i] = (anchor && vid.duration) ? computeLoopBounds(anchor, vid.duration) : null;
 }
 
-function fetchLoopAnchorFor(i, path) {
-  if (Object.prototype.hasOwnProperty.call(loopAnchorCache, path)) {
+// Featured Tile: a visual highlight for a tile currently playing actual
+// favorited content (heart_count > 0) - "featured" meaning something
+// real about the content, not a random ambient flourish the way Mosaic
+// Fit's aspect-driven sizing already varies tile shape for unrelated
+// reasons.
+const FEATURED_HEART_THRESHOLD = 2; // 1 heart could be a slip; 2+ is a real favorite
+
+function applyFeaturedIfReady(i, path) {
+  if (currentPaths[i] !== path) return;
+  const tile = tileElements[i];
+  if (!tile) return;
+  const heartCount = videoMetaCache[path] ? videoMetaCache[path].heart_count : 0;
+  tile.classList.toggle('tile-featured', heartCount >= FEATURED_HEART_THRESHOLD);
+}
+
+// One request per clip load feeds both Custom Loop Point and Featured
+// Tile - they're unrelated mechanics, but both just need to know
+// something about whatever clip a tile just loaded.
+const videoMetaCache = {}; // video_path -> {heart_count, loop_anchor} | null
+
+function fetchVideoMetaFor(i, path) {
+  if (Object.prototype.hasOwnProperty.call(videoMetaCache, path)) {
     applyLoopAnchorIfReady(i, path);
+    applyFeaturedIfReady(i, path);
     return;
   }
-  fetch('/api/loop_anchor?path=' + encodeURIComponent(path))
+  fetch('/api/video_meta?path=' + encodeURIComponent(path))
     .then((r) => r.json())
     .then((data) => {
+      videoMetaCache[path] = data || null;
       loopAnchorCache[path] = (data && data.loop_anchor) || null;
       applyLoopAnchorIfReady(i, path);
+      applyFeaturedIfReady(i, path);
     })
-    .catch(() => { loopAnchorCache[path] = null; });
+    .catch(() => { videoMetaCache[path] = null; loopAnchorCache[path] = null; });
 }
 
 // ---- Mosaic Fit (experimental) ----
@@ -2828,7 +2853,9 @@ function render(d) {
     if (s.path && s.path !== currentPaths[i]) {
       currentPaths[i] = s.path;
       tileLoopBounds[i] = null; // the old tile's bounds don't apply to whatever's loading now
-      fetchLoopAnchorFor(i, s.path);
+      const oldTile = tileElements[i];
+      if (oldTile) oldTile.classList.remove('tile-featured'); // ditto for Featured Tile's highlight
+      fetchVideoMetaFor(i, s.path);
       // Tells the server how many tiles are active, so dense layouts
       // (4x4/5x5) get a cached low-res proxy instead of the full-size
       // source - matches PRELOAD_MAX_TILES: same grids that skip preload
@@ -2972,9 +2999,16 @@ function rateScreen(i, dir, btn, strength) {
         showClaimRewardLabel(i, (strength > 1 ? '💞 Deep Heart x' : '💗 Heart Streak x') + data.heart.heart_count);
         pulseWarmGlow(i, data.heart.heart_count);
       }
-      if (data && data.loop_anchor && vidEl) {
-        loopAnchorCache[currentPaths[i]] = data.loop_anchor;
-        applyLoopAnchorIfReady(i, currentPaths[i]);
+      if (data && data.heart && vidEl) {
+        const path = currentPaths[i];
+        if (data.loop_anchor) loopAnchorCache[path] = data.loop_anchor;
+        // This heart may have just pushed the clip's heart_count past
+        // FEATURED_HEART_THRESHOLD - keep the cache in sync so Featured
+        // Tile's highlight can pick that up right away instead of only
+        // on the clip's next load.
+        videoMetaCache[path] = Object.assign({}, videoMetaCache[path], { heart_count: data.heart.heart_count });
+        applyLoopAnchorIfReady(i, path);
+        applyFeaturedIfReady(i, path);
       }
     })
     .catch(() => {});
@@ -3664,7 +3698,13 @@ function fireColorSplashPiece(pieceOverride, tileIdx) {
 
 // Mystery tile: a pure curiosity-gap hit, distinct from the loss-aversion
 // and reward mechanics above - a tile briefly blurs under a "?" overlay
-// and un-blurs on its own, nothing to act on and no payoff behind it.
+// and un-blurs on its own. Most of the time there's nothing to act on and
+// no payoff behind it - but a fraction of the time (TRUE_MYSTERY_PROBABILITY)
+// it tries to actually deliver on the curiosity gap for real: a server-side
+// swap to a clip with play_count=0, something genuinely never shown by
+// rotation before, not just a random reward roll dressed up as one. Falls
+// back to the plain cosmetic reveal if the library has nothing unplayed
+// left (or the request doesn't resolve before the reveal fires).
 let mysteryTileIndex = -1;
 
 function maybeTriggerMysteryTile() {
@@ -3676,7 +3716,14 @@ function maybeTriggerMysteryTile() {
   if (!tile) return;
   mysteryTileIndex = idx;
   tile.classList.add('mystery-tile');
-  setTimeout(() => clearMysteryTile(idx), TUNING.MYSTERY_TILE_DURATION_MS);
+  let trueMysteryPicked = false;
+  if (Math.random() < TUNING.TRUE_MYSTERY_PROBABILITY) {
+    fetch('/api/true_mystery?screen=' + idx)
+      .then((r) => r.json())
+      .then((data) => { trueMysteryPicked = !!(data && data.picked); })
+      .catch(() => {});
+  }
+  setTimeout(() => clearMysteryTile(idx, trueMysteryPicked), TUNING.MYSTERY_TILE_DURATION_MS);
 }
 
 // Ambient color-breathe: purely decorative, no mechanic behind it at
@@ -3698,12 +3745,16 @@ function maybeTriggerAmbientPulse() {
   setTimeout(() => el.classList.remove('ambient-breath'), AMBIENT_PULSE_DURATION_MS);
 }
 
-function clearMysteryTile(idx) {
+function clearMysteryTile(idx, trueMysteryReveal) {
   const tile = tileElements[idx];
   if (tile) {
     tile.classList.remove('mystery-tile');
     tile.classList.add('mystery-reveal');
     setTimeout(() => tile.classList.remove('mystery-reveal'), 300);
+    if (trueMysteryReveal) {
+      toast('✨ Never seen before!');
+      showClaimRewardLabel(idx, '✨ New Discovery');
+    }
   }
   if (mysteryTileIndex === idx) mysteryTileIndex = -1;
 }
