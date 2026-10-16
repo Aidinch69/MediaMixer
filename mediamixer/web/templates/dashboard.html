@@ -75,6 +75,7 @@
   </div>
   <div class="panel-tabs" id="panel-tabs">
     <button class="panel-tab-btn" data-tab="display" onclick="switchPanelTab('display')">🖥️ Display</button>
+    <button class="panel-tab-btn" data-tab="autopilot" onclick="switchPanelTab('autopilot')">🤖 Auto-Pilot</button>
     <button class="panel-tab-btn" data-tab="engagement" onclick="switchPanelTab('engagement')">🎰 Engagement</button>
     <button class="panel-tab-btn" data-tab="audio" onclick="switchPanelTab('audio')">🎵 Audio</button>
     <button class="panel-tab-btn" data-tab="more" onclick="switchPanelTab('more')">⚙️ More</button>
@@ -99,23 +100,6 @@
     <details class="hint-details"><summary>What does this do?</summary><p class="hint">Sizes tiles by each clip's own aspect ratio to cut down on black bars, instead of a uniform grid. Reflows every few seconds, not on every clip change, to stay calm.</p></details>
     <div class="slider"><label>Playback Speed: <b><span id="l-manual-speed">1.00x</span></b></label><input type="range" id="manual-speed-input" min="0.25" max="2" step="0.05" value="1" oninput="setManualSpeed(this.value)"></div>
     <details class="hint-details"><summary>What does this do?</summary><p class="hint">A baseline speed multiplier for every tile, on top of whatever the server's own tension/barrage speed is doing - 1.00x leaves that untouched. Saved on this device, applies to every layout.</p></details>
-    <h3>🎞️ Dynamic Mosaic<span class="experimental-pill">Experimental</span></h3>
-    <div class="slider">
-      <label>Zone-Driven (needs Auto-Pilot)</label>
-      <button class="badge" id="dynamic-mosaic-zone-toggle" onclick="toggleDynamicMosaicZone()">OFF</button>
-    </div>
-    <div class="slider">
-      <label>Ambient Drift</label>
-      <button class="badge" id="dynamic-mosaic-drift-toggle" onclick="toggleDynamicMosaicDrift()">OFF</button>
-    </div>
-    <div class="slider">
-      <label>Tile Range: <b><span id="l-dynamic-mosaic-range">2 - 16</span></b></label>
-      <div class="grid" style="grid-template-columns:1fr 1fr">
-        <input type="number" id="dynamic-mosaic-min-input" min="1" max="64" value="2" onchange="setDynamicMosaicRange(this.value, document.getElementById('dynamic-mosaic-max-input').value)" placeholder="min">
-        <input type="number" id="dynamic-mosaic-max-input" min="1" max="64" value="16" onchange="setDynamicMosaicRange(document.getElementById('dynamic-mosaic-min-input').value, this.value)" placeholder="max">
-      </div>
-    </div>
-    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Lets the layout (tile count) change itself instead of only ever being a manual pick. Zone-Driven reads Auto-Pilot's current zone - each zone has its own hand-picked feel (Vault stays low/focused, Color and Jackpot go wide for spectacle) rather than one formula trying to guess a single right direction. Ambient Drift just wanders within your range on its own on a timer, with or without Auto-Pilot. Both stay inside the Tile Range below, and every change dips through the layout fade.</p></details>
     <h3>✨ Floating Overlay<span class="experimental-pill">Experimental</span></h3>
     <div class="slider">
       <label>Enabled</label>
@@ -134,27 +118,7 @@
     <details class="hint-details"><summary>What does this do?</summary><p class="hint">Floating clips drift and fade across the screen, like a DVD logo. "Overlay Folder" pulls from the overlay_fx/ folder; drop video files in there to use it.</p></details>
   </div>
 
-  <div class="panel-tab" data-tab="engagement">
-    <h3>⚡ Anticipation<span class="experimental-pill">Experimental</span></h3>
-    <div class="slider">
-      <label>Build-up &amp; Payoff FX</label>
-      <button class="badge" id="anticipation-toggle" onclick="toggleAnticipationFx()">OFF</button>
-    </div>
-    <div class="slider">
-      <label>Fake Near-Misses</label>
-      <button class="badge" id="near-miss-toggle" onclick="toggleNearMiss()">OFF</button>
-    </div>
-    <div class="slider"><label>SFX Volume: <b><span id="l-sfx-vol">70%</span></b></label><input type="range" id="sfx-vol-input" min="0" max="100" value="70" oninput="setSfxVolume(this.value)"></div>
-    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Tension builds (visual pulse, heartbeat, panned riser) when a jackpot is really incoming, with a tier reveal (small/big/mega) and a flash/chime/bass/floater-burst payoff + lingering afterglow when it lands. Milestone jackpot counts get an even bigger one. Near-misses play the same build-up with nothing behind it. Also enables occasional golden "bonus" tiles - rate one 👍 while it's glowing for a quick bonus - and rarer "sealed" tiles, dimmed and playing 25% slower while locked, where the reward itself (xp, a speed kick, a heat bump, or nothing) is only decided the moment you open it. Jackpots and bonuses earn XP toward a level that only ever goes up (top right), each one shifts the color theme, and a daily ~20min "Golden Hour" boosts the odds of all of the above if you happen to be around for it. Near-miss/bonus odds also creep up the longer a single session runs. The thin bar at the very top is an always-on charge meter; quiet tiles get a faint "due" aura; a build-up opens with a quick flash of the next color theme; mega/milestone jackpots can chain into a re-spin; and landing one gives you a few seconds to bank it or push your luck for a bonus (or lose the streak). Occasional "mystery tiles" blur and un-blur on their own with nothing behind them, just curiosity. A chase flash occasionally hops between tiles - tap it before it moves on to build a chain (missing it by a hair still gets acknowledged right on the tile, not just silently reset). Mega+ and milestone jackpots can also fade in a full-screen spiral for a while, at low opacity (sometimes gently breathing wider/narrower as it holds), pulled from a local Spirals/ folder. A small gold badge up top names the jackpot state itself (a build-up's tier, a live streak, or which Auto-Pilot zone is running) separately from the status bar's own rotating notifications just below it. Hearting tiles builds a heart multiplier that nudges the odds of all of the above (bigger jackpots, spirals, speed kicks, xp) a bit further - it decays if you stop, so it rewards staying engaged rather than one single heart early on. A rare "Color Rush" occasionally sweeps through - falling color streaks, a hue-cycling glow around the edge, every tile pulsing its own color on its own beat, and a confetti burst, all at once; smaller standalone pieces of the same effects (just confetti, just the tiles, etc.) can also show up on their own tied to a streak, an unlock, a bonus, or a jackpot. Every so often there's also a genuinely hidden window where rewards are secretly worth double - nothing announces it, you only find out from the "(hidden x2!)" tag on whatever you happened to win while it was running. Spin itself rolls visibly through its possible outcomes before landing, and can land "so close" to a jackpot and say so, instead of that almost-miss going unmentioned.</p></details>
-    <h3>🏆 Progress &amp; Challenges</h3>
-    <div class="metric" id="personal-best"></div>
-    <div class="metric" id="quest-list"></div>
-    <button class="badge" id="prestige-btn" onclick="prestige()" style="display:none">⭐ Prestige (reset level for a rank)</button>
-    <div class="trophy-case" id="trophy-case"></div>
-    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Lifetime bests and two daily quests that re-roll each day and auto-claim XP on completion - all stored on this device, nothing leaves it. The trophy case below unlocks permanent badges as those lifetime stats cross thresholds (hearts given, jackpots, chase chains, prestige) - once earned, a trophy stays forever.</p></details>
-    <h3>🧭 Discovery Vibe</h3>
-    <div class="slider"><label>Familiar ↔ Discovery: <b><span id="l-vibe-dial">Balanced</span></b></label><input type="range" id="vibe-dial-input" min="0" max="2" step="0.05" value="0.35" oninput="setVibeDial(this.value)"></div>
-    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Low = selection sticks closer to clips that already score well (familiar). High = lightly-played clips get a real shot even against established favorites (discovery). Auto-Pilot's own arc blends this automatically while it's running and hands control back to this dial the moment you turn it off.</p></details>
+  <div class="panel-tab" data-tab="autopilot">
     <h3>🎬 Auto-Pilot<span class="experimental-pill">Experimental</span></h3>
     <div class="slider">
       <label>Enabled</label>
@@ -166,7 +130,49 @@
       <span id="l-autopilot-zone" class="zone-readout"></span>
     </div>
     <button class="badge" onclick="switchItUp()">🔀 Switch It Up</button>
-    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Scripts pace, barrage/jackpot odds, floater count, and content novelty through a calm -&gt; building -&gt; climax -&gt; cooldown arc on a repeating timer, instead of those staying wherever you last set them. Each cycle also picks a fresh "zone" (Chase/Color/Jackpot/Vault) that leans the climax toward a different mix of the passive stuff above - one cycle's climax might be chase-flash heavy, the next a Color Rush, the next sealed tiles - instead of every climax looking the same. Turns Floating Overlay on if it's off. Does not touch Mosaic Fit - that stays exactly wherever you set it manually.</p></details>
+    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Scripts pace, barrage/jackpot odds, floater count, and content novelty through a calm -&gt; building -&gt; climax -&gt; cooldown arc on a repeating timer, instead of those staying wherever you last set them. Each cycle also picks a fresh "zone" (Chase/Color/Jackpot/Vault) that leans the climax toward a different mix of the passive stuff above - one cycle's climax might be chase-flash heavy, the next a Color Rush, the next sealed tiles - instead of every climax looking the same. Turns Floating Overlay on if it's off. Does not touch Mosaic Fit - that stays exactly wherever you set it manually. "Switch It Up" forces an immediate zone change plus a fresh novelty push, for whenever the satiation logic's own timing isn't fast enough for you.</p></details>
+    <h3>🎞️ Dynamic Mosaic<span class="experimental-pill">Experimental</span></h3>
+    <div class="slider">
+      <label>Zone-Driven (needs Auto-Pilot)</label>
+      <button class="badge" id="dynamic-mosaic-zone-toggle" onclick="toggleDynamicMosaicZone()">OFF</button>
+    </div>
+    <div class="slider">
+      <label>Ambient Drift</label>
+      <button class="badge" id="dynamic-mosaic-drift-toggle" onclick="toggleDynamicMosaicDrift()">OFF</button>
+    </div>
+    <div class="slider">
+      <label>Tile Range: <b><span id="l-dynamic-mosaic-range">2 - 16</span></b></label>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        <input type="number" id="dynamic-mosaic-min-input" min="1" max="64" value="2" onchange="setDynamicMosaicRange(this.value, document.getElementById('dynamic-mosaic-max-input').value)" placeholder="min">
+        <input type="number" id="dynamic-mosaic-max-input" min="1" max="64" value="16" onchange="setDynamicMosaicRange(document.getElementById('dynamic-mosaic-min-input').value, this.value)" placeholder="max">
+      </div>
+    </div>
+    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Lets the layout (tile count) change itself instead of only ever being a manual pick. Zone-Driven reads Auto-Pilot's current zone - each zone has its own hand-picked feel (Vault stays low/focused, Color and Jackpot go wide for spectacle) rather than one formula trying to guess a single right direction. Ambient Drift just wanders within your range on its own on a timer, with or without Auto-Pilot. Both stay inside the Tile Range below, and every change dips through the layout fade - and now respects a minimum cooldown between automatic changes so several can't land back to back.</p></details>
+    <h3>🛰️ Observability</h3>
+    <pre id="autopilot-debug" class="metric" style="white-space:pre-line;font-family:inherit">Auto-Pilot is off.</pre>
+  </div>
+
+  <div class="panel-tab" data-tab="engagement">
+    <h3>⚡ Anticipation<span class="experimental-pill">Experimental</span></h3>
+    <div class="slider">
+      <label>Build-up &amp; Payoff FX</label>
+      <button class="badge" id="anticipation-toggle" onclick="toggleAnticipationFx()">OFF</button>
+    </div>
+    <div class="slider">
+      <label>Fake Near-Misses</label>
+      <button class="badge" id="near-miss-toggle" onclick="toggleNearMiss()">OFF</button>
+    </div>
+    <div class="slider"><label>SFX Volume: <b><span id="l-sfx-vol">70%</span></b></label><input type="range" id="sfx-vol-input" min="0" max="100" value="70" oninput="setSfxVolume(this.value)"></div>
+    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Tension builds (visual pulse, heartbeat, panned riser) when a jackpot is really incoming, with a tier reveal (small/big/mega) and a flash/chime/bass/floater-burst payoff + lingering afterglow when it lands. Milestone jackpot counts get an even bigger one. Near-misses play the same build-up with nothing behind it. Also enables occasional golden "bonus" tiles - rate one 👍 while it's glowing for a quick bonus - and rarer "sealed" tiles, dimmed and playing slower while locked, where the reward itself (xp, a speed kick, a heat bump, or nothing) is only decided the moment you open it. Jackpots and bonuses earn XP toward a level that only ever goes up (top right), each one shifts the color theme, and a daily ~20min "Golden Hour" boosts the odds of all of the above if you happen to be around for it. Near-miss/bonus odds also creep up the longer a single session runs. The thin bar at the very top is an always-on charge meter; quiet tiles get a faint "due" aura; a build-up opens with a quick flash of the next color theme; mega/milestone jackpots can chain into a re-spin; and landing one gives you a few seconds to bank it or push your luck for a bonus (or lose the streak). Occasional "mystery tiles" blur and un-blur on their own - most of the time with nothing behind them, just curiosity, but sometimes it's a genuine swap to something never shown before. A chase flash occasionally hops between tiles - tap it before it moves on to build a chain (missing it by a hair still gets acknowledged right on the tile, not just silently reset). Mega+ and milestone jackpots can also fade in a full-screen spiral for a while, at low opacity (sometimes gently breathing wider/narrower as it holds), pulled from a local Spirals/ folder. A small gold badge up top names the jackpot state itself (a build-up's tier, a live streak, or which Auto-Pilot zone is running) separately from the status bar's own rotating notifications just below it. Hearting tiles builds a heart multiplier that nudges the odds of all of the above (bigger jackpots, spirals, speed kicks, xp) a bit further - it decays if you stop, so it rewards staying engaged rather than one single heart early on. A rare "Color Rush" occasionally sweeps through - falling color streaks, a hue-cycling glow around the edge, every tile pulsing its own color on its own beat, and a confetti burst, all at once; smaller standalone pieces of the same effects (just confetti, just the tiles, etc.) can also show up on their own tied to a streak, an unlock, a bonus, or a jackpot. Every so often there's also a genuinely hidden window where rewards are secretly worth double - nothing announces it, you only find out from the "(hidden x2!)" tag on whatever you happened to win while it was running. Spin itself rolls visibly through its possible outcomes before landing, and can land "so close" to a jackpot and say so, instead of that almost-miss going unmentioned.</p></details>
+    <h3>🏆 Progress &amp; Challenges</h3>
+    <div class="metric" id="personal-best"></div>
+    <div class="metric" id="quest-list"></div>
+    <button class="badge" id="prestige-btn" onclick="prestige()" style="display:none">⭐ Prestige (reset level for a rank)</button>
+    <div class="trophy-case" id="trophy-case"></div>
+    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Lifetime bests and two daily quests that re-roll each day and auto-claim XP on completion - all stored on this device, nothing leaves it. The trophy case below unlocks permanent badges as those lifetime stats cross thresholds (hearts given, jackpots, chase chains, prestige) - once earned, a trophy stays forever.</p></details>
+    <h3>🧭 Discovery Vibe</h3>
+    <div class="slider"><label>Familiar ↔ Discovery: <b><span id="l-vibe-dial">Balanced</span></b></label><input type="range" id="vibe-dial-input" min="0" max="2" step="0.05" value="0.5" oninput="setVibeDial(this.value)"></div>
+    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Low = selection sticks closer to clips that already score well (familiar). High = lightly-played clips get a real shot even against established favorites (discovery). Auto-Pilot's own arc blends this automatically while it's running (see the Auto-Pilot tab) and hands control back to this dial the moment you turn it off.</p></details>
     <div class="slider">
       <label>Session Timer (opt-in)</label>
       <button class="badge" id="session-timer-toggle" onclick="toggleSessionTimer()">OFF</button>
@@ -175,12 +181,10 @@
   </div>
 
   <div class="panel-tab" data-tab="audio">
-    <h3>🎵 Audio Overlay</h3>
+    <h3>🎵 Shared Audio</h3>
     <div class="grid"><button class="up" onclick="rateAudio('up')">🔊 Audio Up</button><button class="down" onclick="rateAudio('down')">🔇 Audio Down</button></div>
     <button onclick="nextAudio()">⏭️ Next Audio</button>
-    <h3>⏱️ Rotation Pace</h3>
-    <div class="slider"><label>Interval: <b><span id="l-pace">{{ pace_label }}</span></b></label><input type="range" id="pace-input" min="0" max="3" step="1" value="{{ pace_idx }}" onchange="pace(this.value)"></div>
-    <h3>🧠 Synth Oscillators</h3>
+    <div class="slider"><label>Rotation Pace: <b><span id="l-pace">{{ pace_label }}</span></b></label><input type="range" id="pace-input" min="0" max="3" step="1" value="{{ pace_idx }}" onchange="pace(this.value)"></div>
     <div class="slider"><label>Carrier: <b><span id="l-freq">{{ tone_hz }} Hz</span></b></label><button onclick="cycleTone()">Cycle Frequency</button></div>
     <div class="slider"><label>Binaural Beat: <b><span id="l-beat">{{ beat_knob }}</span></b></label><input type="range" min="0" max="1" step="0.01" value="{{ beat_knob }}" oninput="vec('binaural',this.value);document.getElementById('l-beat').innerText=this.value"></div>
     <details class="hint-details"><summary>What does this do?</summary><p class="hint">Layout, pace and the beat/carrier are shared with every device watching. Volume below is just for this device.</p></details>
@@ -188,7 +192,7 @@
     <div class="slider"><label>Binaural Tone: <b><span id="l-binaural-vol">80%</span></b></label><input type="range" id="binaural-vol-input" min="0" max="100" value="80" oninput="setBinauralVolume(this.value)"></div>
     <div class="slider"><label>Overlay Track: <b><span id="l-overlay-vol">85%</span></b></label><input type="range" id="overlay-vol-input" min="0" max="100" value="85" oninput="setOverlayVolume(this.value)"></div>
     <div class="slider"><label>Tile Audio: <b><span id="l-tile-audio-vol">0%</span></b></label><input type="range" id="tile-audio-vol-input" min="0" max="100" value="0" oninput="setTileAudioVolume(this.value)"></div>
-    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Every tile's own clip audio, all at once, at this one shared level - 0% keeps every tile muted (the default). There's no per-tile solo anymore; turning this up means every visible tile plays together at the same volume.</p></details>
+    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Every tile's own clip audio, all at once, at this one shared level - 0% keeps every tile muted (the default). There's no per-tile solo; turning this up means every visible tile plays together at the same volume.</p></details>
   </div>
 
   <div class="panel-tab" data-tab="more">
@@ -216,8 +220,6 @@
     <button onclick="resetTuningToDefaults()">⟲ Reset All to Shipped Defaults</button>
     <details class="hint-details"><summary>What does this do?</summary><p class="hint">Live sliders for the constants we've actually been iterating on this session (spiral opacity/timing, sealed/chase/bonus/color-rush/mystery-tile/due-aura odds and timing, spin, the various multipliers and decay rates, xp amounts) - not everything in the file, just the parts worth fine-tuning in real time instead of editing source and restarting. A "check interval" is how often that system rolls the dice at all, in seconds - not a guarantee. A lower interval means it checks more often; the "odds" slider next to it is the actual chance it fires on each check. Low interval + low odds can feel about the same as high interval + high odds - they both control frequency, just from different angles. Changes persist across reloads on this device. "Save Backup" snapshots your current settings so you can experiment further and get back to them later; "Reset All to Shipped Defaults" always goes back to the values this shipped with, independent of any backup.</p></details>
     <div id="tuning-groups"></div>
-    <h3>🛰️ Auto-Pilot Observability</h3>
-    <pre id="autopilot-debug" class="metric" style="white-space:pre-line;font-family:inherit">Auto-Pilot is off.</pre>
   </div>
 </div>
 <audio id="overlay-audio" loop></audio>

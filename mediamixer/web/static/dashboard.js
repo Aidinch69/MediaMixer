@@ -3290,7 +3290,7 @@ function restorePanelState() {
   document.getElementById('panel-toggle').innerText = collapsed ? '☰' : '✕';
 }
 
-const PANEL_TAB_NAMES = ['display', 'engagement', 'audio', 'more', 'tuning'];
+const PANEL_TAB_NAMES = ['display', 'autopilot', 'engagement', 'audio', 'more', 'tuning'];
 
 function switchPanelTab(name) {
   if (!PANEL_TAB_NAMES.includes(name)) name = PANEL_TAB_NAMES[0];
