@@ -1252,11 +1252,16 @@ function runAnticipationBuildUp(durationS, isReal, weightedTiles, tierName) {
   // change); fake near-misses have no such list, so pick 1-2 at random
   // purely for the "something's choosing" feeling - nothing behind it.
   if (!weightedTiles) weightedTiles = pickRandomTiles();
-  // Mega is a genuinely different moment, not just a louder one: the rest
-  // of the grid dims slightly so attention actually goes to the screens
-  // that are really about to change. A plain opacity overlay (see
-  // .tile-dimmed), never filter/brightness on the video itself.
-  if (isReal && tierName === 'mega' && weightedTiles.length) {
+  // Every real barrage (not just mega) dims the screens that aren't
+  // actually part of it, so attention goes to the ones that are really
+  // about to change - previously only mega got this, so a small/medium
+  // barrage's untouched screens had no visual distinction from the
+  // selected ones at all (and, combined with every screen getting a
+  // speed-up target, read as "the rest of the grid is stuttering/
+  // loading" rather than "these specific tiles are the showcased ones").
+  // A plain opacity overlay (see .tile-dimmed), never filter/brightness
+  // on the video itself.
+  if (isReal && weightedTiles.length) {
     tileElements.forEach((tile, idx) => {
       if (tile && !weightedTiles.includes(idx)) tile.classList.add('tile-dimmed');
     });

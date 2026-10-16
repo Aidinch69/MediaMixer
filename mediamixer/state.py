@@ -205,8 +205,15 @@ class RuntimeState:
             self.barrage_hype_total = ticks
             self.barrage_tile_indexes = list(tile_indexes)
             self.barrage_tier_name = tier_name
-            for screen in self.screens:
-                screen.hype_speed_target = random.uniform(*speed_range)
+            selected = set(tile_indexes)
+            # Only the screens actually named by this barrage get a real
+            # speed-up target - every other screen keeps its neutral 1.0 so
+            # _tick_tension's hype blend leaves it untouched, instead of the
+            # whole grid speeding up for a reveal that only highlights a
+            # handful of tiles (which read as the untouched ones stuttering/
+            # loading, not as "these are the ones being showcased").
+            for idx, screen in enumerate(self.screens):
+                screen.hype_speed_target = random.uniform(*speed_range) if idx in selected else 1.0
 
     def tick_barrage_hype(self) -> bool:
         """Advance the hype countdown by one tick. Returns True exactly once -
