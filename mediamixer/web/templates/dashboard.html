@@ -95,6 +95,8 @@
       <label>Mosaic Fit (Experimental)</label>
       <button class="badge" id="mosaic-toggle" onclick="toggleMosaic()">OFF</button>
     </div>
+    <div class="slider"><label>Playback Speed: <b><span id="l-manual-speed">1.00x</span></b></label><input type="range" id="manual-speed-input" min="0.25" max="2" step="0.05" value="1" oninput="setManualSpeed(this.value)"></div>
+    <details class="hint-details"><summary>What does this do?</summary><p class="hint">A baseline speed multiplier for every tile, on top of whatever the server's own tension/barrage speed is doing - 1.00x leaves that untouched. Saved on this device, applies to every layout.</p></details>
     <details class="hint-details"><summary>What does this do?</summary><p class="hint">Sizes tiles by each clip's own aspect ratio to cut down on black bars, instead of a uniform grid. Reflows every few seconds, not on every clip change, to stay calm.</p></details>
     <h3>✨ Floating Overlay<span class="experimental-pill">Experimental</span></h3>
     <div class="slider">
@@ -162,7 +164,7 @@
     <h3>🧠 Synth Oscillators</h3>
     <div class="slider"><label>Carrier: <b><span id="l-freq">{{ tone_hz }} Hz</span></b></label><button onclick="cycleTone()">Cycle Frequency</button></div>
     <div class="slider"><label>Binaural Beat: <b><span id="l-beat">{{ beat_knob }}</span></b></label><input type="range" min="0" max="1" step="0.01" value="{{ beat_knob }}" oninput="vec('binaural',this.value);document.getElementById('l-beat').innerText=this.value"></div>
-    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Layout, pace and the beat/carrier are shared with every device watching. Volume below is just for this device.</p></details>
+    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Layout, pace and the beat/carrier are shared with every device watching. Volume below is just for this device. Each tile also has its own 🔇/🔊 button for that clip's own audio - only one tile can be "solo" at a time, so they never overlap into noise.</p></details>
     <h3>🔊 This Device's Volume</h3>
     <div class="slider"><label>Binaural Tone: <b><span id="l-binaural-vol">80%</span></b></label><input type="range" id="binaural-vol-input" min="0" max="100" value="80" oninput="setBinauralVolume(this.value)"></div>
     <div class="slider"><label>Overlay Track: <b><span id="l-overlay-vol">85%</span></b></label><input type="range" id="overlay-vol-input" min="0" max="100" value="85" oninput="setOverlayVolume(this.value)"></div>

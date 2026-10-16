@@ -163,6 +163,7 @@ def create_app(ctx: AppContext) -> Flask:
                 if pace_idx == 3
                 else f"Cycle: {snap['played']}/{config.folder_rotation_limit} clips"
             ),
+            "locked": snap["locked"],
             "jackpot": snap["jackpot"],
             "barrage": snap["barrage"],
             "barrage_tiles": snap["barrage_tiles"],

@@ -266,6 +266,7 @@ class RuntimeState:
                     for s in self.screens
                 ],
                 "played": self.videos_in_folder,
+                "locked": self.locked,
                 "jackpot": self.is_jackpot,
                 "barrage": self.barrage_count,
                 "barrage_tiles": list(self.barrage_tile_indexes),

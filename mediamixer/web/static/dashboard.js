@@ -70,6 +70,7 @@ const TUNING_DEFAULTS = {
   CHOICE_MOMENT_PROBABILITY: 0.15,
   CHOICE_MOMENT_WINDOW_MS: 8000,
   CHOICE_MOMENT_XP: 10,
+  LOCK_SLOWDOWN_MULT: 0.70,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -166,6 +167,7 @@ const TUNING_GROUPS = [
   { label: 'Hold-to-Heart', keys: ['HOLD_TO_HEART_MS', 'HOLD_TO_HEART_STRENGTH'] },
   { label: 'Pace-as-Reward', keys: ['PACE_REWARD_XP', 'PACE_REWARD_COOLDOWN_MS'] },
   { label: 'Choice Moments', keys: ['CHOICE_MOMENT_CHECK_MS', 'CHOICE_MOMENT_PROBABILITY', 'CHOICE_MOMENT_WINDOW_MS', 'CHOICE_MOMENT_XP'] },
+  { label: 'Lock Slowdown', keys: ['LOCK_SLOWDOWN_MULT'] },
   { label: 'Multipliers & XP', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
 ];
 const TUNING_META = {
@@ -219,6 +221,7 @@ const TUNING_META = {
   CHOICE_MOMENT_PROBABILITY: { label: 'Choice Moment odds', unit: 'pct', min: 0, max: 0.6, step: 0.01 },
   CHOICE_MOMENT_WINDOW_MS: { label: 'Choice Moment window', unit: 's', min: 3000, max: 20000, step: 1000 },
   CHOICE_MOMENT_XP: { label: 'Choice Moment XP', unit: 'n', min: 1, max: 40, step: 1 },
+  LOCK_SLOWDOWN_MULT: { label: 'Lock slowdown (25-35% slower = 0.65-0.75)', unit: 'x', min: 0.5, max: 1, step: 0.01 },
   JACKPOT_HEAT_DECAY_PER_TICK: { label: 'Jackpot-heat decay (per 5s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   HEART_MULT_DECAY_PER_TICK: { label: 'Heart-multiplier decay (per 6s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   GOLDEN_HOUR_MULTIPLIER: { label: 'Golden Hour odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
@@ -303,6 +306,32 @@ let currentColumns = 1;
 let currentTileCount = 0;
 let currentPaths = [];
 let preloadEnabled = true;
+
+// Manual playback-speed control (the "tool menu" / Display tab slider) -
+// a player-facing baseline multiplier, separate from the server-driven
+// tension/barrage speed (s.speed) and from Lock's own slowdown below;
+// all three compose by multiplying together, with a burst-speed effect
+// (see burstTileSpeed) still fully overriding this for its own window.
+let manualSpeedMult = 1.0;
+
+function setManualSpeed(v) {
+  manualSpeedMult = parseFloat(v);
+  const el = document.getElementById('l-manual-speed');
+  if (el) el.innerText = manualSpeedMult.toFixed(2) + 'x';
+  try { localStorage.setItem('mm_manual_speed', manualSpeedMult); } catch (e) {}
+}
+
+function loadManualSpeedPref() {
+  let saved = 1.0;
+  try {
+    const raw = localStorage.getItem('mm_manual_speed');
+    if (raw !== null) saved = parseFloat(raw);
+  } catch (e) {}
+  if (!Number.isFinite(saved)) saved = 1.0;
+  const input = document.getElementById('manual-speed-input');
+  if (input) input.value = saved;
+  setManualSpeed(saved);
+}
 const PRELOAD_MAX_TILES = 9; // dual/2x2/2x3/3x3 keep deterministic preload; 4x4/5x5 skip it
 let tileElements = [];
 // Dedicated glow overlay divs, one per tile, cached alongside tileElements.
@@ -2642,6 +2671,7 @@ function ensureTiles(count) {
   tileSpeedBurstUntil = new Array(count).fill(0);
   aspectKnown = new Array(count).fill(false);
   tileLoopBounds = new Array(count).fill(null);
+  activeAudioTileIndex = -1; // every tile gets torn down and rebuilt muted below
   tileElements = [];
   tileGlowEls = [];
   tileAmbientEls = [];
@@ -2665,8 +2695,10 @@ function ensureTiles(count) {
       '<div class="tile-actions">' +
       '<button class="up thumb" onclick="rateScreen(' + i + ',\'up\',this)">❤️</button>' +
       '<button class="down thumb" onclick="rateScreen(' + i + ',\'down\',this)">👎</button>' +
+      '<button class="audio thumb" id="audio-btn-' + i + '" onclick="toggleTileAudio(' + i + ')">🔇</button>' +
       '</div></div>';
     const vid = tile.querySelector('#screen-' + i);
+    vid.muted = true; // Tile Audio control below is the only thing that unmutes a tile - never more than one at once
     vid.addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
     vid.addEventListener('loadedmetadata', () => {
       onAspectKnown(i);
@@ -2687,21 +2719,34 @@ function ensureTiles(count) {
     // heart on top of it.
     const upBtn = tile.querySelector('.up.thumb');
     let holdTimer = null;
+    let holdFiredThisPress = false;
     upBtn.addEventListener('pointerdown', () => {
+      holdFiredThisPress = false;
       clearTimeout(holdTimer);
       holdTimer = setTimeout(() => {
         // Fire first, flag after - this call must go through normally
         // (it's the hold itself); the flag is only for the click event
         // that fires afterward once the finger/mouse actually lifts.
         rateScreen(i, 'up', upBtn, TUNING.HOLD_TO_HEART_STRENGTH);
+        holdFiredThisPress = true;
         upBtn.dataset.holdFired = '1';
-        // Safety net: if that click never arrives for any reason (some
-        // touch/pointer edge case), don't leave the flag set forever -
-        // that would silently swallow the viewer's next *real* tap.
-        setTimeout(() => { upBtn.dataset.holdFired = ''; }, 500);
       }, TUNING.HOLD_TO_HEART_MS);
     });
-    const cancelHold = () => clearTimeout(holdTimer);
+    const cancelHold = () => {
+      clearTimeout(holdTimer);
+      if (holdFiredThisPress) {
+        holdFiredThisPress = false;
+        // The trailing click (if one comes) fires synchronously right
+        // after this same pointerup, before any setTimeout callback can
+        // run - so this is scoped to "shortly after release," not "a
+        // fixed window after the hold fired." The previous version timed
+        // the clear from the hold instead of the release, so holding past
+        // ~1s before letting go meant the flag had already expired by the
+        // time the real click landed - the click went through unblocked
+        // and silently added a second, separate heart on release.
+        setTimeout(() => { upBtn.dataset.holdFired = ''; }, 300);
+      }
+    };
     upBtn.addEventListener('pointerup', cancelHold);
     upBtn.addEventListener('pointerleave', cancelHold);
     upBtn.addEventListener('pointercancel', cancelHold);
@@ -2815,7 +2860,12 @@ function render(d) {
     // tile's rate - skip the server-driven sync for its duration instead
     // of stomping it the very next poll (every ~0.3s).
     if (!tileSpeedBurstUntil[i] || Date.now() >= tileSpeedBurstUntil[i]) {
-      vid.playbackRate = s.speed;
+      // Lock already signals "stay on this one longer" - slowing it down
+      // too leans into that same intent instead of just holding it fixed
+      // at normal speed. Composes with the player's own manual speed
+      // slider rather than overriding it.
+      const lockMult = d.locked ? TUNING.LOCK_SLOWDOWN_MULT : 1;
+      vid.playbackRate = s.speed * lockMult * manualSpeedMult;
     }
     const sat = Math.floor((s.tension - 1.0) * 60 + 100);
     const cont = Math.floor((s.tension - 1.0) * 40 + 100);
@@ -2936,6 +2986,36 @@ function rateScreen(i, dir, btn, strength) {
 // barrage system uses, instead of feedback living only in the XP
 // counter. Opacity only, same compositor-only technique as the rest of
 // the glow system.
+// Tile Audio control: each tile's own <video> carries its real audio
+// (separate from the ambient overlay track/binaural synth), but with
+// several tiles playing at once, unmuting all of them would be a
+// cacophony - so at most one tile is ever unmuted ("solo") at a time.
+// Tied to tile *position*, not a specific clip, so it stays selected
+// through that tile's own rotations until you pick a different one or
+// toggle it off.
+let activeAudioTileIndex = -1;
+
+function toggleTileAudio(i) {
+  markInteraction();
+  const vid = tileElements[i] && tileElements[i].querySelector('#screen-' + i);
+  if (!vid) return;
+  if (activeAudioTileIndex === i) {
+    vid.muted = true;
+    activeAudioTileIndex = -1;
+  } else {
+    if (activeAudioTileIndex >= 0) {
+      const prevVid = tileElements[activeAudioTileIndex] && tileElements[activeAudioTileIndex].querySelector('#screen-' + activeAudioTileIndex);
+      if (prevVid) prevVid.muted = true;
+      const prevBtn = document.getElementById('audio-btn-' + activeAudioTileIndex);
+      if (prevBtn) prevBtn.innerText = '🔇';
+    }
+    vid.muted = false;
+    activeAudioTileIndex = i;
+  }
+  const btn = document.getElementById('audio-btn-' + i);
+  if (btn) btn.innerText = activeAudioTileIndex === i ? '🔊' : '🔇';
+}
+
 function pulseTileGlow(idx, multiplier, negative) {
   const el = tileGlowEls[idx];
   if (!el) return;
@@ -3829,6 +3909,7 @@ window.onload = () => {
   loadAnticipationPrefs();
   loadAutopilotPrefs();
   loadVibeDialPref();
+  loadManualSpeedPref();
   loadSessionTimerPref();
   applyColorTheme(0);
   loadXpState();

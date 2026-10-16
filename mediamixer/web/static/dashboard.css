@@ -318,6 +318,8 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .tile-actions .thumb.up:hover{background:rgba(255,60,110,.35);border-color:#ff5c96;transform:scale(1.12)}
 .tile-actions .thumb.down{background:rgba(130,130,150,.15);border-color:rgba(150,150,170,.5)}
 .tile-actions .thumb.down:hover{background:rgba(130,130,150,.3);border-color:#9a9ab0;transform:scale(1.12)}
+.tile-actions .thumb.audio{background:rgba(77,220,255,.15);border-color:rgba(77,220,255,.45)}
+.tile-actions .thumb.audio:hover{background:rgba(77,220,255,.3);border-color:#4ddcff;transform:scale(1.12)}
 .tile-actions .thumb:active{transform:scale(.82)}
 .tile-actions .thumb.pop{animation:thumb-pop .35s ease-out}
 @keyframes thumb-pop{0%{transform:scale(1)}40%{transform:scale(1.4)}100%{transform:scale(1)}}
