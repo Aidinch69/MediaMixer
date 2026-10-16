@@ -361,6 +361,31 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .hint-details[open] summary::before{transform:rotate(90deg)}
 .hint-details summary:hover{color:#c999ff}
 .hint-details .hint{margin-top:6px}
+/* Each tab used to be one flat scroll of h3 headers + controls, with the
+   "what does this do?" disclosure as the only thing that collapsed -
+   everything else (every slider, every button) was always on screen at
+   once, which is what actually read as "large and all over," not the
+   amount of content itself. Grouping each h3's controls into its own
+   closed-by-default <details> fixes that: a tab opens as a short list of
+   titles with a one-line description each, and any one section expands
+   on its own without needing to scroll past every other section's
+   controls to get there. */
+.settings-section{background:#0e081f;border:1px solid #221435;border-radius:8px;overflow:hidden}
+.settings-section>summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:3px;padding:10px 12px;user-select:none}
+.settings-section>summary::-webkit-details-marker{display:none}
+.section-title{display:flex;align-items:center;gap:6px;color:#c999ff;text-transform:uppercase;letter-spacing:1px;font-size:1.05rem}
+.section-title::before{content:'▸';display:inline-block;transition:transform .15s ease;font-size:.65rem;color:#8a7aa8}
+.settings-section[open]>summary .section-title::before{transform:rotate(90deg)}
+.settings-section>summary:hover .section-title::before{color:#c999ff}
+.settings-section-desc{font-size:.68rem;color:#6e6e7a;padding-left:15px}
+.settings-section-body{display:flex;flex-direction:column;gap:12px;padding:0 12px 12px}
+#tuning-groups{display:flex;flex-direction:column;gap:14px}
+.panel-tab[data-tab="display"] .section-title{color:#4dd4ff}
+.panel-tab[data-tab="autopilot"] .section-title{color:#ffa94d}
+.panel-tab[data-tab="engagement"] .section-title{color:#ffd43b}
+.panel-tab[data-tab="audio"] .section-title{color:#ff8fc7}
+.panel-tab[data-tab="more"] .section-title{color:#b399ff}
+.panel-tab[data-tab="tuning"] .section-title{color:#8fffb3}
 .panel{position:fixed;top:0;right:0;width:min(400px,92vw);height:100vh;height:100dvh;background:linear-gradient(180deg,#0e0720,#0a0515 40%);border-left:1px solid #2a1540;box-shadow:-10px 0 30px rgba(0,0,0,.5);padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;overflow-y:auto;z-index:25;transform:translateX(0);transition:transform .25s ease}
 /* Tabs group what used to be one long scroll into a handful of pages -
    Display / Engagement / Audio / More - so finding a given option means
