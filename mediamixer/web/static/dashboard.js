@@ -406,8 +406,18 @@ let lastFilterStr = [];
 const LOOP_LEAD_IN_S = 3;
 const LOOP_TRAIL_IN_S = 4;
 const LOOP_MIN_DURATION_S = 15;
+// Looping was unconditional on any heart at all, and forever once it
+// started - per direct feedback, a single heart (or even a couple)
+// shouldn't be enough to lock a tile into repeating indefinitely. Now
+// gated on the same "real favorite" bar Featured Tile uses, raised a
+// bit further since looping is a much bigger commitment than a visual
+// highlight, and capped to a handful of passes before it's allowed to
+// finish normally and rotate on, same as anything else.
+const LOOP_HEART_THRESHOLD = 5;
+const LOOP_MAX_REPEATS = 3;
 const loopAnchorCache = {}; // video_path -> {min,max} | null (null = confirmed none)
 let tileLoopBounds = []; // per-tile index -> {start,end} | null
+let tileLoopCount = []; // per-tile index -> completed passes through the bounded segment so far
 
 function computeLoopBounds(anchor, duration) {
   if (!anchor || !duration || !isFinite(duration)) return null;
@@ -428,8 +438,10 @@ function applyLoopAnchorIfReady(i, path) {
   if (currentPaths[i] !== path) return;
   const vid = tileElements[i] && tileElements[i].querySelector('#screen-' + i);
   if (!vid) return;
-  const anchor = loopAnchorCache[path];
+  const heartCount = videoMetaCache[path] ? videoMetaCache[path].heart_count : 0;
+  const anchor = heartCount >= LOOP_HEART_THRESHOLD ? loopAnchorCache[path] : null;
   tileLoopBounds[i] = (anchor && vid.duration) ? computeLoopBounds(anchor, vid.duration) : null;
+  tileLoopCount[i] = 0;
 }
 
 // Featured Tile: a visual highlight for a tile currently playing actual
@@ -3545,10 +3557,19 @@ function createTileElement(i) {
     });
     // Custom Loop Point's actual seek-back - a no-op whenever this tile
     // has no loop bounds set (the normal case, for any clip that's never
-    // been hearted), so this doesn't change behavior for ordinary playback.
+    // earned enough hearts to qualify), so this doesn't change behavior
+    // for ordinary playback. Capped to LOOP_MAX_REPEATS passes - once hit,
+    // bounds are cleared so this tile plays out to its real end and
+    // rotates normally, instead of repeating forever.
     vid.addEventListener('timeupdate', () => {
       const bounds = tileLoopBounds[i];
-      if (bounds && vid.currentTime >= bounds.end) vid.currentTime = bounds.start;
+      if (!bounds || vid.currentTime < bounds.end) return;
+      tileLoopCount[i] = (tileLoopCount[i] || 0) + 1;
+      if (tileLoopCount[i] >= LOOP_MAX_REPEATS) {
+        tileLoopBounds[i] = null;
+      } else {
+        vid.currentTime = bounds.start;
+      }
     });
     // Hold-to-Heart: holding the heart button past a threshold fires one
     // amplified heart instead of waiting for a plain tap - a deliberate,
@@ -3653,6 +3674,7 @@ function ensureTiles(count) {
     heldPlaybackRate.length = count;
     aspectKnown.length = count;
     tileLoopBounds.length = count;
+    tileLoopCount.length = count;
     lastFilterStr.length = count;
     if (bonusWindowTileIndex >= count) { clearTimeout(bonusWindowTimer); bonusWindowTileIndex = -1; }
     if (sealedTileIndex >= count) { clearTimeout(sealedTimer); sealedTileIndex = -1; }
@@ -3730,6 +3752,7 @@ function render(d) {
     if (s.path && s.path !== currentPaths[i]) {
       currentPaths[i] = s.path;
       tileLoopBounds[i] = null; // the old tile's bounds don't apply to whatever's loading now
+      tileLoopCount[i] = 0;
       const oldTile = tileElements[i];
       if (oldTile) oldTile.classList.remove('tile-featured'); // ditto for Featured Tile's highlight
       fetchVideoMetaFor(i, s.path);
