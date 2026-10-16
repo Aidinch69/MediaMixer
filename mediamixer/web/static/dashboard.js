@@ -1636,6 +1636,7 @@ function maybeAwardPatience() {
   if (now - lastAnyInteractionAt >= TUNING.PATIENCE_HOLD_MS && now - patienceAwardedAt >= TUNING.PATIENCE_HOLD_MS) {
     patienceAwardedAt = now;
     awardXp(TUNING.PATIENCE_XP);
+    nudgeEngagement(0.15); // settled/absorbed is still real engagement, not idleness
     toast('🧘 Patience +' + TUNING.PATIENCE_XP + 'xp');
   }
 }
@@ -2057,6 +2058,8 @@ function runPayoff(chainDepth) {
 }
 
 function applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk, chainDepth, willChain) {
+  nudgeEngagement(0.2 * tier.flash);
+  markNoveltyHappened(); // a real jackpot landing is exactly the kind of thing boredom debt exists to not need to force
   const theater = document.getElementById('theater-box');
   const theaterGlow = document.getElementById('theater-glow');
   theater.style.setProperty('--flash-opacity', Math.min(0.9, 0.6 * tier.flash).toFixed(2));
@@ -2406,17 +2409,135 @@ const AUTOPILOT_ZONES = {
 };
 const AUTOPILOT_ZONE_NAMES = Object.keys(AUTOPILOT_ZONES);
 let autopilotZone = null;
-let autopilotLastFrac = 0;
-
-function pickAutopilotZone(excludeName) {
-  const choices = AUTOPILOT_ZONE_NAMES.filter(n => n !== excludeName);
-  return choices[Math.floor(Math.random() * choices.length)];
-}
+let autopilotZoneStartedAt = 0;
 
 // Falls back to 1 (no-op) whenever Auto-Pilot is off, so manual play is
 // never affected by zone weighting at all.
 function autopilotZoneMultiplier(key) {
   return autopilotZone ? AUTOPILOT_ZONES[autopilotZone][key] : 1;
+}
+
+// ---- Engagement signal ----
+// A smoothed read of how the viewer is actually responding right now -
+// distinct from the scripted keyframe arc above, which has no idea what
+// you're doing and never did. Nudged by real actions (hearting, chase
+// catches, claims, Patience Hold, dislikes/Recalibrate/skips), decays
+// back toward neutral (1.0) when nothing happens - same halflife-decay
+// shape bandit.py's decayed_value already uses server-side for content
+// reward, just applied here to "how into this are you right now"
+// instead of "how good is this clip." Tracked unconditionally (not
+// gated on Auto-Pilot being on) so it already reflects real recent
+// behavior the moment Auto-Pilot gets turned on mid-session, instead of
+// starting blind at neutral.
+let engagementScore = 1.0;
+let engagementUpdatedAt = Date.now();
+let engagementPrevForTrend = 1.0;
+const ENGAGEMENT_HALFLIFE_MS = 45000;
+const ENGAGEMENT_MIN = 0.2;
+const ENGAGEMENT_MAX = 2.2;
+
+function decayEngagementToNow() {
+  const now = Date.now();
+  const elapsed = now - engagementUpdatedAt;
+  engagementUpdatedAt = now;
+  if (elapsed <= 0) return;
+  const decay = Math.pow(0.5, elapsed / ENGAGEMENT_HALFLIFE_MS);
+  engagementScore = 1.0 + (engagementScore - 1.0) * decay;
+}
+
+function nudgeEngagement(amount) {
+  decayEngagementToNow();
+  engagementScore = Math.max(ENGAGEMENT_MIN, Math.min(ENGAGEMENT_MAX, engagementScore + amount));
+}
+
+function readEngagement() {
+  decayEngagementToNow();
+  return engagementScore;
+}
+
+// ---- Zone bandit ----
+// Zones used to just rotate on a fixed timer, excluding only the last
+// one used - no memory of which ones actually land for this viewer.
+// zonePayoff is a learned EMA of engagementScore averaged over each
+// zone's own run, persisted so the preference carries across sessions.
+// zoneRecentUse is a deliberate counterweight: a zone scoring well still
+// gets suppressed right after it was just used, ramping back up over
+// the next few rotations - the explicit "don't just keep picking the
+// one good zone forever" guard, since a learned preference with no
+// exploration pressure is indistinguishable from repetition.
+let zonePayoff = { chase: 1.0, color: 1.0, jackpot: 1.0, vault: 1.0 };
+let zoneRecentUse = { chase: 3, color: 3, jackpot: 3, vault: 3 };
+
+function loadZonePayoffPrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('mm_zone_payoff') || '{}');
+    AUTOPILOT_ZONE_NAMES.forEach((z) => { if (Number.isFinite(saved[z])) zonePayoff[z] = saved[z]; });
+  } catch (e) {}
+}
+
+function recordZonePayoff(zoneName, engagement) {
+  if (!zoneName) return;
+  const alpha = 0.3; // how much one zone's outcome moves its learned preference
+  zonePayoff[zoneName] = (1 - alpha) * zonePayoff[zoneName] + alpha * engagement;
+  try { localStorage.setItem('mm_zone_payoff', JSON.stringify(zonePayoff)); } catch (e) {}
+  AUTOPILOT_ZONE_NAMES.forEach((z) => { zoneRecentUse[z] = (z === zoneName) ? 0 : zoneRecentUse[z] + 1; });
+}
+
+function pickAutopilotZone(excludeName) {
+  const names = AUTOPILOT_ZONE_NAMES.filter((z) => z !== excludeName);
+  const weights = names.map((z) => {
+    const recencyMult = Math.min(1, zoneRecentUse[z] / 3); // ramps back to full weight over ~3 rotations
+    return Math.max(0.05, zonePayoff[z] * (0.3 + 0.7 * recencyMult));
+  });
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  let roll = Math.random() * total;
+  for (let i = 0; i < names.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return names[i];
+  }
+  return names[names.length - 1];
+}
+
+// ---- Boredom debt ----
+// A release valve independent of the engagement/satiation logic below -
+// that logic only reacts to active rejection (low engagement), but a
+// long "comfortable but flat" stretch (nothing rejected, nothing new
+// either) wouldn't trip it at all. This counts ticks since anything
+// genuinely novel actually happened and forces a surprise once it's
+// been too long, regardless of what the engagement score says.
+let ticksSinceNovelty = 0;
+const BOREDOM_DEBT_LIMIT = 20; // ~80s at the 4s tick rate
+
+function markNoveltyHappened() { ticksSinceNovelty = 0; }
+
+function maybeReleaseBoredomDebt() {
+  ticksSinceNovelty++;
+  if (ticksSinceNovelty < BOREDOM_DEBT_LIMIT) return;
+  ticksSinceNovelty = 0;
+  if (Math.random() < 0.5) fetch('/api/double_feature').then((r) => r.json()).then((d) => { if (d && d.picked) markNoveltyHappened(); });
+  else if (tileElements.length) fetch('/api/true_mystery?screen=' + Math.floor(Math.random() * tileElements.length)).then((r) => r.json()).then((d) => { if (d && d.picked) markNoveltyHappened(); });
+}
+
+// ---- Session phase ----
+// A slow, session-scale modifier on top of the fast cycle-scale zone
+// logic below - a 10-minute sitting and a 90-minute one shouldn't get
+// the identical treatment. Purely a nudge on novelty bias, not a
+// parallel system: 'opening' leans discovery (the content bandit still
+// needs data), 'deepening' stays neutral (let the Vibe Dial and the arc
+// itself drive it), and 'late' either keeps leaning in (engagement still
+// climbing this far in has earned it) or eases toward familiar/calm
+// instead of forcing the same shape a short session gets.
+function autopilotSessionPhase() {
+  const elapsedMin = (Date.now() - sessionStartedAt) / 60000;
+  if (elapsedMin < 10) return 'opening';
+  if (elapsedMin < 45) return 'deepening';
+  return 'late';
+}
+
+function autopilotNoveltyBiasForPhase(phase, trendingUp) {
+  if (phase === 'opening') return 0.5;
+  if (phase === 'deepening') return 0.0;
+  return trendingUp ? 0.1 : -0.3;
 }
 
 function loadAutopilotPrefs() {
@@ -2450,21 +2571,46 @@ function autopilotTick() {
   const elapsed = (Date.now() - autopilotStartTime) / 1000;
   const frac = (elapsed % cycleS) / cycleS;
   const { a, b, lf } = autopilotPhaseAt(frac);
+  const engagement = readEngagement();
 
-  // A new zone whenever the cycle wraps back to its start (frac drops
-  // below where it was last tick) - not on every tick, so the zone
-  // holds steady for a whole cycle's calm->climax->cooldown arc rather
-  // than flickering between zones mid-arc.
-  if (!autopilotZone || frac < autopilotLastFrac) {
-    autopilotZone = pickAutopilotZone(autopilotZone);
+  // Zone duration is now engagement-aware instead of a fixed wrap-the-
+  // cycle timer - see the satiation/bandit comments above. A zone
+  // extends itself while it's genuinely working, but the bar to keep
+  // extending rises the longer it's already run, with a hard ceiling
+  // that fires regardless of engagement - "enough of a good thing" is a
+  // real limit, not just a suggestion.
+  const now = Date.now();
+  if (!autopilotZone) {
+    autopilotZone = pickAutopilotZone(null);
+    autopilotZoneStartedAt = now;
     maybeApplyZoneDrivenMosaic(autopilotZone);
+    markNoveltyHappened();
+  } else {
+    const zoneAgeMs = now - autopilotZoneStartedAt;
+    const naturalMs = cycleS * 1000;
+    const hardCeilingMs = naturalMs * 2.5;
+    const satiationFrac = Math.min(1.5, zoneAgeMs / hardCeilingMs);
+    const stayThreshold = 1.0 + satiationFrac * 1.2; // rises toward 2.2 (the engagement cap) as satiation climbs
+    const pastHardCeiling = zoneAgeMs > hardCeilingMs;
+    const disengaged = engagement < 0.6 && zoneAgeMs > naturalMs * 0.4; // don't cut absurdly early on a brief dip
+    const naturallyDue = zoneAgeMs > naturalMs && engagement < stayThreshold;
+    if (pastHardCeiling || disengaged || naturallyDue) {
+      recordZonePayoff(autopilotZone, engagement);
+      autopilotZone = pickAutopilotZone(autopilotZone);
+      autopilotZoneStartedAt = now;
+      maybeApplyZoneDrivenMosaic(autopilotZone);
+      markNoveltyHappened();
+    }
   }
-  autopilotLastFrac = frac;
   updateAutopilotZoneUi();
+  maybeReleaseBoredomDebt();
 
   const barrageP = lerp(a.barrage, b.barrage, lf) * autopilotZoneMultiplier('barrage');
   const jackpotP = lerp(a.jackpot, b.jackpot, lf) * autopilotZoneMultiplier('barrage');
-  const noveltyBonus = lerp(a.novelty, b.novelty, lf);
+  const phase = autopilotSessionPhase();
+  const trendingUp = engagement > engagementPrevForTrend + 0.02;
+  engagementPrevForTrend = engagement;
+  const noveltyBonus = Math.max(0, lerp(a.novelty, b.novelty, lf) + autopilotNoveltyBiasForPhase(phase, trendingUp));
   const fxTarget = Math.round(lerp(a.fx, b.fx, lf));
   const targetPace = lf < 0.5 ? a.pace : b.pace;
   autopilotAmbientBoost = lerp(a.ambient, b.ambient, lf);
@@ -2584,7 +2730,8 @@ function startAutopilot() {
   autopilotStartTime = Date.now();
   autopilotLastPace = null;
   autopilotZone = null;
-  autopilotLastFrac = 0;
+  autopilotZoneStartedAt = 0;
+  ticksSinceNovelty = 0;
   if (!fxEnabled) toggleFx();
   autopilotTick();
   autopilotTimer = setInterval(autopilotTick, AUTOPILOT_TICK_MS);
@@ -2594,6 +2741,7 @@ function stopAutopilot() {
   clearInterval(autopilotTimer);
   autopilotTimer = null;
   autopilotAmbientBoost = 0;
+  if (autopilotZone) recordZonePayoff(autopilotZone, readEngagement()); // learn from however long this one actually ran, even cut short
   autopilotZone = null;
   updateAutopilotZoneUi();
   // Auto-Pilot's arc drives novelty/exploration on its own curve while
@@ -2665,6 +2813,7 @@ function registerDislikeForRecalibrate() {
 
 function recalibrate() {
   toast('🔄 Recalibrating - mixing it up');
+  nudgeEngagement(-0.3); // a clear rejection signal - three dislikes in a row is not "flat," it's actively not landing
   fetch('/api/skip');
   if (!autopilotEnabled) {
     applyVibeDial(Math.max(vibeDialValue, RECALIBRATE_DISCOVERY_BONUS));
@@ -3071,7 +3220,7 @@ function connectStream() {
   return source;
 }
 
-function skip() { fetch('/api/skip').then(() => toast('⬇️ Skipped All', true)); }
+function skip() { nudgeEngagement(-0.05); fetch('/api/skip').then(() => toast('⬇️ Skipped All', true)); }
 function lock() { fetch('/api/lock').then(() => toast('60s Locked')); }
 function cycleTone() { fetch('/api/cycle_tone'); }
 function cat(f) { fetch('/api/folder?folder=' + encodeURIComponent(f)).then(() => toast('Category: ' + f.toUpperCase())); }
@@ -3152,7 +3301,9 @@ function rateScreen(i, dir, btn, strength) {
       burstTileSpeed(i, 1500, 1.05 + heartMultiplier * 0.02, 1.15 + heartMultiplier * 0.03);
     }
     dislikeStreak = 0;
+    nudgeEngagement(0.12 * strength);
   } else {
+    nudgeEngagement(-0.08);
     registerDislikeForRecalibrate();
   }
   const mult = registerCombo();
@@ -3435,6 +3586,7 @@ function openSealedTile(idx) {
   // Combo Chain Mechanics - see catchChaseFlash. An empty pull doesn't
   // feed the chain; only an actual payoff should keep it alive.
   const chainMult = outcome.negative ? 1 : registerCombo();
+  nudgeEngagement(outcome.negative ? -0.03 : 0.08);
   const xpAmount = (Array.isArray(outcome.xp) ? Math.round(outcome.xp[0] + Math.random() * (outcome.xp[1] - outcome.xp[0])) : outcome.xp) * mult * chainMult;
   const claimEl = tileClaimEls[idx];
   if (claimEl) {
@@ -3557,6 +3709,7 @@ function catchChaseFlash(idx) {
   clearChaseFlashVisual(idx);
   chaseFlashTileIndex = -1;
   chaseChain++;
+  nudgeEngagement(0.1);
   if (chaseChain > statsBestChaseChain) {
     statsBestChaseChain = chaseChain;
     saveStats();
@@ -3924,6 +4077,7 @@ function maybeTriggerDoubleFeature() {
     .then((data) => {
       if (!data || !data.picked || !Array.isArray(data.screens)) return;
       toast('🎬 Double Feature!');
+      markNoveltyHappened();
       data.screens.forEach((idx) => showClaimRewardLabel(idx, '🎬 Double Feature'));
     })
     .catch(() => {});
@@ -3957,6 +4111,7 @@ function clearMysteryTile(idx, trueMysteryReveal) {
     setTimeout(() => tile.classList.remove('mystery-reveal'), 300);
     if (trueMysteryReveal) {
       toast('✨ Never seen before!');
+      markNoveltyHappened();
       showClaimRewardLabel(idx, '✨ New Discovery');
     }
   }
@@ -3966,6 +4121,7 @@ function clearMysteryTile(idx, trueMysteryReveal) {
 function triggerMiniPayoff(idx) {
   playChimeSound(0.7);
   burstExtraFloaters(0.5);
+  nudgeEngagement(0.08);
   const mult = hiddenMultiplierFactor();
   const chainMult = registerCombo(); // Combo Chain Mechanics - see catchChaseFlash
   const xp = TUNING.XP_PER_BONUS_CLAIM * mult * chainMult;
@@ -4166,6 +4322,7 @@ window.onload = () => {
   loadVibeDialPref();
   loadManualSpeedPref();
   loadDynamicMosaicPrefs();
+  loadZonePayoffPrefs();
   loadTileAudioVolumePref();
   loadSessionTimerPref();
   applyColorTheme(0);
