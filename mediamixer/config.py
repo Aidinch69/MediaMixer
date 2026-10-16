@@ -110,13 +110,15 @@ class Config:
     # matches what actually happened, instead of an independent random
     # guess at the same time.
     jackpot_tiers: Tuple[JackpotTier, ...] = (
-        # speed_range tapered per direct feedback
+        # speed_range tapered per direct feedback; hype_ticks (0.5s each)
+        # raised so even "small" holds at least 10s - per feedback that
+        # the hold itself needed a real floor, not just a faster fade.
         JackpotTier("small", weight=65, tile_count=(1, 2), jackpot_picks=1,
-                    speed_range=(1.08, 1.45), hype_ticks=(4, 6)),
+                    speed_range=(1.08, 1.45), hype_ticks=(20, 24)),
         JackpotTier("medium", weight=28, tile_count=(2, 3), jackpot_picks=2,
-                    speed_range=(1.15, 1.55), hype_ticks=(6, 9)),
+                    speed_range=(1.15, 1.55), hype_ticks=(24, 30)),
         JackpotTier("mega", weight=7, tile_count=(3, 4), jackpot_picks=4,
-                    speed_range=(1.25, 1.8), hype_ticks=(10, 14)),
+                    speed_range=(1.25, 1.8), hype_ticks=(28, 36)),
     )
     jackpot_probability: float = 0.12
     jackpot_hold_seconds: float = 60.0

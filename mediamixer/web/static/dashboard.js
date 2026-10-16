@@ -485,6 +485,11 @@ let mosaicEnabled = false;
 let aspectRatios = [];
 let aspectKnown = [];
 let tileSpeedBurstUntil = [];
+// Whatever burstTileSpeed/fadeTileSpeedTo last intentionally set a
+// tile's playbackRate to, so it can be reapplied if a new .src load
+// (a content rotation mid-hold) resets it back to 1 - see
+// applyRandomStart.
+let heldPlaybackRate = [];
 let mosaicSettleTimer = null;
 // Barrage/jackpot hype speed used to apply s.speed straight from the
 // server every poll - smooth in principle (the server's own envelope is
@@ -677,7 +682,7 @@ let fxSprites = [];
 // copies at different positions.
 function randomFloaterOpacity() {
   const maxOp = fxOpacity / 100;
-  const minOp = maxOp * 0.5;
+  const minOp = maxOp * 0.65; // nudged up per feedback that the floor read as too faint
   return minOp + Math.random() * (maxOp - minOp);
 }
 
@@ -1016,6 +1021,7 @@ let sfxGain = null;
 let anticipationActive = false;
 let anticipationRunId = 0;
 let lastKnownBarrage = 0;
+let lastKnownBarrageTiles = [];
 let lastKnownJackpot = false;
 
 function loadAnticipationPrefs() {
@@ -1578,14 +1584,13 @@ function updateStatusBar() {
   const bar = document.getElementById('status-bar');
   if (!bar) return;
   let text = null;
-  if (anticipationActive) {
-    // pendingServerTier is known as soon as a real (server-driven) build-up
-    // starts - read without consuming it (only resolveTier() clears it) so
-    // this can say what's actually coming instead of staying vague. Fake
-    // near-misses have no server tier at all, so they stay vague on
-    // purpose - revealing "this one's fake" would spoil the point of them.
-    text = pendingServerTier ? ('🔥 Building... (' + pendingServerTier + ' incoming)') : '🔥 Something\'s building...';
-  } else if (sealedTileIndex >= 0) {
+  // anticipationActive used to also show its own "building" text here,
+  // duplicating updateModeBadge's persistent "🎰 Building..." badge at
+  // the same time - two notifications for the one event read as a
+  // glitch, not as two separate pieces of information. The mode-badge
+  // already owns this (and already names the tier once known), so this
+  // rotating bar just stays on whatever's next in line during a build-up.
+  if (sealedTileIndex >= 0) {
     text = '🔒 Sealed tile - open it to see what\'s inside!';
   } else if (bonusWindowTileIndex >= 0) {
     text = '✨ Bonus tile glowing - tap it before it fades!';
@@ -1631,13 +1636,14 @@ function updateModeBadge() {
     // nudging odds toward bigger jackpots) would be invisible - nothing
     // to notice means nothing to feel rewarded by.
     text = '🔥 Odds heating up';
-  } else if (autopilotZone) {
-    // Lowest priority - only shown when nothing more pressing is. Auto-
-    // Pilot's zone (and status phrase, same format as the settings
-    // panel's own "Current Zone" row) otherwise only showed in the panel
-    // itself, which "can't tell if you're not in the menu."
-    text = '🎬 ' + AUTOPILOT_ZONES[autopilotZone].label + (autopilotCurrentStatusPhrase ? ' · ' + autopilotCurrentStatusPhrase : '');
   }
+  // Auto-Pilot's zone/phrase used to be this badge's lowest-priority
+  // fallback - which meant it vanished behind a jackpot streak, heart
+  // multiplier, or heating-odds badge any time one of those was also
+  // active, reported as the zone readout "hiding." It now has its own
+  // permanent spot (#autopilot-zone-live, in the status-badges row) that
+  // doesn't compete with this badge's own jackpot-specific priority
+  // chain at all - see updateAutopilotZoneLive.
   if (text) {
     el.innerText = text;
     el.classList.add('show');
@@ -1646,6 +1652,22 @@ function updateModeBadge() {
   }
 }
 setInterval(updateModeBadge, 1000);
+
+// Its own permanent spot, independent of mode-badge's jackpot-specific
+// priority chain - shows whenever Auto-Pilot has a live zone, full stop,
+// instead of being bumped off by a jackpot streak/heat/heart-multiplier
+// badge that happens to also be active at the same time.
+function updateAutopilotZoneLive() {
+  const el = document.getElementById('autopilot-zone-live');
+  if (!el) return;
+  if (autopilotEnabled && autopilotZone) {
+    el.innerText = '🎬 ' + AUTOPILOT_ZONES[autopilotZone].label + (autopilotCurrentStatusPhrase ? ' · ' + autopilotCurrentStatusPhrase : '');
+    el.style.display = '';
+  } else {
+    el.style.display = 'none';
+  }
+}
+setInterval(updateAutopilotZoneLive, 1000);
 
 // Leveling/XP: a persistent long-horizon progress bar across sessions,
 // separate from any single jackpot - the point is a number that only ever
@@ -2328,7 +2350,7 @@ function chooseMoment(kind) {
   } else if (kind === 'new') {
     toast('🌱 Something different');
     fetch('/api/skip');
-    if (!autopilotEnabled) applyVibeDial(Math.min(2, vibeDialValue + 0.5));
+    if (!autopilotEnabled) applyVibeDial(Math.min(2.5, vibeDialValue + 0.5));
   } else {
     toast('🎲 Surprise me!');
     fetch('/api/skip');
@@ -2379,6 +2401,7 @@ function handleAnticipationStatus(d) {
     }
   }
   lastKnownBarrage = d.barrage;
+  lastKnownBarrageTiles = d.barrage > 0 ? (d.barrage_tiles || []) : [];
   lastKnownJackpot = d.jackpot;
 }
 
@@ -2964,9 +2987,14 @@ function autopilotTick() {
   } else {
     const zoneAgeMs = now - autopilotZoneStartedAt;
     const naturalMs = cycleS * 1000;
-    const hardCeilingMs = naturalMs * 2.5;
+    // Ceiling trimmed from 2.5x to 2.0x, and the stay-bar now rises
+    // faster relative to satiation (1.2 -> 1.5) - per feedback that a
+    // zone could still run a bit long under genuine sustained
+    // engagement, even at a short Typical Pace. A zone that's really
+    // working still gets real extra room, just a tighter one.
+    const hardCeilingMs = naturalMs * 2.0;
     const satiationFrac = Math.min(1.5, zoneAgeMs / hardCeilingMs);
-    const stayThreshold = 1.0 + satiationFrac * 1.2; // rises toward 2.2 (the engagement cap) as satiation climbs
+    const stayThreshold = 1.0 + satiationFrac * 1.5; // rises toward 2.25 (near the engagement cap) as satiation climbs, faster than before
     const pastHardCeiling = zoneAgeMs > hardCeilingMs;
     const disengaged = engagement < 0.6 && zoneAgeMs > naturalMs * 0.4; // don't cut absurdly early on a brief dip
     const naturallyDue = zoneAgeMs > naturalMs && engagement < stayThreshold;
@@ -3095,9 +3123,10 @@ function updateAutopilotZoneUi() {
 // payoff, just not flagged as a disengagement cut - the viewer asking
 // for a change isn't the same signal as the system detecting rejection)
 // plus a fresh novelty push, instead of waiting out the satiation clock.
-function switchItUp() {
-  if (!autopilotEnabled || !autopilotZone) { toast('🔀 Turn Auto-Pilot on first', true); return; }
-  markInteraction();
+// Shared by the manual "Switch It Up" button and Spin's own occasional
+// zone shuffle (see spin()) - forces an immediate zone change, bypassing
+// the satiation/engagement logic that would otherwise decide when.
+function rollNewAutopilotZone() {
   const engagement = readEngagement();
   const endingZone = autopilotZone;
   recordZonePayoff(endingZone, engagement, false, autopilotPrevZone);
@@ -3107,9 +3136,15 @@ function switchItUp() {
   autopilotZoneChangedAt = Date.now();
   maybeApplyZoneDrivenMosaic(autopilotZone);
   markNoveltyHappened();
+  updateAutopilotZoneUi();
+}
+
+function switchItUp() {
+  if (!autopilotEnabled || !autopilotZone) { toast('🔀 Turn Auto-Pilot on first', true); return; }
+  markInteraction();
+  rollNewAutopilotZone();
   fetch('/api/double_feature').catch(() => {});
   toast('🔀 Switching it up - ' + AUTOPILOT_ZONES[autopilotZone].label);
-  updateAutopilotZoneUi();
 }
 
 // A plain-text live readout of what Auto-Pilot currently thinks is
@@ -3307,7 +3342,7 @@ function applyVibeDial(value) {
 function setVibeDial(v) {
   vibeDialValue = parseFloat(v);
   const el = document.getElementById('l-vibe-dial');
-  if (el) el.innerText = vibeDialValue < 0.5 ? 'Familiar' : (vibeDialValue > 1.3 ? 'Discovery' : 'Balanced');
+  if (el) el.innerText = vibeDialValue < 0.5 ? 'Familiar' : (vibeDialValue > 1.6 ? 'Discovery' : 'Balanced');
   try { localStorage.setItem(VIBE_DIAL_KEY, vibeDialValue); } catch (e) {}
   if (!autopilotEnabled) applyVibeDial(vibeDialValue);
 }
@@ -3319,7 +3354,7 @@ function setVibeDial(v) {
 // of leaving the viewer to keep disliking the same vein of content one
 // clip at a time while the slower-moving reward averages catch up.
 const RECALIBRATE_THRESHOLD = 3;
-const RECALIBRATE_DISCOVERY_BONUS = 1.4;
+const RECALIBRATE_DISCOVERY_BONUS = 1.75;
 const RECALIBRATE_DISCOVERY_HOLD_MS = 20000;
 let dislikeStreak = 0;
 
@@ -3615,6 +3650,7 @@ function ensureTiles(count) {
     currentPaths.length = count;
     aspectRatios.length = count;
     tileSpeedBurstUntil.length = count;
+    heldPlaybackRate.length = count;
     aspectKnown.length = count;
     tileLoopBounds.length = count;
     lastFilterStr.length = count;
@@ -3628,11 +3664,20 @@ function ensureTiles(count) {
   return true;
 }
 
-function applyRandomStart(vid) {
+function applyRandomStart(vid, idx) {
   const onMeta = () => {
     vid.removeEventListener('loadedmetadata', onMeta);
     if (isFinite(vid.duration) && vid.duration > 0) {
       vid.currentTime = Math.random() * RANDOM_START_MAX_FRACTION * vid.duration;
+    }
+    // Loading a new .src resets playbackRate back to 1 even though a
+    // held speed effect (most notably a sealed-tile miss-hold, which can
+    // run up to 15s - long enough for the clip underneath to rotate on
+    // its own mid-hold) hasn't actually expired yet. Without this, the
+    // tile still looked locked (dim, badge gone) but had silently sped
+    // back up to normal the moment its content happened to change.
+    if (tileSpeedBurstUntil[idx] && Date.now() < tileSpeedBurstUntil[idx] && heldPlaybackRate[idx] != null) {
+      vid.playbackRate = heldPlaybackRate[idx];
     }
     vid.play().catch(() => {});
   };
@@ -3693,7 +3738,7 @@ function render(d) {
       // source - matches PRELOAD_MAX_TILES: same grids that skip preload
       // also get the lighter file.
       vid.src = mediaOrigin(i) + '/media/' + s.path + '?tiles=' + d.screens.length;
-      applyRandomStart(vid);
+      applyRandomStart(vid, i);
     }
     const label = document.getElementById('label-' + i);
     if (label) label.innerText = s.name || '';
@@ -3789,7 +3834,14 @@ let lastLayoutChangeAt = 0;
 // ever came from that side, not from someone manually clicking fast.
 function setLayout(mode, quiet) {
   const now = Date.now();
-  if (quiet && now - lastLayoutChangeAt < TUNING.LAYOUT_CHANGE_COOLDOWN_MS) return;
+  // An automatic (quiet) layout change used to fire mid-barrage without
+  // any awareness of it - Dynamic Mosaic's own drift timer doesn't know
+  // or care what else is going on, so a build-up/hype window could get
+  // its tile rebuilt (and dipped through the layout fade) right out from
+  // under it, reported as "it refreshed the state and changed" a few
+  // seconds into a hype event. Manual clicks still always go through -
+  // only automatic ones defer to whatever's actively playing out.
+  if (quiet && (now - lastLayoutChangeAt < TUNING.LAYOUT_CHANGE_COOLDOWN_MS || anticipationActive)) return;
   lastLayoutChangeAt = now;
   fadeTransition(() => {
     fetch('/api/layout?mode=' + mode).then(() => { if (!quiet) toast('Layout: ' + mode.toUpperCase()); });
@@ -3835,6 +3887,18 @@ function rateScreen(i, dir, btn, strength) {
   if (dir === 'up') {
     claimBonusTile(i);
     bumpHeartMultiplier();
+    // Hearting one of the tiles a real barrage actually picked out -
+    // while it's live, not just coincidentally at some point during it -
+    // is rewarded beyond a normal heart: an extra multiplier bump, a
+    // flat XP bonus, and a bit of heat, so reacting to the highlight
+    // itself (not just whatever happens to be on screen) pays off.
+    if (lastKnownBarrage > 0 && lastKnownBarrageTiles.includes(i)) {
+      bumpHeartMultiplier();
+      awardXp(15);
+      bumpJackpotHeat(0.3);
+      fireColorSplashPiece(null, i);
+      toast('❤️🔥 Highlighted tile! Bonus heart multiplier');
+    }
     statsLifetimeHearts += strength;
     saveStats();
     updateStatsUi();
@@ -4049,6 +4113,7 @@ function burstTileSpeed(idx, durationMs, minMult, maxMult) {
   minMult = minMult == null ? 1.25 : minMult;
   maxMult = maxMult == null ? 2.0 : maxMult;
   vid.playbackRate = minMult + Math.random() * (maxMult - minMult);
+  heldPlaybackRate[idx] = vid.playbackRate;
   tileSpeedBurstUntil[idx] = Date.now() + durationMs;
 }
 
@@ -4111,6 +4176,7 @@ function fadeTileSpeedTo(idx, fadeMs, targetMin, targetMax, holdAfterMs) {
     const elapsed = Date.now() - startTime;
     const t = Math.min(1, elapsed / fadeMs);
     vid.playbackRate = startSpeed + (targetSpeed - startSpeed) * t;
+    heldPlaybackRate[idx] = vid.playbackRate;
     if (t < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
@@ -4891,6 +4957,15 @@ function spin() {
     } else {
       showSpinResult('💨 Nothing');
       toast('💨 Nothing this time...', true);
+    }
+    // Independent of the roll above - a spin can also shake up Auto-
+    // Pilot's current zone, same mechanism as the manual "Switch It Up"
+    // button (minus the Double Feature push, which stays exclusive to
+    // a deliberate press), so Spin feels tied into the rest of the
+    // system instead of being its own separate island.
+    if (autopilotEnabled && autopilotZone && Math.random() < 0.18) {
+      rollNewAutopilotZone();
+      toast('🎰🔀 Spin shook up the zone - ' + AUTOPILOT_ZONES[autopilotZone].label);
     }
   }, SPIN_ROLL_DELAY_MS);
 }

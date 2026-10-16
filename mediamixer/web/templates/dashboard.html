@@ -58,6 +58,7 @@
     <span class="badge jackpot-badge" id="jackpot-tag">🎰 JACKPOT</span>
     <span id="jackpot-streak" class="jackpot-streak-readout"></span>
     <span id="combo-readout" class="combo-readout"></span>
+    <span id="autopilot-zone-live" class="zone-readout"></span>
     <span class="offline-badge golden-hour-badge" id="golden-hour-badge">✨ GOLDEN HOUR</span>
     <span class="offline-badge surge-badge" id="surge-badge">⚡ SURGE</span>
     <span class="offline-badge" id="audio-offline">🔇 No Overlay Tracks</span>
@@ -201,7 +202,7 @@
     <details class="settings-section">
       <summary><span class="section-title">🧭 Discovery Vibe</span><span class="settings-section-desc">How much selection favors familiar favorites vs. fresh content.</span></summary>
       <div class="settings-section-body">
-        <div class="slider"><label>Familiar ↔ Discovery: <b><span id="l-vibe-dial">Balanced</span></b></label><input type="range" id="vibe-dial-input" min="0" max="2" step="0.05" value="0.5" oninput="setVibeDial(this.value)"></div>
+        <div class="slider"><label>Familiar ↔ Discovery: <b><span id="l-vibe-dial">Balanced</span></b></label><input type="range" id="vibe-dial-input" min="0" max="2.5" step="0.05" value="0.5" oninput="setVibeDial(this.value)"></div>
         <details class="hint-details"><summary>What does this do?</summary><p class="hint">Low = selection sticks closer to clips that already score well (familiar). High = lightly-played clips get a real shot even against established favorites (discovery). Auto-Pilot's own arc blends this automatically while it's running (see the Auto-Pilot tab) and hands control back to this dial the moment you turn it off.</p></details>
         <div class="slider">
           <label>Session Timer (opt-in)</label>
