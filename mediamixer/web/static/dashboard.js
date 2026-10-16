@@ -2813,25 +2813,10 @@ function setConnected(ok) {
   document.getElementById('conn-label').innerText = ok ? 'Connected' : 'Reconnecting…';
 }
 
-function ensureTiles(count) {
-  if (currentTileCount === count) return false;
-  currentTileCount = count;
-  currentPaths = new Array(count).fill('');
-  aspectRatios = new Array(count).fill(DEFAULT_ASPECT);
-  tileSpeedBurstUntil = new Array(count).fill(0);
-  aspectKnown = new Array(count).fill(false);
-  tileLoopBounds = new Array(count).fill(null);
-  if (focusModeActive >= 0) { anticipationFxEnabled = focusModeSavedAnticipation; focusModeActive = -1; } // old tile is gone - don't leave anticipation FX stuck off
-  tileElements = [];
-  tileGlowEls = [];
-  tileAmbientEls = [];
-  tileClaimEls = [];
-  lastFilterStr = new Array(count).fill('');
-  clearTimeout(bonusWindowTimer);
-  bonusWindowTileIndex = -1; // old tile references are about to be discarded
-  clearTimeout(sealedTimer);
-  sealedTileIndex = -1;
-  for (let i = 0; i < count; i++) {
+// Builds one fully-wired tile (markup + every listener a tile needs) -
+// pulled out of ensureTiles so growing the grid can create just the new
+// tiles instead of rebuilding every existing one from scratch.
+function createTileElement(i) {
     const tile = document.createElement('div');
     tile.className = 'tile';
     tile.innerHTML =
@@ -2914,10 +2899,63 @@ function ensureTiles(count) {
         showClaimRewardLabel(i, '😤 So close!');
       }
     });
-    tileElements.push(tile);
-    tileGlowEls.push(tile.querySelector('.tile-glow-fx'));
-    tileAmbientEls.push(ambientEl);
-    tileClaimEls.push(tile.querySelector('.tile-claim-fx'));
+    return tile;
+}
+
+// Incremental: when the tile count changes, keep every tile whose index
+// still exists exactly as it is (same <video> element, same playback
+// position, same listeners) - only the *delta* is actually created or
+// torn down. The previous version discarded and rebuilt every tile on
+// any count change, which meant growing from say 4 tiles to 6 restarted
+// all 4 already-playing tiles from scratch along with the 2 genuinely
+// new ones. applyLayoutMode()'s later clear-and-reappend of the grid
+// container only reorders these same element references - detaching and
+// reattaching an existing <video> node doesn't reset or interrupt its
+// playback, only discarding and recreating the element itself does.
+function ensureTiles(count) {
+  if (currentTileCount === count) return false;
+  const oldCount = currentTileCount;
+  currentTileCount = count;
+
+  if (count > oldCount) {
+    const grow = count - oldCount;
+    currentPaths = currentPaths.concat(new Array(grow).fill(''));
+    aspectRatios = aspectRatios.concat(new Array(grow).fill(DEFAULT_ASPECT));
+    tileSpeedBurstUntil = tileSpeedBurstUntil.concat(new Array(grow).fill(0));
+    aspectKnown = aspectKnown.concat(new Array(grow).fill(false));
+    tileLoopBounds = tileLoopBounds.concat(new Array(grow).fill(null));
+    lastFilterStr = lastFilterStr.concat(new Array(grow).fill(''));
+    for (let i = oldCount; i < count; i++) {
+      const tile = createTileElement(i);
+      tileElements.push(tile);
+      tileGlowEls.push(tile.querySelector('.tile-glow-fx'));
+      tileAmbientEls.push(tile.querySelector('.tile-ambient-fx'));
+      tileClaimEls.push(tile.querySelector('.tile-claim-fx'));
+    }
+  } else {
+    // Shrinking: drop the tiles beyond the new count and clear any
+    // ambient/mechanic state that was pointing at one of them - the
+    // index itself is about to stop existing, not just change content.
+    for (let i = count; i < oldCount; i++) {
+      if (tileElements[i] && tileElements[i].parentNode) tileElements[i].parentNode.removeChild(tileElements[i]);
+    }
+    tileElements.length = count;
+    tileGlowEls.length = count;
+    tileAmbientEls.length = count;
+    tileClaimEls.length = count;
+    currentPaths.length = count;
+    aspectRatios.length = count;
+    tileSpeedBurstUntil.length = count;
+    aspectKnown.length = count;
+    tileLoopBounds.length = count;
+    lastFilterStr.length = count;
+    if (bonusWindowTileIndex >= count) { clearTimeout(bonusWindowTimer); bonusWindowTileIndex = -1; }
+    if (sealedTileIndex >= count) { clearTimeout(sealedTimer); sealedTileIndex = -1; }
+    if (chaseFlashTileIndex >= count) { clearTimeout(chaseFlashTimer); chaseFlashTileIndex = -1; chaseChain = 0; }
+    if (lastChaseMissIdx >= count) lastChaseMissIdx = -1;
+    if (dueAuraTileIndex >= count) dueAuraTileIndex = -1;
+    if (mysteryTileIndex >= count) mysteryTileIndex = -1;
+    if (focusModeActive >= count) { anticipationFxEnabled = focusModeSavedAnticipation; focusModeActive = -1; }
   }
   return true;
 }
