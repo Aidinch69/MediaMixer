@@ -227,6 +227,8 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    still drive a real fade (fadeSealedDim) instead of only ever being
    able to snap this on/off via the class alone. */
 .tile-sealed-dim::after{content:'';position:absolute;inset:0;background:#000;opacity:var(--sealed-dim-opacity,.4);pointer-events:none;z-index:1;transition:opacity var(--sealed-dim-fade-ms,.3s) ease}
+.sealed-status-label{position:absolute;bottom:6px;left:8px;z-index:2;font-size:.7rem;color:rgba(255,255,255,.8);background:rgba(0,0,0,.55);padding:2px 8px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .3s ease}
+.tile-sealed-missed .sealed-status-label{opacity:1}
 .tile.mystery-tile video{filter:blur(14px)}
 .tile.mystery-reveal video{transition:filter .3s ease}
 #anticipation-meter{position:fixed;top:0;left:0;width:100%;height:4px;z-index:18;background:rgba(255,255,255,.05);pointer-events:none}
@@ -331,7 +333,6 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    construction. */
 .tile-featured{box-shadow:inset 0 0 0 3px rgba(255,212,59,.85),inset 0 0 24px rgba(255,212,59,.25)}
 .tile video{width:100%;height:100%;object-fit:contain;transition:filter .3s ease}
-.screen-grid.mosaic .tile video{object-fit:cover}
 .preload{display:none}
 .tile-overlay{position:absolute;top:0;left:0;right:0;z-index:2;display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:6px;opacity:0;transition:opacity .15s;pointer-events:none}
 .tile:hover .tile-overlay{opacity:1}

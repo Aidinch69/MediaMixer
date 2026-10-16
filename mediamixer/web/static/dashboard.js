@@ -27,7 +27,7 @@ const TUNING_DEFAULTS = {
   SEALED_CHECK_MS: 35000,
   SEALED_PROBABILITY: 0.10,
   SEALED_DURATION_MS: 6000,
-  SEALED_LOCK_SPEED_MULT: 0.51,
+  SEALED_LOCK_SPEED_MULT: 0.5,
   SEALED_MISS_HOLD_MS: 15000,
   SEALED_MISS_FADE_MS: 5000,
   SEALED_UNLOCK_FADE_MS: 3000,
@@ -80,9 +80,9 @@ const TUNING_DEFAULTS = {
   DOUBLE_FEATURE_PROBABILITY: 0.12,
   LAYOUT_FADE_MS: 350,
   LAYOUT_FADE_HOLD_MS: 450,
-  LAYOUT_CHANGE_COOLDOWN_MS: 12000,
-  DYNAMIC_MOSAIC_CHECK_MS: 45000,
-  DYNAMIC_MOSAIC_DRIFT_PROBABILITY: 0.4,
+  LAYOUT_CHANGE_COOLDOWN_MS: 20000,
+  DYNAMIC_MOSAIC_CHECK_MS: 10000,
+  DYNAMIC_MOSAIC_DRIFT_PROBABILITY: 0.1,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -3365,6 +3365,7 @@ function createTileElement(i) {
       '<div class="tile-glow-fx"></div>' +
       '<div class="tile-ambient-fx"><span class="tap-badge">👆 TAP</span><span class="chase-badge">⚡ CATCH</span><span class="sealed-badge">🔒 OPEN</span></div>' +
       '<div class="tile-claim-fx"><span class="claim-reward-label"></span></div>' +
+      '<div class="sealed-status-label">🔒 Locked</div>' +
       '<div class="tile-overlay">' +
       '<div class="src-label" id="label-' + i + '"></div>' +
       '<div class="tile-actions">' +
@@ -3886,7 +3887,7 @@ function claimBonusTile(idx) {
     el.classList.add('bonus-claimed');
     setTimeout(() => el.classList.remove('bonus-claimed'), BONUS_CLAIM_CELEBRATION_MS);
   }
-  burstTileSpeed(idx, BONUS_CLAIM_CELEBRATION_MS, 1.185, 1.879); // the increase-over-normal (was 0.20-0.95) trimmed another 7.5%
+  burstTileSpeed(idx, BONUS_CLAIM_CELEBRATION_MS, 1.185, 1.5); // tapered per direct feedback
   bumpJackpotHeat(0.5); // a smaller, flat nudge than a chase catch's - see bumpJackpotHeat
   triggerMiniPayoff(idx);
 }
@@ -3980,7 +3981,7 @@ function activateSealedTile(idx) {
   // genuine slowdown - burstTileSpeed doubles as a slow-down here since
   // min/max are both the same value.
   const tile = tileElements[idx];
-  if (tile) tile.classList.add('tile-sealed-dim');
+  if (tile) { tile.classList.add('tile-sealed-dim'); tile.classList.remove('tile-sealed-missed'); }
   burstTileSpeed(idx, TUNING.SEALED_DURATION_MS, TUNING.SEALED_LOCK_SPEED_MULT, TUNING.SEALED_LOCK_SPEED_MULT);
   clearTimeout(sealedTimer);
   sealedTimer = setTimeout(() => missSealedTile(idx), TUNING.SEALED_DURATION_MS);
@@ -3995,6 +3996,8 @@ function missSealedTile(idx) {
   if (idx !== sealedTileIndex) return;
   const el = tileAmbientEls[idx];
   if (el) el.classList.remove('sealed-tile'); // no longer tappable - the pulse/badge goes immediately
+  const tile = tileElements[idx];
+  if (tile) tile.classList.add('tile-sealed-missed'); // bottom-left "locked" label while the miss-hold plays out
   sealedTileIndex = -1;
   // The original lock burst (from activateSealedTile) only ever covered
   // SEALED_DURATION_MS - without re-extending it here, it would expire
@@ -4007,6 +4010,7 @@ function missSealedTile(idx) {
   tileSpeedBurstUntil[idx] = Date.now() + TUNING.SEALED_MISS_HOLD_MS;
   setTimeout(() => {
     if (sealedTileIndex === idx) return; // this tile got sealed again before the old hold finished - don't fade it out from under the new one
+    if (tile) tile.classList.remove('tile-sealed-missed');
     fadeSealedDim(idx, TUNING.SEALED_MISS_FADE_MS);
     fadeTileSpeedTo(idx, TUNING.SEALED_MISS_FADE_MS, 1, 1);
   }, TUNING.SEALED_MISS_HOLD_MS);
@@ -4018,9 +4022,9 @@ function missSealedTile(idx) {
 const SEALED_OUTCOMES = [
   { chance: 0.10, label: '📦 Empty...', xp: 0, speed: null, heat: 0, negative: true },
   { chance: 0.35, label: null, xp: [10, 20], speed: null, heat: 0 },
-  { chance: 0.30, label: null, xp: [25, 40], speed: [1.10, 1.25], heat: 0.3 },
-  { chance: 0.20, label: null, xp: [15, 25], speed: [1.20, 1.45], heat: 0.8 },
-  { chance: 0.05, label: '🎰 Jackpot inside!', xp: [50, 80], speed: [1.30, 1.60], heat: 1.6 },
+  { chance: 0.30, label: null, xp: [25, 40], speed: [1.1, 1.2], heat: 0.3 }, // tapered per direct feedback
+  { chance: 0.20, label: null, xp: [15, 25], speed: [1.2, 1.35], heat: 0.8 },
+  { chance: 0.05, label: '🎰 Jackpot inside!', xp: [50, 80], speed: [1.35, 1.6], heat: 1.6 },
 ];
 
 function rollSealedOutcome() {
@@ -4210,8 +4214,8 @@ function catchChaseFlash(idx) {
   const chainForSpeed = Math.min(chaseChain, 8);
   // Base increase-over-normal (was 0.05-0.15) trimmed 10%; the per-streak
   // addition on top (was 0.05-0.10) trimmed a further 5%.
-  const chainSpeedExtra = chainForSpeed * (0.0475 + Math.random() * 0.0475);
-  burstTileSpeed(idx, CHASE_CAUGHT_CELEBRATION_MS * pulses, 1.045 + chainSpeedExtra, 1.135 + chainSpeedExtra);
+  const chainSpeedExtra = chainForSpeed * (0.0375 + Math.random() * 0.0375); // tapered per direct feedback
+  burstTileSpeed(idx, CHASE_CAUGHT_CELEBRATION_MS * pulses, 1.045 + chainSpeedExtra, 1.125 + chainSpeedExtra);
   const catchMult = hiddenMultiplierFactor();
   // Combo Chain Mechanics: a catch here feeds the same shared combo meter
   // rating-in-succession builds (registerCombo/comboMultiplier), so bursts
