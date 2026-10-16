@@ -165,6 +165,7 @@
       <label>Current Zone</label>
       <span id="l-autopilot-zone" class="zone-readout"></span>
     </div>
+    <button class="badge" onclick="switchItUp()">🔀 Switch It Up</button>
     <details class="hint-details"><summary>What does this do?</summary><p class="hint">Scripts pace, barrage/jackpot odds, floater count, and content novelty through a calm -&gt; building -&gt; climax -&gt; cooldown arc on a repeating timer, instead of those staying wherever you last set them. Each cycle also picks a fresh "zone" (Chase/Color/Jackpot/Vault) that leans the climax toward a different mix of the passive stuff above - one cycle's climax might be chase-flash heavy, the next a Color Rush, the next sealed tiles - instead of every climax looking the same. Turns Floating Overlay on if it's off. Does not touch Mosaic Fit - that stays exactly wherever you set it manually.</p></details>
     <div class="slider">
       <label>Session Timer (opt-in)</label>
@@ -215,6 +216,8 @@
     <button onclick="resetTuningToDefaults()">⟲ Reset All to Shipped Defaults</button>
     <details class="hint-details"><summary>What does this do?</summary><p class="hint">Live sliders for the constants we've actually been iterating on this session (spiral opacity/timing, sealed/chase/bonus/color-rush/mystery-tile/due-aura odds and timing, spin, the various multipliers and decay rates, xp amounts) - not everything in the file, just the parts worth fine-tuning in real time instead of editing source and restarting. A "check interval" is how often that system rolls the dice at all, in seconds - not a guarantee. A lower interval means it checks more often; the "odds" slider next to it is the actual chance it fires on each check. Low interval + low odds can feel about the same as high interval + high odds - they both control frequency, just from different angles. Changes persist across reloads on this device. "Save Backup" snapshots your current settings so you can experiment further and get back to them later; "Reset All to Shipped Defaults" always goes back to the values this shipped with, independent of any backup.</p></details>
     <div id="tuning-groups"></div>
+    <h3>🛰️ Auto-Pilot Observability</h3>
+    <pre id="autopilot-debug" class="metric" style="white-space:pre-line;font-family:inherit">Auto-Pilot is off.</pre>
   </div>
 </div>
 <audio id="overlay-audio" loop></audio>

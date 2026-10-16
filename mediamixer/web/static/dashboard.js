@@ -27,6 +27,10 @@ const TUNING_DEFAULTS = {
   SEALED_CHECK_MS: 35000,
   SEALED_PROBABILITY: 0.10,
   SEALED_DURATION_MS: 6000,
+  SEALED_LOCK_SPEED_MULT: 0.60,
+  SEALED_MISS_HOLD_MS: 15000,
+  SEALED_MISS_FADE_MS: 5000,
+  SEALED_UNLOCK_FADE_MS: 3000,
   CHASE_CHECK_MS: 20000,
   CHASE_PROBABILITY: 0.22,
   CHASE_FLASH_START_MS: 1800,
@@ -164,7 +168,7 @@ function restoreTuningBackup() {
 // concern, TUNING itself always stores the raw value a usage site reads.
 const TUNING_GROUPS = [
   { label: 'Spiral', keys: ['SPIRAL_OPACITY_MIN', 'SPIRAL_OPACITY_RANGE', 'SPIRAL_HOLD_MIN_MS', 'SPIRAL_HOLD_RANGE_MS', 'SPIRAL_FADE_MIN_MS', 'SPIRAL_FADE_RANGE_MS', 'SPIRAL_BREATHE_PROBABILITY', 'SPIRAL_BREATHE_INTERVAL_MS'] },
-  { label: 'Sealed Tile', keys: ['SEALED_PROBABILITY', 'SEALED_CHECK_MS', 'SEALED_DURATION_MS'] },
+  { label: 'Sealed Tile', keys: ['SEALED_PROBABILITY', 'SEALED_CHECK_MS', 'SEALED_DURATION_MS', 'SEALED_LOCK_SPEED_MULT', 'SEALED_MISS_HOLD_MS', 'SEALED_MISS_FADE_MS', 'SEALED_UNLOCK_FADE_MS'] },
   { label: 'Chase', keys: ['CHASE_PROBABILITY', 'CHASE_CHECK_MS', 'CHASE_FLASH_START_MS', 'CHASE_FLASH_MIN_MS', 'CHASE_HOP_DELAY_MS', 'CHASE_CAUGHT_MAX_PULSES', 'CHASE_XP_BASE', 'CHASE_XP_PER_CATCH'] },
   { label: 'Bonus Window', keys: ['BONUS_WINDOW_PROBABILITY', 'BONUS_WINDOW_CHECK_MS', 'BONUS_WINDOW_DURATION_MS'] },
   { label: 'Color Rush / Splash', keys: ['COLOR_RUSH_PROBABILITY', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_PROBABILITY', 'COLOR_SPLASH_CHECK_MS'] },
@@ -192,6 +196,10 @@ const TUNING_META = {
   SEALED_CHECK_MS: { label: 'Sealed-tile check interval', unit: 's', min: 5000, max: 90000, step: 1000 },
   SEALED_PROBABILITY: { label: 'Sealed-tile odds', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
   SEALED_DURATION_MS: { label: 'Sealed-tile duration', unit: 's', min: 2000, max: 20000, step: 500 },
+  SEALED_LOCK_SPEED_MULT: { label: 'Sealed-tile lock speed', unit: 'x', min: 0.3, max: 1, step: 0.05 },
+  SEALED_MISS_HOLD_MS: { label: 'Sealed-tile miss hold (before fading)', unit: 's', min: 2000, max: 30000, step: 1000 },
+  SEALED_MISS_FADE_MS: { label: 'Sealed-tile miss fade-out', unit: 's', min: 1000, max: 15000, step: 500 },
+  SEALED_UNLOCK_FADE_MS: { label: 'Sealed-tile unlock fade', unit: 's', min: 500, max: 10000, step: 500 },
   CHASE_CHECK_MS: { label: 'Chase check interval', unit: 's', min: 5000, max: 60000, step: 1000 },
   CHASE_PROBABILITY: { label: 'Chase odds', unit: 'pct', min: 0, max: 0.6, step: 0.01 },
   CHASE_FLASH_START_MS: { label: 'Chase window (start)', unit: 's', min: 500, max: 4000, step: 100 },
@@ -2927,6 +2935,56 @@ function updateAutopilotZoneUi() {
   if (row) row.style.display = autopilotZone ? 'flex' : 'none';
 }
 
+// Manual escape hatch: the satiation/bandit logic above has genuinely
+// good judgment about when to move on, but "good judgment, eventually"
+// isn't the same as "right now, if I want it" - this forces an
+// immediate zone change (still recording the outgoing zone's real
+// payoff, just not flagged as a disengagement cut - the viewer asking
+// for a change isn't the same signal as the system detecting rejection)
+// plus a fresh novelty push, instead of waiting out the satiation clock.
+function switchItUp() {
+  if (!autopilotEnabled || !autopilotZone) { toast('🔀 Turn Auto-Pilot on first', true); return; }
+  markInteraction();
+  const engagement = readEngagement();
+  const endingZone = autopilotZone;
+  recordZonePayoff(endingZone, engagement, false, autopilotPrevZone);
+  autopilotPrevZone = endingZone;
+  autopilotZone = pickAutopilotZone(endingZone, endingZone);
+  autopilotZoneStartedAt = Date.now();
+  autopilotZoneChangedAt = Date.now();
+  maybeApplyZoneDrivenMosaic(autopilotZone);
+  markNoveltyHappened();
+  fetch('/api/double_feature').catch(() => {});
+  toast('🔀 Switching it up - ' + AUTOPILOT_ZONES[autopilotZone].label);
+  updateAutopilotZoneUi();
+}
+
+// A plain-text live readout of what Auto-Pilot currently thinks is
+// happening and why - not meant to be polished, just enough to actually
+// see the engagement/satiation/bandit machinery working instead of
+// having to trust it blindly. Runs on its own timer (not gated on a
+// tick firing) so it still shows a true "off" state immediately.
+function updateAutopilotDebugUi() {
+  const el = document.getElementById('autopilot-debug');
+  if (!el) return;
+  if (!autopilotEnabled) { el.innerText = 'Auto-Pilot is off.'; return; }
+  const engagement = readEngagement();
+  const trendArrow = engagement > engagementPrevForTrend ? ' ↑' : engagement < engagementPrevForTrend ? ' ↓' : '';
+  const zoneAgeS = autopilotZone ? Math.round((Date.now() - autopilotZoneStartedAt) / 1000) : 0;
+  const lines = [
+    'Zone: ' + (autopilotZone ? AUTOPILOT_ZONES[autopilotZone].label : '-') + ' (' + zoneAgeS + 's in)',
+    'Engagement: ' + engagement.toFixed(2) + trendArrow,
+    'Session trust: ' + sessionTrust.toFixed(2),
+    'Step-off proximity: ' + stepOffProximity().toFixed(2) + (sessionRetentionBeatPhase ? '  (retention beat: ' + sessionRetentionBeatPhase + ')' : ''),
+    'Cycle #' + autopilotCycleCount + (autopilotFakeoutActive ? '  (fakeout active)' : ''),
+    'Boredom debt: ' + ticksSinceNovelty + ' / ' + BOREDOM_DEBT_LIMIT,
+    'Temperament (top zone): ' + autopilotTemperament(),
+    'Zone payoff: ' + AUTOPILOT_ZONE_NAMES.map((z) => z + '=' + zonePayoff[z].toFixed(2)).join('  '),
+  ];
+  el.innerText = lines.join('\n');
+}
+setInterval(updateAutopilotDebugUi, 1000);
+
 // ---- Dynamic Mosaic ----
 // Two independent toggles rather than one auto-computed formula, since
 // "ramp tile count" doesn't have one right direction - see AUTOPILOT_ZONES'
@@ -3791,7 +3849,7 @@ function claimBonusTile(idx) {
     el.classList.add('bonus-claimed');
     setTimeout(() => el.classList.remove('bonus-claimed'), BONUS_CLAIM_CELEBRATION_MS);
   }
-  burstTileSpeed(idx, BONUS_CLAIM_CELEBRATION_MS, 1.20, 1.95); // trimmed 5pts off both ends (was 1.25-2.0)
+  burstTileSpeed(idx, BONUS_CLAIM_CELEBRATION_MS, 1.185, 1.879); // the increase-over-normal (was 0.20-0.95) trimmed another 7.5%
   bumpJackpotHeat(0.5); // a smaller, flat nudge than a chase catch's - see bumpJackpotHeat
   triggerMiniPayoff(idx);
 }
@@ -3832,6 +3890,48 @@ function maybeTriggerSealedTile() {
   }
 }
 
+// Fades the sealed dim's opacity to 0 over durationMs (instead of
+// snapping instantly the moment the class is removed, which is all a
+// plain class toggle could ever do for a pseudo-element's own opacity -
+// see the CSS comment on .tile-sealed-dim::after), then cleans the
+// class and custom properties up once the fade has actually finished.
+function fadeSealedDim(idx, durationMs) {
+  const tile = tileElements[idx];
+  if (!tile || !tile.classList.contains('tile-sealed-dim')) return;
+  tile.style.setProperty('--sealed-dim-fade-ms', durationMs + 'ms');
+  tile.style.setProperty('--sealed-dim-opacity', '0');
+  setTimeout(() => {
+    tile.classList.remove('tile-sealed-dim');
+    tile.style.removeProperty('--sealed-dim-opacity');
+    tile.style.removeProperty('--sealed-dim-fade-ms');
+  }, durationMs);
+}
+
+// Smoothly ramps playbackRate from wherever it currently sits to a
+// (randomized) target over fadeMs, instead of the instant snap a plain
+// burstTileSpeed call would give it - playbackRate has no native CSS
+// transition to lean on. holdAfterMs (if given) keeps the burst window
+// open that much longer past the fade itself, so a reward can ease into
+// its burst speed and then actually hold there for a beat before
+// render()'s own guard lets it expire back to the server-driven speed,
+// the same way every other burst in this file already naturally expires.
+function fadeTileSpeedTo(idx, fadeMs, targetMin, targetMax, holdAfterMs) {
+  const vid = tileElements[idx] && tileElements[idx].querySelector('#screen-' + idx);
+  if (!vid) return;
+  holdAfterMs = holdAfterMs || 0;
+  const startSpeed = vid.playbackRate;
+  const targetSpeed = targetMin + Math.random() * (targetMax - targetMin);
+  const startTime = Date.now();
+  tileSpeedBurstUntil[idx] = startTime + fadeMs + holdAfterMs;
+  function step() {
+    const elapsed = Date.now() - startTime;
+    const t = Math.min(1, elapsed / fadeMs);
+    vid.playbackRate = startSpeed + (targetSpeed - startSpeed) * t;
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
 function activateSealedTile(idx) {
   sealedTileIndex = idx;
   sealedExpireAt = Date.now() + TUNING.SEALED_DURATION_MS;
@@ -3840,22 +3940,30 @@ function activateSealedTile(idx) {
   // Looks actually locked, not just bordered: a dim overlay on the tile
   // itself (same opacity-only technique as the mega-barrage dim, but its
   // own class so the two never fight over who gets to clear it) plus a
-  // genuine 25% slowdown - burstTileSpeed doubles as a slow-down here
-  // since min/max are both 0.75.
+  // genuine slowdown - burstTileSpeed doubles as a slow-down here since
+  // min/max are both the same value.
   const tile = tileElements[idx];
   if (tile) tile.classList.add('tile-sealed-dim');
-  burstTileSpeed(idx, TUNING.SEALED_DURATION_MS, 0.75, 0.75);
+  burstTileSpeed(idx, TUNING.SEALED_DURATION_MS, TUNING.SEALED_LOCK_SPEED_MULT, TUNING.SEALED_LOCK_SPEED_MULT);
   clearTimeout(sealedTimer);
   sealedTimer = setTimeout(() => missSealedTile(idx), TUNING.SEALED_DURATION_MS);
 }
 
+// A miss no longer disappears the instant the tap window closes - it
+// holds the locked look (still dim, still slow) for a while longer,
+// genuinely un-tappable now but not yet visually resolved, before
+// fading itself back to normal instead of snapping straight from
+// "locked" to "normal" the moment the window expires.
 function missSealedTile(idx) {
   if (idx !== sealedTileIndex) return;
   const el = tileAmbientEls[idx];
-  if (el) el.classList.remove('sealed-tile');
-  const tile = tileElements[idx];
-  if (tile) tile.classList.remove('tile-sealed-dim');
+  if (el) el.classList.remove('sealed-tile'); // no longer tappable - the pulse/badge goes immediately
   sealedTileIndex = -1;
+  setTimeout(() => {
+    if (sealedTileIndex === idx) return; // this tile got sealed again before the old hold finished - don't fade it out from under the new one
+    fadeSealedDim(idx, TUNING.SEALED_MISS_FADE_MS);
+    fadeTileSpeedTo(idx, TUNING.SEALED_MISS_FADE_MS, 1, 1);
+  }, TUNING.SEALED_MISS_HOLD_MS);
 }
 
 // The actual roll: each outcome names its own odds, xp, speed range (or
@@ -3882,14 +3990,6 @@ function openSealedTile(idx) {
   if (idx !== sealedTileIndex || Date.now() >= sealedExpireAt) return;
   const ambientEl = tileAmbientEls[idx];
   if (ambientEl) ambientEl.classList.remove('sealed-tile');
-  const tile = tileElements[idx];
-  if (tile) tile.classList.remove('tile-sealed-dim');
-  // Clears the 0.75x lock-slowdown's burst window outright rather than
-  // waiting for it to expire on its own schedule - opening early (before
-  // the full seal duration) with an outcome that has no speed component
-  // of its own would otherwise leave the video looking stuck at 75%
-  // speed with no sealed badge left to explain why.
-  tileSpeedBurstUntil[idx] = 0;
   clearTimeout(sealedTimer);
   sealedTileIndex = -1;
 
@@ -3906,7 +4006,13 @@ function openSealedTile(idx) {
     setTimeout(() => claimEl.classList.remove('sealed-opened'), 1200);
   }
   if (xpAmount > 0) awardXp(xpAmount);
-  if (outcome.speed) burstTileSpeed(idx, 1800, outcome.speed[0], outcome.speed[1]);
+  // Unlocking fades the lock look away instead of snapping it off -
+  // speed eases back to normal (or into the reward's own burst range,
+  // held for the same 1800ms a plain reward burst already would) over
+  // SEALED_UNLOCK_FADE_MS, same timing for the dim.
+  fadeSealedDim(idx, TUNING.SEALED_UNLOCK_FADE_MS);
+  if (outcome.speed) fadeTileSpeedTo(idx, TUNING.SEALED_UNLOCK_FADE_MS, outcome.speed[0], outcome.speed[1], 1800);
+  else fadeTileSpeedTo(idx, TUNING.SEALED_UNLOCK_FADE_MS, 1, 1);
   if (outcome.heat > 0) bumpJackpotHeat(outcome.heat);
   playChimeSound(outcome.negative ? 0.4 : 0.7 + outcome.heat * 0.2);
   incrementQuestMetric('bonuses', 1);
@@ -4056,8 +4162,10 @@ function catchChaseFlash(idx) {
   // (also trimmed 5pts) stacked on for every catch in the current chain
   // (capped at 8 catches' worth so it can't run away).
   const chainForSpeed = Math.min(chaseChain, 8);
-  const chainSpeedExtra = chainForSpeed * (0.05 + Math.random() * 0.05);
-  burstTileSpeed(idx, CHASE_CAUGHT_CELEBRATION_MS * pulses, 1.05 + chainSpeedExtra, 1.15 + chainSpeedExtra);
+  // Base increase-over-normal (was 0.05-0.15) trimmed 10%; the per-streak
+  // addition on top (was 0.05-0.10) trimmed a further 5%.
+  const chainSpeedExtra = chainForSpeed * (0.0475 + Math.random() * 0.0475);
+  burstTileSpeed(idx, CHASE_CAUGHT_CELEBRATION_MS * pulses, 1.045 + chainSpeedExtra, 1.135 + chainSpeedExtra);
   const catchMult = hiddenMultiplierFactor();
   // Combo Chain Mechanics: a catch here feeds the same shared combo meter
   // rating-in-succession builds (registerCombo/comboMultiplier), so bursts

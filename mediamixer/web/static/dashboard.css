@@ -221,7 +221,12 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    with tile-dimmed above) so the mega-barrage dim and this one can
    never fight over clearing the same class on the same tile. Paired
    with a genuine 25% playback slowdown (see activateSealedTile). */
-.tile-sealed-dim::after{content:'';position:absolute;inset:0;background:#000;opacity:.4;pointer-events:none;z-index:1;transition:opacity .3s ease}
+/* opacity/transition both read from custom properties instead of fixed
+   values - pseudo-elements can't be reached with inline styles, but a
+   custom property set on the real element inherits into them, so JS can
+   still drive a real fade (fadeSealedDim) instead of only ever being
+   able to snap this on/off via the class alone. */
+.tile-sealed-dim::after{content:'';position:absolute;inset:0;background:#000;opacity:var(--sealed-dim-opacity,.4);pointer-events:none;z-index:1;transition:opacity var(--sealed-dim-fade-ms,.3s) ease}
 .tile.mystery-tile video{filter:blur(14px)}
 .tile.mystery-reveal video{transition:filter .3s ease}
 #anticipation-meter{position:fixed;top:0;left:0;width:100%;height:4px;z-index:18;background:rgba(255,255,255,.05);pointer-events:none}
