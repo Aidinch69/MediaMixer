@@ -2821,7 +2821,6 @@ function ensureTiles(count) {
   tileSpeedBurstUntil = new Array(count).fill(0);
   aspectKnown = new Array(count).fill(false);
   tileLoopBounds = new Array(count).fill(null);
-  activeAudioTileIndex = -1; // every tile gets torn down and rebuilt muted below
   if (focusModeActive >= 0) { anticipationFxEnabled = focusModeSavedAnticipation; focusModeActive = -1; } // old tile is gone - don't leave anticipation FX stuck off
   tileElements = [];
   tileGlowEls = [];
@@ -2846,11 +2845,11 @@ function ensureTiles(count) {
       '<div class="tile-actions">' +
       '<button class="up thumb" onclick="rateScreen(' + i + ',\'up\',this)">❤️</button>' +
       '<button class="down thumb" onclick="rateScreen(' + i + ',\'down\',this)">👎</button>' +
-      '<button class="audio thumb" id="audio-btn-' + i + '" onclick="toggleTileAudio(' + i + ')">🔇</button>' +
       '<button class="focus thumb" id="focus-btn-' + i + '" onclick="toggleFocusMode(' + i + ')">🔍</button>' +
       '</div></div>';
     const vid = tile.querySelector('#screen-' + i);
-    vid.muted = true; // Tile Audio control below is the only thing that unmutes a tile - never more than one at once
+    vid.volume = tileAudioVolume; // master Tile Audio Volume slider - shared by every tile, not a per-tile solo toggle
+    vid.muted = tileAudioVolume <= 0;
     vid.addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
     vid.addEventListener('loadedmetadata', () => {
       onAspectKnown(i);
@@ -3170,34 +3169,39 @@ function rateScreen(i, dir, btn, strength) {
 // barrage system uses, instead of feedback living only in the XP
 // counter. Opacity only, same compositor-only technique as the rest of
 // the glow system.
-// Tile Audio control: each tile's own <video> carries its real audio
-// (separate from the ambient overlay track/binaural synth), but with
-// several tiles playing at once, unmuting all of them would be a
-// cacophony - so at most one tile is ever unmuted ("solo") at a time.
-// Tied to tile *position*, not a specific clip, so it stays selected
-// through that tile's own rotations until you pick a different one or
-// toggle it off.
-let activeAudioTileIndex = -1;
+// Tile Audio: each tile's own <video> carries its real audio (separate
+// from the ambient overlay track/binaural synth). Replaced the earlier
+// per-tile solo toggle with one master volume shared by every tile -
+// at 0 every tile stays muted (the original default), above 0 every
+// tile plays at the same level together rather than only ever one at a
+// time. volume/muted are plain properties on each <video> element and
+// survive that element's src changing to a new clip, so this only needs
+// applying once per tile creation, not on every rotation.
+let tileAudioVolume = 0;
 
-function toggleTileAudio(i) {
-  markInteraction();
-  const vid = tileElements[i] && tileElements[i].querySelector('#screen-' + i);
-  if (!vid) return;
-  if (activeAudioTileIndex === i) {
-    vid.muted = true;
-    activeAudioTileIndex = -1;
-  } else {
-    if (activeAudioTileIndex >= 0) {
-      const prevVid = tileElements[activeAudioTileIndex] && tileElements[activeAudioTileIndex].querySelector('#screen-' + activeAudioTileIndex);
-      if (prevVid) prevVid.muted = true;
-      const prevBtn = document.getElementById('audio-btn-' + activeAudioTileIndex);
-      if (prevBtn) prevBtn.innerText = '🔇';
-    }
-    vid.muted = false;
-    activeAudioTileIndex = i;
-  }
-  const btn = document.getElementById('audio-btn-' + i);
-  if (btn) btn.innerText = activeAudioTileIndex === i ? '🔊' : '🔇';
+function setTileAudioVolume(v) {
+  tileAudioVolume = Math.max(0, Math.min(100, parseFloat(v))) / 100;
+  const el = document.getElementById('l-tile-audio-vol');
+  if (el) el.innerText = Math.round(tileAudioVolume * 100) + '%';
+  tileElements.forEach((tile, i) => {
+    const vid = tile.querySelector('#screen-' + i);
+    if (vid) { vid.volume = tileAudioVolume; vid.muted = tileAudioVolume <= 0; }
+  });
+  try { localStorage.setItem('mm_tile_audio_vol', tileAudioVolume); } catch (e) {}
+}
+
+function loadTileAudioVolumePref() {
+  let saved = 0;
+  try {
+    const raw = localStorage.getItem('mm_tile_audio_vol');
+    if (raw !== null) saved = parseFloat(raw);
+  } catch (e) {}
+  if (!Number.isFinite(saved)) saved = 0;
+  tileAudioVolume = saved;
+  const input = document.getElementById('tile-audio-vol-input');
+  if (input) input.value = Math.round(saved * 100);
+  const el = document.getElementById('l-tile-audio-vol');
+  if (el) el.innerText = Math.round(saved * 100) + '%';
 }
 
 // Focus Mode: a deliberate, manual "clean room" for one tile - takes it
@@ -4184,6 +4188,7 @@ window.onload = () => {
   loadVibeDialPref();
   loadManualSpeedPref();
   loadDynamicMosaicPrefs();
+  loadTileAudioVolumePref();
   loadSessionTimerPref();
   applyColorTheme(0);
   loadXpState();
