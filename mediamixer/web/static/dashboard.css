@@ -319,28 +319,12 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    neighbors, which looked fine with at most one featured tile but broke
    badly with several at once (a real reported bug: "larger tiles than
    they should be, overlapping others, zoomed in"). More than one tile
-   can be featured at a time (there's no "only one at once" guard here,
-   unlike Focus Mode), and Dynamic Mosaic's denser grids make that
-   genuinely common, not a rare edge case - so this has to stay fully
-   inside its own cell no matter how many tiles have it at once. inset
-   keeps it there by construction. */
+   can be featured at a time (there's no "only one at once" guard here),
+   and Dynamic Mosaic's denser grids make that genuinely common, not a
+   rare edge case - so this has to stay fully inside its own cell no
+   matter how many tiles have it at once. inset keeps it there by
+   construction. */
 .tile-featured{box-shadow:inset 0 0 0 3px rgba(255,212,59,.85),inset 0 0 24px rgba(255,212,59,.25)}
-/* Focus Mode: the focused tile takes over the whole theater (fixed,
-   inset:0, above the fade overlay) while every other tile just dims and
-   stops accepting clicks - still visible, not hidden outright, so the
-   rest of the grid's pull doesn't vanish, it just steps back. The
-   transform/box-shadow transition already on .tile smooths the dim; the
-   focused tile's own jump to fixed positioning happens inside
-   fadeTransition's dim beat, so the brief reflow it causes in the
-   now-shorthanded grid is hidden behind the fade rather than visible. */
-/* z-index 4, not above the fade overlay's 50 - the overlay has to be
-   able to visually cover this tile's own jump to fixed positioning
-   while it's dimming, or the whole point of hiding that jump behind the
-   fade is lost. Once the overlay fades back to opacity 0 it's invisible
-   regardless of stacking order, so this still ends up the topmost
-   visible thing once the dip completes. */
-.tile.focus-active{position:fixed;inset:12px;z-index:4;border-radius:10px}
-.tile.dimmed-by-focus{opacity:.18;pointer-events:none}
 .tile video{width:100%;height:100%;object-fit:contain;transition:filter .3s ease}
 .screen-grid.mosaic .tile video{object-fit:cover}
 .preload{display:none}
@@ -357,8 +341,6 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .tile-actions .thumb.up:hover{background:rgba(255,60,110,.35);border-color:#ff5c96;transform:scale(1.12)}
 .tile-actions .thumb.down{background:rgba(130,130,150,.15);border-color:rgba(150,150,170,.5)}
 .tile-actions .thumb.down:hover{background:rgba(130,130,150,.3);border-color:#9a9ab0;transform:scale(1.12)}
-.tile-actions .thumb.focus{background:rgba(184,77,255,.15);border-color:rgba(184,77,255,.45)}
-.tile-actions .thumb.focus:hover{background:rgba(184,77,255,.3);border-color:#b84dff;transform:scale(1.12)}
 .tile-actions .thumb:active{transform:scale(.82)}
 .tile-actions .thumb.pop{animation:thumb-pop .35s ease-out}
 @keyframes thumb-pop{0%{transform:scale(1)}40%{transform:scale(1.4)}100%{transform:scale(1)}}

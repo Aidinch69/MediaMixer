@@ -2145,7 +2145,6 @@ function bankWin(quiet) {
 let choiceMomentTimer = null;
 
 function maybeTriggerChoiceMoment() {
-  if (focusModeActive >= 0) return; // Focus Mode's clean room
   if (choiceMomentTimer) return; // one at a time
   if (Math.random() < TUNING.CHOICE_MOMENT_PROBABILITY) showChoiceMoment();
 }
@@ -2826,7 +2825,6 @@ function createTileElement(i) {
       '<div class="tile-actions">' +
       '<button class="up thumb" onclick="rateScreen(' + i + ',\'up\',this)">❤️</button>' +
       '<button class="down thumb" onclick="rateScreen(' + i + ',\'down\',this)">👎</button>' +
-      '<button class="focus thumb" id="focus-btn-' + i + '" onclick="toggleFocusMode(' + i + ')">🔍</button>' +
       '</div></div>';
     const vid = tile.querySelector('#screen-' + i);
     vid.volume = tileAudioVolume; // master Tile Audio Volume slider - shared by every tile, not a per-tile solo toggle
@@ -2951,7 +2949,6 @@ function ensureTiles(count) {
     if (lastChaseMissIdx >= count) lastChaseMissIdx = -1;
     if (dueAuraTileIndex >= count) dueAuraTileIndex = -1;
     if (mysteryTileIndex >= count) mysteryTileIndex = -1;
-    if (focusModeActive >= count) { anticipationFxEnabled = focusModeSavedAnticipation; focusModeActive = -1; }
   }
   return true;
 }
@@ -3078,9 +3075,9 @@ function skip() { fetch('/api/skip').then(() => toast('⬇️ Skipped All', true
 function lock() { fetch('/api/lock').then(() => toast('60s Locked')); }
 function cycleTone() { fetch('/api/cycle_tone'); }
 function cat(f) { fetch('/api/folder?folder=' + encodeURIComponent(f)).then(() => toast('Category: ' + f.toUpperCase())); }
-// Dip-to-dim: bridges a visual rearrangement (layout/tile-count change,
-// or Focus Mode's own takeover below) with a brief fade to black instead
-// of cutting straight to the new arrangement - see the CSS comment on
+// Dip-to-dim: bridges a visual rearrangement (layout/tile-count change)
+// with a brief fade to black instead of cutting straight to the new
+// arrangement - see the CSS comment on
 // #layout-fade-overlay for why a full dim rather than an animated reflow.
 // `changeFn` runs right at the bottom of the dip, `atDip` (for a caller
 // that itself does something async, e.g. an API call) defaults to firing
@@ -3236,58 +3233,6 @@ function loadTileAudioVolumePref() {
   if (input) input.value = Math.round(saved * 100);
   const el = document.getElementById('l-tile-audio-vol');
   if (el) el.innerText = Math.round(saved * 100) + '%';
-}
-
-// Focus Mode: a deliberate, manual "clean room" for one tile - takes it
-// full-screen and strips every flashy overlay mechanic (jackpot build-up,
-// chase/bonus/sealed windows, spiral, Color Rush, mystery tile...) by
-// temporarily forcing anticipationFxEnabled off, the one flag nearly all
-// of them already gate on. The rest of the grid stays visible but dimmed
-// and un-interactive, rather than hidden outright, so the pull of the
-// grid doesn't vanish entirely - it just steps back. The focused screen's
-// own rotation is frozen server-side (/api/focus) so it can't get yanked
-// away mid-focus by its normal expiry timer; the rest of the grid keeps
-// rotating normally underneath.
-let focusModeActive = -1;
-let focusModeSavedAnticipation = true;
-
-function toggleFocusMode(i) {
-  markInteraction();
-  if (focusModeActive === i) {
-    exitFocusMode(i);
-  } else {
-    if (focusModeActive >= 0) exitFocusMode(focusModeActive);
-    enterFocusMode(i);
-  }
-}
-
-function enterFocusMode(i) {
-  fadeTransition(() => {
-    const tile = tileElements[i];
-    if (!tile) return;
-    focusModeActive = i;
-    focusModeSavedAnticipation = anticipationFxEnabled;
-    anticipationFxEnabled = false;
-    tile.classList.add('focus-active');
-    tileElements.forEach((t, idx) => { if (idx !== i) t.classList.add('dimmed-by-focus'); });
-    const btn = document.getElementById('focus-btn-' + i);
-    if (btn) btn.innerText = '✕';
-    fetch('/api/focus?screen=' + i + '&on=true');
-    toast('🔍 Focus Mode');
-  });
-}
-
-function exitFocusMode(i) {
-  fadeTransition(() => {
-    const tile = tileElements[i];
-    if (tile) tile.classList.remove('focus-active');
-    tileElements.forEach((t) => t.classList.remove('dimmed-by-focus'));
-    anticipationFxEnabled = focusModeSavedAnticipation;
-    focusModeActive = -1;
-    const btn = document.getElementById('focus-btn-' + i);
-    if (btn) btn.innerText = '🔍';
-    fetch('/api/focus?screen=' + i + '&on=false');
-  });
 }
 
 function pulseTileGlow(idx, multiplier, negative) {
@@ -3993,7 +3938,6 @@ const AMBIENT_PULSE_PROBABILITY = 0.3;
 const AMBIENT_PULSE_DURATION_MS = 12000;
 
 function maybeTriggerAmbientPulse() {
-  if (focusModeActive >= 0) return; // Focus Mode's clean room
   if (anticipationActive || !tileGlowEls.length) return;
   if (Math.random() >= AMBIENT_PULSE_PROBABILITY) return;
   const idx = Math.floor(Math.random() * tileGlowEls.length);

@@ -94,8 +94,6 @@ class RotationEngine:
         use_preload = override_folder is None
 
         for index in indexes:
-            if self._state.is_frozen(index):
-                continue  # Focus Mode - this screen is deliberately parked, not due
             if is_jackpot:
                 expires_in = event_expires_in
             else:

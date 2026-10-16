@@ -390,18 +390,6 @@ def create_app(ctx: AppContext) -> Flask:
             loop_anchor = library.bump_loop_anchor(db, path, position)
         return jsonify(ok=True, heart=heart, loop_anchor=loop_anchor)
 
-    @app.route("/api/focus")
-    def api_focus():
-        try:
-            index = int(request.args.get("screen", ""))
-        except (TypeError, ValueError):
-            return jsonify(ok=False, error="invalid screen index"), 400
-        if request.args.get("on", "true").lower() == "true":
-            g.session.state.freeze_screen(index)
-        else:
-            g.session.state.unfreeze_screen(index)
-        return jsonify(ok=True)
-
     @app.route("/api/double_feature")
     def api_double_feature():
         screens = g.session.state.current_paths()

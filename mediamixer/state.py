@@ -76,13 +76,6 @@ class RuntimeState:
         self.want_skip = False
         self.want_lock = False
 
-        # Focus Mode: a screen the viewer has deliberately parked on,
-        # excluded from every rotation path (expiry, skip-all, folder
-        # switch) until explicitly unfrozen - see RotationEngine's
-        # _rotate_locked, which is the one choke point every rotation
-        # path funnels through.
-        self.frozen_screens: set = set()
-
         self.preload_enabled = config.default_preload_enabled
 
     def set_preload_enabled(self, enabled: bool):
@@ -105,7 +98,6 @@ class RuntimeState:
             self.barrage_hype_total = 0
             self.barrage_tile_indexes = []
             self.barrage_tier_name = ""
-            self.frozen_screens.clear()  # screen indexes are meaningless across a tile-count change
         return preset
 
     # -- binaural synth parameters (the tone itself is generated client-side via Web Audio) --
@@ -149,18 +141,6 @@ class RuntimeState:
     def request_lock(self):
         with self._lock:
             self.want_lock = True
-
-    def freeze_screen(self, index: int):
-        with self._lock:
-            self.frozen_screens.add(index)
-
-    def unfreeze_screen(self, index: int):
-        with self._lock:
-            self.frozen_screens.discard(index)
-
-    def is_frozen(self, index: int) -> bool:
-        with self._lock:
-            return index in self.frozen_screens
 
     def consume_flags(self):
         with self._lock:
