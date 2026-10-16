@@ -90,6 +90,16 @@ const TUNING_DEFAULTS = {
   BARRAGE_DIM_FADE_OUT_MS: 3000,
   BARRAGE_DIM_SPEED_MULT: 0.65,
   BONUS_CLAIM_SPEED_FADE_MS: 2000,
+  FX_REWARD_BONUS_CHANCE: 0.35,
+  FX_REWARD_SEALED_CHANCE: 0.3,
+  FX_REWARD_CATCH_CHANCE: 0.12,
+  CHASE_MILESTONE_XP_MULT: 3,
+  FRESH_DROP_CHECK_MS: 45000,
+  FRESH_DROP_PROBABILITY: 0.35,
+  FRESH_DROP_FIRST_DELAY_MS: 90000,
+  FRESH_DROP_MIN_GAP_MS: 180000,
+  FRESH_DROP_SESSION_CAP: 4,
+  AUDIO_REACT_PULSE_GAP_MS: 320,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -133,9 +143,10 @@ function restartAllTunableIntervals() {
   startTunableInterval('COLOR_RUSH_CHECK_MS', maybeTriggerColorRush);
   startTunableInterval('COLOR_SPLASH_CHECK_MS', maybeTriggerColorSplashPiece);
   startTunableInterval('MYSTERY_TILE_CHECK_MS', maybeTriggerMysteryTile);
+  startTunableInterval('FRESH_DROP_CHECK_MS', maybeTriggerFreshDrop);
 }
 
-const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS', 'MYSTERY_TILE_CHECK_MS', 'PATIENCE_CHECK_MS', 'CHOICE_MOMENT_CHECK_MS', 'DOUBLE_FEATURE_CHECK_MS'];
+const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS', 'MYSTERY_TILE_CHECK_MS', 'PATIENCE_CHECK_MS', 'CHOICE_MOMENT_CHECK_MS', 'DOUBLE_FEATURE_CHECK_MS', 'FRESH_DROP_CHECK_MS'];
 
 function setTuning(key, value) {
   TUNING[key] = value;
@@ -191,6 +202,9 @@ const TUNING_GROUPS = [
   { label: 'Layout Fade / Dynamic Mosaic', desc: 'Fade timing and the automatic-layout-change cooldown/cadence.', keys: ['LAYOUT_FADE_MS', 'LAYOUT_FADE_HOLD_MS', 'LAYOUT_CHANGE_COOLDOWN_MS', 'DYNAMIC_MOSAIC_CHECK_MS', 'DYNAMIC_MOSAIC_DRIFT_PROBABILITY'] },
   { label: 'Barrage/Jackpot Hype', desc: 'Speed-up fade timing, plus the non-selected tiles\' dim/slowdown.', keys: ['BARRAGE_SPEED_FADE_MS', 'BARRAGE_DIM_OPACITY', 'BARRAGE_DIM_FADE_IN_MS', 'BARRAGE_DIM_FADE_OUT_MS', 'BARRAGE_DIM_SPEED_MULT'] },
   { label: 'Multipliers & XP', desc: 'Heat/heart multiplier caps and decay, hidden-window odds, XP amounts.', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
+  { label: 'Visual FX Rewards', desc: 'Odds a tile effect (prism, kaleido, VHS...) rides along with a reward.', keys: ['FX_REWARD_BONUS_CHANCE', 'FX_REWARD_SEALED_CHANCE', 'FX_REWARD_CATCH_CHANCE', 'CHASE_MILESTONE_XP_MULT'] },
+  { label: 'Fresh Drops', desc: 'How new clips get rationed out - check rate, odds, spacing, per-session cap.', keys: ['FRESH_DROP_CHECK_MS', 'FRESH_DROP_PROBABILITY', 'FRESH_DROP_FIRST_DELAY_MS', 'FRESH_DROP_MIN_GAP_MS', 'FRESH_DROP_SESSION_CAP'] },
+  { label: 'Audio-Reactive', desc: 'Minimum gap between audio-triggered tile pulses.', keys: ['AUDIO_REACT_PULSE_GAP_MS'] },
 ];
 const TUNING_META = {
   XP_PER_BONUS_CLAIM: { label: 'Bonus-tap XP', unit: 'n', min: 5, max: 50, step: 1 },
@@ -268,6 +282,16 @@ const TUNING_META = {
   GOLDEN_HOUR_MULTIPLIER: { label: 'Golden Hour odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
   SURGE_MULTIPLIER: { label: 'Surge odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
   RATE_XP_BASE: { label: 'Rate (👍/👎) base XP', unit: 'n', min: 1, max: 20, step: 1 },
+  FX_REWARD_BONUS_CHANCE: { label: 'FX with a bonus tap', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  FX_REWARD_SEALED_CHANCE: { label: 'FX with a sealed-tile open', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  FX_REWARD_CATCH_CHANCE: { label: 'FX with a chase catch', unit: 'pct', min: 0, max: 1, step: 0.01 },
+  CHASE_MILESTONE_XP_MULT: { label: 'Catch-streak milestone XP (x streak)', unit: 'n', min: 1, max: 10, step: 0.5 },
+  FRESH_DROP_CHECK_MS: { label: 'Fresh Drop check interval', unit: 's', min: 15000, max: 180000, step: 5000 },
+  FRESH_DROP_PROBABILITY: { label: 'Fresh Drop odds (per check)', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  FRESH_DROP_FIRST_DELAY_MS: { label: 'Fresh Drop earliest (after session start)', unit: 's', min: 0, max: 600000, step: 15000 },
+  FRESH_DROP_MIN_GAP_MS: { label: 'Fresh Drop minimum gap', unit: 's', min: 30000, max: 900000, step: 15000 },
+  FRESH_DROP_SESSION_CAP: { label: 'Fresh Drops per session (cap)', unit: 'n', min: 1, max: 20, step: 1 },
+  AUDIO_REACT_PULSE_GAP_MS: { label: 'Audio pulse minimum gap', unit: 's', min: 100, max: 2000, step: 20 },
 };
 
 function formatTuningValue(key, value) {
@@ -1040,7 +1064,14 @@ function applyVolumes() {
   if (synthNodes && audioCtx) {
     synthNodes.masterGain.gain.setTargetAtTime(BINAURAL_BASE_GAIN * (binauralVolume / 100), audioCtx.currentTime, 0.05);
   }
-  if (overlayEl) {
+  // Once the overlay track is routed through Web Audio for the audio-
+  // reactive analyser (see hookOverlayAudio), its level lives on that
+  // gain node instead - leaving element volume below 1 as well would
+  // apply it twice in browsers that honor both.
+  if (overlayEl && overlayGainNode && audioCtx) {
+    overlayEl.volume = 1;
+    overlayGainNode.gain.setTargetAtTime(Math.max(0, Math.min(1, overlayVolume / 100)), audioCtx.currentTime, 0.05);
+  } else if (overlayEl) {
     overlayEl.volume = Math.max(0, Math.min(1, overlayVolume / 100));
   }
 }
@@ -1109,6 +1140,8 @@ function enableAudio() {
   audioCtx.resume().then(() => {
     audioUnlocked = true;
     document.getElementById('audio-unlock').classList.remove('show');
+    hookOverlayAudio();
+    hookAllTileAudio();
     if (overlayEl && overlayEl.src) overlayEl.play().catch(() => {});
   }).catch(() => {});
 }
@@ -1762,6 +1795,8 @@ function updateModeBadge() {
   let text = null;
   if (anticipationActive) {
     text = pendingServerTier ? ('🎰 ' + pendingServerTier.toUpperCase() + ' building...') : '🎰 Building...';
+  } else if (finaleActive) {
+    text = finaleStatusText();
   } else if (jackpotStreak > 1 && Date.now() - lastJackpotAt < STREAK_RESET_MS) {
     text = '🔥 Jackpot streak x' + jackpotStreak;
   } else if (heartMultiplier >= 2) {
@@ -1795,7 +1830,10 @@ setInterval(updateModeBadge, 1000);
 function updateAutopilotZoneLive() {
   const el = document.getElementById('autopilot-zone-live');
   if (!el) return;
-  if (autopilotEnabled && autopilotZone) {
+  if (finaleActive) {
+    el.innerText = finaleStatusText();
+    el.style.display = '';
+  } else if (autopilotEnabled && autopilotZone) {
     el.innerText = '🎬 ' + AUTOPILOT_ZONES[autopilotZone].label + (autopilotCurrentStatusPhrase ? ' · ' + autopilotCurrentStatusPhrase : '');
     el.style.display = '';
   } else {
@@ -2345,6 +2383,7 @@ function runPayoff(chainDepth) {
   awardXp((XP_PER_TIER[tier.name] || 10) * (milestoneCount ? 3 : 1));
   recordPayoffStats(streak, milestoneCount);
   incrementQuestMetric('jackpots', 1);
+  sessionStats.jackpots++;
   revealTier(tier, () => {
     const willChain = decideChain(tier, chainDepth);
     applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk, chainDepth, willChain);
@@ -2381,6 +2420,10 @@ function applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk, chainDepth,
   burstExtraFloaters(tier.burst);
   if (wasAtRisk) playClutchSting();
   if (Math.random() < 0.12 * tier.flash) fireColorSplashPiece(); // bigger tiers roll a bit more often
+  // Medium+ also lights a couple of tiles with a visual FX moment, and a
+  // short burst of mantra text rides along with anything mega or bigger.
+  if (tier.name !== 'small') fireRandomTileFx(tier.shake ? 3 : 2);
+  if (tier.shake) mantraBurst(3);
   const label = milestoneCount ? ('🏆 MILESTONE: ' + milestoneCount + ' JACKPOTS!') : '🎰 ' + (tier.name === 'mega' ? 'MEGA JACKPOT' : tier.name === 'medium' ? 'Jackpot!' : 'Jackpot');
   const prefix = (chainDepth > 0 ? '⛓ CHAIN! ' : '') + (wasAtRisk ? '🔥 SAVED! ' : '');
   // Explicitly ties the screen-shake to what just happened, in the same
@@ -2631,7 +2674,8 @@ function oddsMultiplier() {
     * comboMultiplier()
     * (1 + jackpotHeat * 0.15) // catch streaks/bonus taps nudge this up too, see bumpJackpotHeat
     * (1 + heartMultiplier * 0.08) // hearts nudge it too, see bumpHeartMultiplier
-    * (1 + autopilotAmbientBoost); // Auto-Pilot's climax phase nudges it too, see autopilotTick
+    * (1 + autopilotAmbientBoost) // Auto-Pilot's climax phase nudges it too, see autopilotTick
+    * (1 + finaleAmbientBoost()); // so does Finale's build/peak, see dashboard_layers.js
   return Math.min(3, raw);
 }
 
@@ -2779,8 +2823,17 @@ const AUTOPILOT_ZONES = {
   color: { label: 'Color Zone', chase: 0.6, bonus: 0.8, sealed: 0.8, colorRush: 2.4, barrage: 1.0, tileBias: 'high', curveBias: 0.85 },
   jackpot: { label: 'Jackpot Zone', chase: 0.7, bonus: 0.9, sealed: 1.0, colorRush: 0.7, barrage: 1.6, tileBias: 'high', curveBias: 0.7 },
   vault: { label: 'Vault Zone', chase: 0.6, bonus: 0.7, sealed: 2.2, colorRush: 0.6, barrage: 0.9, tileBias: 'low', curveBias: 1.4 },
+  // Engages Rhythm Mode (beat walker, tempo waves, tap-along) for as long
+  // as the zone runs, even if it's switched off manually - see
+  // rhythmZoneActive in dashboard_layers.js.
+  rhythm: { label: 'Rhythm Zone', chase: 0.8, bonus: 1.0, sealed: 0.7, colorRush: 0.8, barrage: 1.1, tileBias: 'mid', curveBias: 0.9, rhythm: true },
 };
 const AUTOPILOT_ZONE_NAMES = Object.keys(AUTOPILOT_ZONES);
+function zoneMap(value) {
+  const map = {};
+  AUTOPILOT_ZONE_NAMES.forEach((z) => { map[z] = value; });
+  return map;
+}
 let autopilotZone = null;
 let autopilotZoneStartedAt = 0;
 let autopilotPrevZone = null; // for crossfade and transition-chemistry recording
@@ -2871,9 +2924,9 @@ function updateSessionTrust(engagement) {
 // the next few rotations - the explicit "don't just keep picking the
 // one good zone forever" guard, since a learned preference with no
 // exploration pressure is indistinguishable from repetition.
-let zonePayoff = { chase: 1.0, color: 1.0, jackpot: 1.0, vault: 1.0 };
-let zoneRecentUse = { chase: 3, color: 3, jackpot: 3, vault: 3 };
-let zoneTimesPicked = { chase: 0, color: 0, jackpot: 0, vault: 0 };
+let zonePayoff = zoneMap(1.0);
+let zoneRecentUse = zoneMap(3);
+let zoneTimesPicked = zoneMap(0);
 // 'fromZone>toZone' -> learned engagement EMA for that specific sequence,
 // not just the destination zone in isolation - order can matter as much
 // as choice (does engagement tend to rise more after Vault->Chase than
@@ -3080,6 +3133,10 @@ function autopilotPhaseAt(frac, kfs) {
 
 function autopilotTick() {
   if (!autopilotEnabled) return;
+  // Finale takes over every control this tick would otherwise drive
+  // (pace, intensity, novelty, floater count) for its own one-shot arc,
+  // then hands back - see finaleTick/endFinale.
+  if (finaleActive) { updateAutopilotZoneUi(); return; }
   const now = Date.now();
 
   // Drifting cycle length: wanders slowly within +/-20% of the slider
@@ -3167,6 +3224,7 @@ function autopilotTick() {
   }
   updateAutopilotZoneUi();
   maybeReleaseBoredomDebt();
+  rhythmZoneActive = !!(autopilotZone && AUTOPILOT_ZONES[autopilotZone].rhythm);
 
   // Per-zone curveBias reshapes the arc's own progress through itself -
   // a zone isn't just a different odds table, it's a different-feeling
@@ -3247,8 +3305,8 @@ function autopilotTick() {
 function updateAutopilotZoneUi() {
   const el = document.getElementById('l-autopilot-zone');
   const row = document.getElementById('autopilot-zone-row');
-  if (el) el.innerText = autopilotZone ? (AUTOPILOT_ZONES[autopilotZone].label + (autopilotCurrentStatusPhrase ? ' · ' + autopilotCurrentStatusPhrase : '')) : '';
-  if (row) row.style.display = autopilotZone ? 'flex' : 'none';
+  if (el) el.innerText = finaleActive ? finaleStatusText() : autopilotZone ? (AUTOPILOT_ZONES[autopilotZone].label + (autopilotCurrentStatusPhrase ? ' · ' + autopilotCurrentStatusPhrase : '')) : '';
+  if (row) row.style.display = autopilotZone || finaleActive ? 'flex' : 'none';
 }
 
 // Manual escape hatch: the satiation/bandit logic above has genuinely
@@ -3429,6 +3487,7 @@ function stopAutopilot() {
   clearInterval(autopilotTimer);
   autopilotTimer = null;
   autopilotAmbientBoost = 0;
+  rhythmZoneActive = false;
   if (autopilotZone) recordZonePayoff(autopilotZone, readEngagement(), false, autopilotPrevZone); // learn from however long this one actually ran, even cut short
   autopilotZone = null;
   autopilotCurrentStatusPhrase = '';
@@ -3661,7 +3720,7 @@ function createTileElement(i) {
       '<video id="screen-' + i + '" autoplay></video>' +
       '<video id="preload-' + i + '" class="preload" preload="auto" muted></video>' +
       '<div class="tile-glow-fx"></div>' +
-      '<div class="tile-ambient-fx"><span class="tap-badge">👆 TAP</span><span class="chase-badge">⚡ CATCH</span><span class="sealed-badge">🔒 OPEN</span></div>' +
+      '<div class="tile-ambient-fx"><span class="tap-badge">👆 TAP</span><span class="chase-badge">⚡ CATCH</span><span class="sealed-badge">🔒 OPEN</span><span class="chase-onemore-label"></span></div>' +
       '<div class="tile-claim-fx"><span class="claim-reward-label"></span></div>' +
       '<div class="sealed-status-label">🔒 Locked</div>' +
       '<div class="tile-overlay">' +
@@ -3671,6 +3730,11 @@ function createTileElement(i) {
       '<button class="down thumb" onclick="rateScreen(' + i + ',\'down\',this)">👎</button>' +
       '</div></div>';
     const vid = tile.querySelector('#screen-' + i);
+    // CORS-mode loads (paired with the server's /media/ CORS header) so
+    // this tile's audio can be routed into the audio-reactive analyser -
+    // a cross-origin element without it would play silence once routed.
+    // Set before any src is ever assigned; see also the &cors=1 in render.
+    vid.crossOrigin = 'anonymous';
     vid.volume = tileAudioVolume; // master Tile Audio Volume slider - shared by every tile, not a per-tile solo toggle
     vid.muted = tileAudioVolume <= 0;
     vid.addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
@@ -3773,6 +3837,7 @@ function ensureTiles(count) {
     aspectKnown = aspectKnown.concat(new Array(grow).fill(false));
     tileLoopBounds = tileLoopBounds.concat(new Array(grow).fill(null));
     lastFilterStr = lastFilterStr.concat(new Array(grow).fill(''));
+    tileNaturalBase = tileNaturalBase.concat(new Array(grow).fill(0));
     for (let i = oldCount; i < count; i++) {
       const tile = createTileElement(i);
       tileElements.push(tile);
@@ -3798,6 +3863,7 @@ function ensureTiles(count) {
     tileLoopBounds.length = count;
     tileLoopCount.length = count;
     lastFilterStr.length = count;
+    tileNaturalBase.length = count;
     if (bonusWindowTileIndex >= count) { clearTimeout(bonusWindowTimer); bonusWindowTileIndex = -1; }
     if (sealedTileIndex >= count) { clearTimeout(sealedTimer); sealedTileIndex = -1; }
     if (chaseFlashTileIndex >= count) { clearTimeout(chaseFlashTimer); chaseFlashTileIndex = -1; chaseChain = 0; }
@@ -3835,6 +3901,7 @@ function render(d) {
   currentLayout = d.layout;
   currentColumns = d.columns;
   if (tilesRebuilt || columnsChanged) applyLayoutMode();
+  if (tilesRebuilt) hookAllTileAudio();
 
   scrambleText(document.getElementById('t-audio'), d.audio_name);
   document.getElementById('t-lock').innerText = d.lock_label;
@@ -3882,7 +3949,10 @@ function render(d) {
       // (4x4/5x5) get a cached low-res proxy instead of the full-size
       // source - matches PRELOAD_MAX_TILES: same grids that skip preload
       // also get the lighter file.
-      vid.src = mediaOrigin(i) + '/media/' + s.path + '?tiles=' + d.screens.length;
+      // &cors=1 keeps CORS-mode requests (see crossOrigin in
+      // createTileElement) off any cached copy fetched before the server
+      // started sending the CORS header, which would otherwise fail.
+      vid.src = mediaOrigin(i) + '/media/' + s.path + '?tiles=' + d.screens.length + '&cors=1';
       applyRandomStart(vid, i);
     }
     const label = document.getElementById('label-' + i);
@@ -3910,7 +3980,11 @@ function render(d) {
     // at normal speed. Composes with the player's own manual speed
     // slider rather than overriding it.
     const lockMult = d.locked ? TUNING.LOCK_SLOWDOWN_MULT : 1;
-    const naturalSpeed = s.speed * lockMult * manualSpeedMult;
+    // globalSpeedMult (Rhythm Mode's tempo waves, Finale's speed arc) is
+    // kept separate in tileNaturalBase so its own tick can re-apply it
+    // between status pushes - see dashboard_layers.js.
+    tileNaturalBase[i] = s.speed * lockMult * manualSpeedMult;
+    const naturalSpeed = tileNaturalBase[i] * globalSpeedMult();
     const barrageTiles = d.barrage > 0 ? (d.barrage_tiles || []) : [];
     const isSelected = barrageTiles.includes(i);
     const isDimmed = barrageTiles.length > 0 && !isSelected;
@@ -3922,7 +3996,7 @@ function render(d) {
       setLiveSpeedEffect(i, vid, 'barrageBoost', SPEED_PRIORITY.barrageBoost, isSelected, naturalSpeed, TUNING.BARRAGE_SPEED_FADE_MS, TUNING.BARRAGE_SPEED_FADE_MS);
     }
     if (isDimmed || tileSpeedEffects[i] && tileSpeedEffects[i].has('barrageDim')) {
-      setLiveSpeedEffect(i, vid, 'barrageDim', SPEED_PRIORITY.barrageDim, isDimmed, TUNING.BARRAGE_DIM_SPEED_MULT * lockMult * manualSpeedMult, TUNING.BARRAGE_DIM_FADE_IN_MS, TUNING.BARRAGE_DIM_FADE_OUT_MS);
+      setLiveSpeedEffect(i, vid, 'barrageDim', SPEED_PRIORITY.barrageDim, isDimmed, TUNING.BARRAGE_DIM_SPEED_MULT * lockMult * manualSpeedMult * globalSpeedMult(),TUNING.BARRAGE_DIM_FADE_IN_MS, TUNING.BARRAGE_DIM_FADE_OUT_MS);
     }
     resolveAndApplyTileSpeed(i, vid, naturalSpeed);
     const sat = Math.floor((s.tension - 1.0) * 60 + 100);
@@ -4044,6 +4118,7 @@ function rateScreen(i, dir, btn, strength) {
       toast('❤️🔥 Highlighted tile! Bonus heart multiplier');
     }
     statsLifetimeHearts += strength;
+    sessionStats.hearts += strength;
     saveStats();
     updateStatsUi();
     checkTrophies();
@@ -4128,10 +4203,14 @@ function setTileAudioVolume(v) {
   tileAudioVolume = Math.max(0, Math.min(100, parseFloat(v))) / 100;
   const el = document.getElementById('l-tile-audio-vol');
   if (el) el.innerText = Math.round(tileAudioVolume * 100) + '%';
+  hookAllTileAudio();
   tileElements.forEach((tile, i) => {
     const vid = tile.querySelector('#screen-' + i);
-    if (vid) { vid.volume = tileAudioVolume; vid.muted = tileAudioVolume <= 0; }
+    // A tile already routed into the analyser gets its level from the
+    // shared tileAudioGainNode instead (see hookTileAudio).
+    if (vid) { vid.volume = tileSourceNodes.has(vid) ? 1 : tileAudioVolume; vid.muted = tileAudioVolume <= 0; }
   });
+  if (tileAudioGainNode && audioCtx) tileAudioGainNode.gain.setTargetAtTime(tileAudioVolume, audioCtx.currentTime, 0.05);
   try { localStorage.setItem('mm_tile_audio_vol', tileAudioVolume); } catch (e) {}
 }
 
@@ -4387,7 +4466,8 @@ function openSealedTile(idx) {
   if (outcome.heat > 0) bumpJackpotHeat(outcome.heat);
   playChimeSound(outcome.negative ? 0.4 : 0.7 + outcome.heat * 0.2);
   incrementQuestMetric('bonuses', 1);
-  const tag = mult > 1 ? ' (hidden x' + mult + '!)' : '';
+  const fxLabel = outcome.negative ? null : maybeFxReward(idx, TUNING.FX_REWARD_SEALED_CHANCE);
+  const tag = (mult > 1 ? ' (hidden x' + mult + '!)' : '') + (fxLabel ? ' · ' + fxLabel : '');
   const label = outcome.label || ('+' + xpAmount + 'xp' + (outcome.speed ? ' ⚡' : '') + tag);
   showClaimRewardLabel(idx, label);
   toast((outcome.negative ? '📦 Sealed tile was empty' : '🔓 Sealed tile: ' + label), outcome.negative);
@@ -4459,14 +4539,24 @@ function activateChaseFlash(idx) {
   const durationMs = chaseFlashDurationForChain();
   chaseFlashExpireAt = Date.now() + durationMs;
   const el = tileAmbientEls[idx];
-  if (el) el.classList.add('chase-flash');
+  if (el) {
+    el.classList.add('chase-flash');
+    // "One more": when catching this flash would land a streak milestone,
+    // say so right on it - the moment the chain is most worth protecting
+    // is exactly when it should be most visible what's at stake.
+    const nextChain = chaseChain + 1;
+    const oneAway = CHASE_MILESTONES.includes(nextChain);
+    el.classList.toggle('chase-onemore', oneAway);
+    const lbl = el.querySelector('.chase-onemore-label');
+    if (lbl && oneAway) lbl.textContent = '🔥 1 more → x' + nextChain + ' bonus!';
+  }
   clearTimeout(chaseFlashTimer);
   chaseFlashTimer = setTimeout(() => missChaseFlash(idx), durationMs);
 }
 
 function clearChaseFlashVisual(idx) {
   const el = tileAmbientEls[idx];
-  if (el) el.classList.remove('chase-flash');
+  if (el) el.classList.remove('chase-flash', 'chase-onemore');
   clearTimeout(chaseFlashTimer);
 }
 
@@ -4487,6 +4577,9 @@ function missChaseFlash(idx) {
     setTimeout(() => el.classList.remove('near-miss-grace'), CHASE_NEAR_MISS_GRACE_MS);
   }
   if (chaseChain > 0) toast('💨 Chain broken (was x' + chaseChain + ')', true);
+  if (chaseChain > 0 && CHASE_MILESTONES.includes(chaseChain + 1)) {
+    showClaimRewardLabel(idx, '💔 1 away from the x' + (chaseChain + 1) + ' bonus!');
+  }
   chaseChain = 0;
 }
 
@@ -4553,6 +4646,10 @@ function catchChaseFlash(idx) {
   // The corner toast is easy to miss on a denser grid - right on the
   // tile that was actually caught is where attention already is.
   showClaimRewardLabel(idx, 'Chain x' + chaseChain + chainTag);
+  sessionStats.catches++;
+  sessionStats.bestChain = Math.max(sessionStats.bestChain, chaseChain);
+  if (CHASE_MILESTONES.includes(chaseChain)) awardChaseMilestone(idx, chaseChain); // after the label above, so the milestone's own label wins
+  else if (maybeFxReward(idx, TUNING.FX_REWARD_CATCH_CHANCE)) { /* label-free - the catch label is already up */ }
   if (Math.random() < 0.25) fireColorSplashPiece('tiles', idx); // small, occasional flourish - see Color Rush section
   setTimeout(() => {
     if (!tileElements.length) { chaseChain = 0; return; }
@@ -4917,9 +5014,12 @@ function triggerMiniPayoff(idx) {
   const mult = hiddenMultiplierFactor();
   const chainMult = registerCombo(); // Combo Chain Mechanics - see catchChaseFlash
   const xp = TUNING.XP_PER_BONUS_CLAIM * mult * chainMult;
-  const tag = mult > 1 ? ' (hidden x' + mult + '!)' : '';
+  let tag = mult > 1 ? ' (hidden x' + mult + '!)' : '';
   awardXp(xp);
   incrementQuestMetric('bonuses', 1);
+  sessionStats.bonuses++;
+  const fxLabel = idx != null ? maybeFxReward(idx, TUNING.FX_REWARD_BONUS_CHANCE) : null;
+  if (fxLabel) tag += ' · ' + fxLabel;
   toast('✨ Bonus! +' + xp + 'xp' + tag); // was already awarded, just wasn't shown
   // The toast says the same thing, but it's off in a corner - a label
   // right on the tile that was actually tapped shows what was won where
@@ -4988,12 +5088,105 @@ function showSpinResult(text) {
   btn.innerText = text;
 }
 
-const SPIN_ROLL_DELAY_MS = 900; // was 500 - needs enough room for the reel below to actually read as cycling
-const SPIN_REEL_TICK_MS = 110;
+// A real reel window (#spin-reel above the button) instead of symbols
+// flickering inside the button text: a strip of every possible landing
+// state scrolls past, decelerates, and stops on the actual outcome - so
+// you watch it slow down past JACKPOT and feel each possibility go by.
+// The roll itself is still decided up front; the strip is just built so
+// it lands on whatever was rolled. A "so close" doesn't just land on a
+// label - the reel creeps most of the way onto JACKPOT, hangs there for a
+// beat, then slips back one notch.
+const SPIN_REEL_CELL_PX = 40; // matches .spin-reel-cell's CSS height
+const SPIN_REEL_SPIN_MS = 2400;
+const SPIN_REEL_SLIP_HOLD_MS = 420; // how long a near-miss hangs on the edge of JACKPOT before slipping back
+const SPIN_REEL_LINGER_MS = 2600; // how long the landed result stays in the window afterward
 // Words alongside the icons, not just the icons alone - names each
-// actual possible landing state so the cycling reads as "here's what
-// you could get" instead of an ambiguous string of emoji.
-const SPIN_REEL_SYMBOLS = ['🎰 JACKPOT', '😤 SO CLOSE', '✨ BONUS', '🎉 XP', '💨 NOTHING'];
+// actual possible landing state so the reel reads as "here's what you
+// could get" instead of an ambiguous string of emoji.
+const SPIN_SYMBOLS = {
+  jackpot: '🎰 JACKPOT', close: '😤 SO CLOSE', bonus: '✨ BONUS', fx: '🌀 FX BURST', xp: '🎉 XP', nothing: '💨 NOTHING',
+};
+const SPIN_SYMBOL_KEYS = Object.keys(SPIN_SYMBOLS);
+let spinReelHideTimer = null;
+
+function randomSpinSymbol(avoid) {
+  const pool = SPIN_SYMBOL_KEYS.filter((k) => k !== avoid);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// A soft blip each time a cell passes the window, scheduled up front on
+// the audio clock along the same deceleration curve as the strip itself,
+// so the clicks slow down in step with what you see.
+function playReelTicks(totalCells, durationMs) {
+  const bus = ensureSfxBus();
+  if (!bus) return;
+  const now = audioCtx.currentTime;
+  // Inverse of the strip's ease-out: cell k passes at roughly
+  // t = duration * (1 - sqrt(1 - k/total)), so ticks bunch at the start
+  // and spread out toward the stop.
+  for (let k = 1; k <= totalCells; k++) {
+    const t = (durationMs / 1000) * (1 - Math.sqrt(1 - k / totalCells));
+    const osc = audioCtx.createOscillator();
+    osc.type = 'triangle';
+    const g = audioCtx.createGain();
+    osc.connect(g); g.connect(bus);
+    const t0 = now + t;
+    osc.frequency.setValueAtTime(1500 + (k % 2) * 220, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.06, t0 + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.035);
+    osc.start(t0);
+    osc.stop(t0 + 0.04);
+  }
+}
+
+function runSpinReel(outcome, onLanded) {
+  const reel = document.getElementById('spin-reel');
+  const strip = document.getElementById('spin-reel-strip');
+  if (!reel || !strip) { onLanded(); return; }
+  const cells = [];
+  const fillerCount = 24 + Math.floor(Math.random() * 6);
+  // JACKPOT shows up a few times on the way down, so it actually goes by
+  // instead of only ever existing as an unseen possibility.
+  for (let i = 0; i < fillerCount; i++) {
+    cells.push(i % 5 === 2 ? 'jackpot' : randomSpinSymbol(cells[i - 1]));
+  }
+  // The cell right before the landing spot is never JACKPOT unless it's
+  // a near-miss; then the cell right after is, so the reel can creep onto it.
+  if (cells[fillerCount - 1] === 'jackpot') cells[fillerCount - 1] = randomSpinSymbol('jackpot');
+  cells.push(outcome);
+  cells.push(outcome === 'close' ? 'jackpot' : randomSpinSymbol(outcome));
+  cells.push(randomSpinSymbol());
+  strip.innerHTML = cells.map((k) => '<div class="spin-reel-cell spin-cell-' + k + '">' + SPIN_SYMBOLS[k] + '</div>').join('');
+
+  const landIdx = fillerCount;
+  const slip = outcome === 'close';
+  clearTimeout(spinReelHideTimer);
+  strip.style.transition = 'none';
+  strip.style.transform = 'translateY(0)';
+  reel.classList.remove('landed');
+  reel.classList.add('show');
+  void strip.offsetWidth; // force a reflow so the scroll below starts from the top, not wherever the last spin left it
+  const stopAt = slip ? landIdx + 0.62 : landIdx;
+  strip.style.transition = 'transform ' + SPIN_REEL_SPIN_MS + 'ms cubic-bezier(.12,.62,.22,1)';
+  strip.style.transform = 'translateY(' + (-stopAt * SPIN_REEL_CELL_PX) + 'px)';
+  playReelTicks(Math.floor(stopAt), SPIN_REEL_SPIN_MS);
+
+  const land = () => {
+    reel.classList.add('landed');
+    onLanded();
+    spinReelHideTimer = setTimeout(() => reel.classList.remove('show', 'landed'), SPIN_REEL_LINGER_MS);
+  };
+  setTimeout(() => {
+    if (!slip) { land(); return; }
+    setTimeout(() => {
+      strip.style.transition = 'transform 380ms cubic-bezier(.5,0,.4,1.5)';
+      strip.style.transform = 'translateY(' + (-landIdx * SPIN_REEL_CELL_PX) + 'px)';
+      playFizzleSound();
+      setTimeout(land, 400);
+    }, SPIN_REEL_SLIP_HOLD_MS);
+  }, SPIN_REEL_SPIN_MS);
+}
 
 function spin() {
   markInteraction();
@@ -5006,50 +5199,47 @@ function spin() {
   const theater = document.getElementById('theater-box');
   teaseNextTheme(theater); // quick visual "tick" regardless of outcome
 
-  // A brief "rolling" wobble before the outcome reveals - an instant,
-  // flat result didn't read as an actual pull, just a button press. The
-  // symbols cycling through are cosmetic only (the real roll is already
-  // fixed below) but let you feel the possible outcomes going by, like
-  // an actual reel, instead of a cloak-and-dagger wait for one number.
+  const roll = Math.random();
+  let outcome;
+  if (roll < 0.08 && !anticipationActive) outcome = 'jackpot';
+  else if (roll < 0.12) outcome = 'close';
+  else if (roll < 0.44 && tileElements.length) outcome = 'bonus';
+  else if (roll < 0.56 && tileElements.length && fxRewardsEnabled) outcome = 'fx';
+  else if (roll < 0.79) outcome = 'xp';
+  else outcome = 'nothing';
+
   const btn = document.getElementById('spin-btn');
-  let reelTimer = null;
   if (btn) {
     btn.disabled = true;
     btn.classList.remove('spin-ready');
     btn.classList.add('spin-rolling');
-    let reelIdx = 0;
-    btn.innerText = SPIN_REEL_SYMBOLS[0];
-    reelTimer = setInterval(() => {
-      reelIdx = (reelIdx + 1) % SPIN_REEL_SYMBOLS.length;
-      btn.innerText = SPIN_REEL_SYMBOLS[reelIdx];
-    }, SPIN_REEL_TICK_MS);
-    // Covers the rolling window too, not just the result display after it -
-    // otherwise the 1s countdown tick (updateSpinButton) could land inside
-    // this gap and stomp the reel with a premature countdown before the
-    // outcome even reveals.
-    spinResultUntil = Date.now() + SPIN_ROLL_DELAY_MS + 2500;
+    btn.innerText = '🎰 Spinning…';
   }
+  // Covers the whole reel run plus the result display after it, so the
+  // 1s countdown tick (updateSpinButton) can't stomp the button mid-spin.
+  spinResultUntil = Date.now() + SPIN_REEL_SPIN_MS + SPIN_REEL_SLIP_HOLD_MS + 3000;
 
-  const roll = Math.random();
-  setTimeout(() => {
-    clearInterval(reelTimer);
+  runSpinReel(outcome, () => {
     if (btn) btn.classList.remove('spin-rolling');
-    if (roll < 0.08 && !anticipationActive) {
+    if (outcome === 'jackpot') {
       showSpinResult('🎉 JACKPOT!');
       runPayoff(); // full jackpot-tier celebration - the rare big pull
-    } else if (roll < 0.12) {
-      // A genuine near-miss slice right past the jackpot cutoff - nothing
-      // behind it (same philosophy as the fake build-up near-misses), but
-      // naming how close the roll actually was is the whole point: Spin's
-      // outcome used to be totally invisible, so a near-miss here never
-      // registered as "almost" anything, just as "nothing."
+    } else if (outcome === 'close') {
+      // Nothing behind it (same philosophy as the fake build-up near-
+      // misses), but the reel itself just showed how close it came.
       showSpinResult('😤 SO CLOSE!');
       toast('😤 So close to a JACKPOT! (rolled ' + (roll * 100).toFixed(1) + '%, needed under 8%)', true);
-    } else if (roll < 0.44 && tileElements.length) {
+    } else if (outcome === 'bonus') {
       activateBonusWindow(pickAmbientTarget());
       showSpinResult('✨ Tap the tile!');
       toast('✨ A tile just lit up - tap it!');
-    } else if (roll < 0.79) {
+    } else if (outcome === 'fx') {
+      fireRandomTileFx(3);
+      playChimeSound(0.8);
+      awardXp(5);
+      showSpinResult('🌀 FX Burst!');
+      toast('🌀 FX Burst! +5xp');
+    } else if (outcome === 'xp') {
       const amount = Math.round(8 + Math.random() * 12);
       playChimeSound(0.6);
       awardXp(amount);
@@ -5064,11 +5254,11 @@ function spin() {
     // button (minus the Double Feature push, which stays exclusive to
     // a deliberate press), so Spin feels tied into the rest of the
     // system instead of being its own separate island.
-    if (autopilotEnabled && autopilotZone && Math.random() < 0.18) {
+    if (autopilotEnabled && autopilotZone && !finaleActive && Math.random() < 0.18) {
       rollNewAutopilotZone();
       toast('🎰🔀 Spin shook up the zone - ' + AUTOPILOT_ZONES[autopilotZone].label);
     }
-  }, SPIN_ROLL_DELAY_MS);
+  });
 }
 
 function updateSpinButton() {
@@ -5139,6 +5329,7 @@ window.onload = () => {
   lastAnyPayoffAt = sessionStartedAt;
   overlayEl = document.getElementById('overlay-audio');
   loadVolumePrefs();
+  initLayers();
   armAutoUnlock();
   fetch('/api/status').then(r => r.json()).then(render);
   connectStream();

@@ -124,6 +124,16 @@ def create_app(ctx: AppContext) -> Flask:
         g.session = session
 
     @app.after_request
+    def _media_cors(response):
+        # Tiles load media from 127.0.0.x loopback shards (see mediaOrigin in
+        # dashboard.js), which are cross-origin to the page - without this,
+        # routing a tile's audio through Web Audio for the audio-reactive
+        # analyser would output silence.
+        if request.path.startswith("/media/"):
+            response.headers["Access-Control-Allow-Origin"] = "*"
+        return response
+
+    @app.after_request
     def _persist_session_cookie(response):
         new_id = getattr(g, "new_session_id", None)
         if new_id:
@@ -248,7 +258,13 @@ def create_app(ctx: AppContext) -> Flask:
     def api_overlay_fx_list():
         source = request.args.get("source", "dedicated")
         if source == "library":
-            items = [{"path": p, "kind": "video", "base": "/media/"} for p in library.list_all_videos(config)]
+            # Fresh clips stay out of the floaters too, or they'd leak out
+            # before their own Fresh Drop reveal.
+            fresh = {_relative_media_path(config, p) for p in library.fresh_video_paths(db)}
+            items = [
+                {"path": p, "kind": "video", "base": "/media/"}
+                for p in library.list_all_videos(config) if p not in fresh
+            ]
         else:
             items = [
                 {"path": it["path"], "kind": it["kind"], "base": "/overlay_fx/"}
@@ -348,6 +364,9 @@ def create_app(ctx: AppContext) -> Flask:
 
     @app.route("/api/intensity")
     def api_intensity():
+        if request.args.get("reset"):
+            g.session.state.set_intensity(config.barrage_probability, config.jackpot_probability)
+            return jsonify(ok=True)
         try:
             barrage_p = float(request.args.get("barrage", ""))
             jackpot_p = float(request.args.get("jackpot", ""))
@@ -415,6 +434,29 @@ def create_app(ctx: AppContext) -> Flask:
             return jsonify(ok=True, picked=False)
         placed = g.session.rotation.force_screen(index, picked)
         return jsonify(ok=True, picked=placed)
+
+    @app.route("/api/fresh_status")
+    def api_fresh_status():
+        # Re-scans on the way in so a clip dropped into media_assets mid-
+        # session gets noticed without needing a page reload.
+        library.sync_library(db, config)
+        return jsonify(ok=True, waiting=len(library.fresh_video_paths(db)))
+
+    @app.route("/api/fresh_drop")
+    def api_fresh_drop():
+        try:
+            index = int(request.args.get("screen", ""))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="invalid screen index"), 400
+        if not (0 <= index < len(g.session.state.current_paths())):
+            return jsonify(ok=False, error="screen index out of range"), 400
+        path = library.pick_fresh_video(db)
+        if not path:
+            return jsonify(ok=True, picked=False, waiting=0)
+        placed = g.session.rotation.force_screen(index, path)
+        if placed:
+            library.mark_debuted(db, path)
+        return jsonify(ok=True, picked=placed, name=os.path.basename(path), waiting=len(library.fresh_video_paths(db)))
 
     @app.route("/api/video_meta")
     def api_video_meta():

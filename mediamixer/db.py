@@ -16,6 +16,10 @@ from .config import Config
 
 log = logging.getLogger(__name__)
 
+# A clip that arrived after the initial library scan and hasn't had its
+# Fresh Drop reveal yet.
+_FRESH_CONDITION = "(added_at > 0 AND debuted_at IS NULL)"
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS folder_weights (
     folder_name TEXT PRIMARY KEY,
@@ -32,7 +36,9 @@ CREATE TABLE IF NOT EXISTS video_weights (
     first_heart_at REAL,
     last_heart_at  REAL,
     loop_anchor_min REAL,
-    loop_anchor_max REAL
+    loop_anchor_max REAL,
+    added_at    REAL NOT NULL DEFAULT 0,
+    debuted_at  REAL
 );
 CREATE INDEX IF NOT EXISTS idx_video_weights_folder ON video_weights(folder_name);
 CREATE TABLE IF NOT EXISTS audio_tracks (
@@ -64,6 +70,11 @@ class Database:
             ("last_heart_at", "ALTER TABLE video_weights ADD COLUMN last_heart_at REAL"),
             ("loop_anchor_min", "ALTER TABLE video_weights ADD COLUMN loop_anchor_min REAL"),
             ("loop_anchor_max", "ALTER TABLE video_weights ADD COLUMN loop_anchor_max REAL"),
+            # Fresh Drop: DEFAULT 0 marks every row that already existed
+            # before this column did as "old library" rather than "fresh" -
+            # only clips that show up in a later sync get a real timestamp.
+            ("added_at", "ALTER TABLE video_weights ADD COLUMN added_at REAL NOT NULL DEFAULT 0"),
+            ("debuted_at", "ALTER TABLE video_weights ADD COLUMN debuted_at REAL"),
         ):
             if column not in existing:
                 conn.execute(ddl)
@@ -92,18 +103,28 @@ class Database:
     def ensure_folder(self, name: str):
         self._connect().execute("INSERT OR IGNORE INTO folder_weights(folder_name) VALUES (?)", (name,))
 
-    def ensure_video(self, path: str, folder: str):
+    def ensure_video(self, path: str, folder: str, fresh: bool = False):
+        """`fresh` stamps added_at so Fresh Drop holds the clip back from
+        ordinary rotation until it gets its own debut - see video_rewards."""
         self._connect().execute(
-            "INSERT OR IGNORE INTO video_weights(video_path, folder_name) VALUES (?, ?)", (path, folder)
+            "INSERT OR IGNORE INTO video_weights(video_path, folder_name, added_at) VALUES (?, ?, ?)",
+            (path, folder, time.time() if fresh else 0),
         )
+
+    def video_count(self) -> int:
+        return self._connect().execute("SELECT COUNT(*) AS n FROM video_weights").fetchone()["n"]
 
     # -- selection --
     def folder_rewards(self):
         return self._connect().execute("SELECT folder_name, ema_reward, updated_at FROM folder_weights").fetchall()
 
-    def video_rewards(self, folder: str):
+    def video_rewards(self, folder: str, include_fresh: bool = False):
+        """Fresh (not-yet-debuted) clips are left out by default so ordinary
+        rotation can't burn through a new batch before Fresh Drop gets to
+        ration it out one reveal at a time."""
+        fresh_clause = "" if include_fresh else " AND NOT " + _FRESH_CONDITION
         return self._connect().execute(
-            "SELECT video_path, ema_reward, play_count, updated_at FROM video_weights WHERE folder_name=?",
+            "SELECT video_path, ema_reward, play_count, updated_at FROM video_weights WHERE folder_name=?" + fresh_clause,
             (folder,),
         ).fetchall()
 
@@ -115,8 +136,8 @@ class Database:
         updates could rank the same tied video differently from one offset
         to the next, handing two screens the same "top ranked" pick."""
         rows = self._connect().execute(
-            "SELECT video_path FROM video_weights WHERE folder_name=? "
-            "ORDER BY ema_reward DESC, video_path ASC LIMIT ?",
+            "SELECT video_path FROM video_weights WHERE folder_name=? AND NOT " + _FRESH_CONDITION +
+            " ORDER BY ema_reward DESC, video_path ASC LIMIT ?",
             (folder, limit),
         ).fetchall()
         return [r["video_path"] for r in rows]
@@ -195,14 +216,27 @@ class Database:
         if folder:
             row = conn.execute(
                 "SELECT video_path FROM video_weights WHERE folder_name=? AND play_count=0 "
-                "ORDER BY RANDOM() LIMIT 1",
+                "AND NOT " + _FRESH_CONDITION + " ORDER BY RANDOM() LIMIT 1",
                 (folder,),
             ).fetchone()
         else:
             row = conn.execute(
-                "SELECT video_path FROM video_weights WHERE play_count=0 ORDER BY RANDOM() LIMIT 1"
+                "SELECT video_path FROM video_weights WHERE play_count=0 AND NOT " + _FRESH_CONDITION +
+                " ORDER BY RANDOM() LIMIT 1"
             ).fetchone()
         return row["video_path"] if row else None
+
+    # -- fresh drop --
+    def fresh_video_paths(self) -> list:
+        rows = self._connect().execute(
+            "SELECT video_path FROM video_weights WHERE " + _FRESH_CONDITION + " ORDER BY added_at ASC"
+        ).fetchall()
+        return [r["video_path"] for r in rows]
+
+    def mark_debuted(self, path: str):
+        conn = self._connect()
+        conn.execute("UPDATE video_weights SET debuted_at=? WHERE video_path=?", (time.time(), path))
+        conn.commit()
 
     # -- custom loop point --
     def get_loop_anchor(self, path: str) -> Optional[dict]:

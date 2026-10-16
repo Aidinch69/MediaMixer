@@ -24,11 +24,43 @@
   <div class="screen-grid" id="screen-grid"></div>
   <div id="layout-fade-overlay"></div>
 </div>
+<div id="audio-glow"></div>
 <div id="fx-layer"></div>
 <div id="disco-rain"></div>
 <div id="disco-border"></div>
 <div id="tier-reveal"></div>
 <video id="spiral-overlay" muted loop playsinline></video>
+<div id="mantra-layer"></div>
+<!-- RGB Split tile FX: red pulled one way, green+blue the other. The
+     feOffset dx values are animated live from dashboard_layers.js. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="mm-rgb-split" color-interpolation-filters="sRGB">
+    <feColorMatrix in="SourceGraphic" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="red"/>
+    <feOffset in="red" dx="0" dy="0" result="redShift"/>
+    <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0" result="cyan"/>
+    <feOffset in="cyan" dx="0" dy="0" result="cyanShift"/>
+    <feBlend in="redShift" in2="cyanShift" mode="screen"/>
+  </filter>
+</svg>
+<button id="rhythm-pad" onclick="rhythmTap()" title="Tap on the beat (or press Space)">
+  <span class="rhythm-pad-icon">🥁</span>
+  <span id="rhythm-pad-streak">tap / space</span>
+</button>
+<div id="finale-offer-prompt">
+  <div class="choice-moment-row">
+    <span>🎆 Ready for a Finale?</span>
+    <button onclick="startFinale()">Start Finale</button>
+    <button onclick="hideFinaleOffer()">Not yet</button>
+  </div>
+  <div class="choice-moment-timer"><div class="finale-offer-timer-fill"></div></div>
+</div>
+<div id="session-recap" onclick="if (event.target === this) hideSessionRecap()">
+  <div class="session-recap-card">
+    <div id="session-recap-title">📊 Session Recap</div>
+    <div id="session-recap-grid"></div>
+    <button onclick="hideSessionRecap()">Keep going</button>
+  </div>
+</div>
 <div id="push-luck-prompt">
   <div class="push-luck-row">
     <span>Push your luck?</span>
@@ -47,6 +79,7 @@
   <div class="choice-moment-timer"><div class="choice-moment-timer-fill"></div></div>
 </div>
 <div id="spin-widget">
+  <div id="spin-reel"><div id="spin-reel-strip"></div></div>
   <button id="spin-btn" onclick="spin()" title="Pull for a chance at a bonus">🎰 Spin</button>
 </div>
 <div class="panel" id="panel">
@@ -125,6 +158,42 @@
         <details class="hint-details"><summary>What does this do?</summary><p class="hint">Floating clips drift and fade across the screen, like a DVD logo. "Overlay Folder" pulls from the overlay_fx/ folder; drop video files in there to use it.</p></details>
       </div>
     </details>
+    <details class="settings-section">
+      <summary><span class="section-title">💬 Mantra Text</span><span class="settings-section-desc">Your own phrases drifting, flashing, and pulsing over everything.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider">
+          <label>Enabled</label>
+          <button class="badge" id="mantra-toggle" onclick="toggleMantra()">ON</button>
+        </div>
+        <div class="slider">
+          <label>Frequency</label>
+          <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+            <button class="badge" id="mantra-freq-0" onclick="setMantraFrequency(0)">Low</button>
+            <button class="badge" id="mantra-freq-1" onclick="setMantraFrequency(1)">Medium</button>
+            <button class="badge" id="mantra-freq-2" onclick="setMantraFrequency(2)">High</button>
+          </div>
+        </div>
+        <div class="slider">
+          <label>Styles</label>
+          <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+            <button class="badge" id="mantra-style-drift" onclick="toggleMantraStyle('drift')">Drift</button>
+            <button class="badge" id="mantra-style-flash" onclick="toggleMantraStyle('flash')">Flash</button>
+            <button class="badge" id="mantra-style-beat" onclick="toggleMantraStyle('beat')">On the Beat</button>
+          </div>
+        </div>
+        <div class="slider"><label>Max Opacity: <b><span id="l-mantra-opacity">70%</span></b></label><input type="range" id="mantra-opacity-input" min="15" max="100" value="70" oninput="setMantraOpacity(this.value)"></div>
+        <div class="slider">
+          <label>Phrases (one per line)</label>
+          <textarea id="mantra-phrases-input" rows="7" class="mantra-phrases-input"></textarea>
+          <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+            <button class="badge" onclick="saveMantraPhrases()">💾 Save</button>
+            <button class="badge" onclick="resetMantraPhrases()">⟲ Defaults</button>
+            <button class="badge" onclick="previewMantra()">👁 Preview</button>
+          </div>
+        </div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Short phrases from your list appear over the whole screen - above the spiral, below the controls. Drift floats a phrase up and away somewhere on screen; Flash is a brief centered word; On the Beat pops one on a strong hit in the audio or a Rhythm Mode downbeat. While a spiral is up, phrases also slow into a centered "trance" breathe. Frequency is a baseline - it rises on its own during a spiral, a Surge, Auto-Pilot's climax, and a Finale's build and peak, and a burst of phrases rides along with mega jackpots.</p></details>
+      </div>
+    </details>
   </div>
 
   <div class="panel-tab" data-tab="autopilot">
@@ -166,6 +235,19 @@
       </div>
     </details>
     <details class="settings-section">
+      <summary><span class="section-title">🎆 Finale</span><span class="settings-section-desc">One planned build to a big climax, then an afterglow and a recap.</span></summary>
+      <div class="settings-section-body">
+        <button class="badge" id="finale-btn" onclick="toggleFinale()">🎆 Start Finale</button>
+        <div class="metric" id="finale-status">Ready.</div>
+        <div class="slider"><label>Length: <b><span id="l-finale-minutes">5 min</span></b></label><input type="range" id="finale-minutes-input" min="2" max="15" step="1" value="5" oninput="setFinaleMinutes(this.value)"></div>
+        <div class="slider">
+          <label>Offer one on long Auto-Pilot sessions</label>
+          <button class="badge" id="finale-offer-toggle" onclick="toggleFinaleOffer()">ON</button>
+        </div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Auto-Pilot's arc repeats calm → climax → cooldown for as long as it runs. A Finale is one longer climb that goes further than any single cycle, actually lands, and then ends. Build (first ~55%): pace quickens, jackpot odds and floaters climb, selection leans toward your favorites, playback speed eases up, mantras pick up, and Rhythm Mode joins in. Peak (to ~85%): the spiral fades in, a Surge runs the whole stretch, and color splashes and tile FX keep firing. Climax: a guaranteed MEGA jackpot, a full Color Rush, and a mantra flood all at once. Afterglow: everything eases below normal and settles, then a recap of the session. While it runs it takes over the controls Auto-Pilot normally drives, then gives them back (or restores your manual settings if Auto-Pilot is off). With the offer option on, a long Auto-Pilot session suggests one once - ignoring it just lets it fade.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
       <summary><span class="section-title">🛰️ Observability</span><span class="settings-section-desc">Live readout of Auto-Pilot's internal state.</span></summary>
       <div class="settings-section-body">
         <pre id="autopilot-debug" class="metric" style="white-space:pre-line;font-family:inherit">Auto-Pilot is off.</pre>
@@ -193,10 +275,75 @@
       <summary><span class="section-title">🏆 Progress &amp; Challenges</span><span class="settings-section-desc">Lifetime bests, daily quests, and the trophy case.</span></summary>
       <div class="settings-section-body">
         <div class="metric" id="personal-best"></div>
+        <button class="badge" onclick="showSessionRecap()">📊 This Session's Recap</button>
         <div class="metric" id="quest-list"></div>
         <button class="badge" id="prestige-btn" onclick="prestige()" style="display:none">⭐ Prestige (reset level for a rank)</button>
         <div class="trophy-case" id="trophy-case"></div>
         <details class="hint-details"><summary>What does this do?</summary><p class="hint">Lifetime bests and two daily quests that re-roll each day and auto-claim XP on completion - all stored on this device, nothing leaves it. The trophy case below unlocks permanent badges as those lifetime stats cross thresholds (hearts given, jackpots, chase chains, prestige) - once earned, a trophy stays forever.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🌀 Visual FX Rewards</span><span class="settings-section-desc">Prism, kaleido, zoom, RGB split, VHS, and shockwave moments on tiles.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider">
+          <label>Enabled</label>
+          <button class="badge" id="fx-rewards-toggle" onclick="toggleFxRewards()">ON</button>
+        </div>
+        <div class="slider">
+          <label>Preview (on a random tile)</label>
+          <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+            <button class="badge" onclick="previewTileFx('prism')">🌈 Prism</button>
+            <button class="badge" onclick="previewTileFx('kaleido')">🔮 Kaleido</button>
+            <button class="badge" onclick="previewTileFx('zoom')">💓 Zoom</button>
+            <button class="badge" onclick="previewTileFx('rgb')">🎞 RGB Split</button>
+            <button class="badge" onclick="previewTileFx('vhs')">📼 VHS</button>
+            <button class="badge" onclick="previewTileFx('shock')">💥 Shock</button>
+          </div>
+        </div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">A new kind of thing to win: a few seconds of visual effect on the tile a reward landed on, which also pulls your eye to that video. They can ride along with a bonus tap, a sealed-tile open, or a chase catch (odds in Tuning → Visual FX Rewards); catch-streak milestones always get one; medium+ jackpots light up a couple of tiles; Spin has a new "FX Burst" result; and a long in-sync run in Rhythm Mode earns one too. Zoom Pulse kicks in time with the audio (or Rhythm Mode's beat) when there's something to follow.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🥁 Rhythm Mode</span><span class="settings-section-desc">A beat the grid moves to, tempo waves, and tap-along streaks.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider">
+          <label>Enabled</label>
+          <button class="badge" id="rhythm-toggle" onclick="toggleRhythm()">OFF</button>
+        </div>
+        <div class="metric" id="rhythm-status"></div>
+        <div class="slider">
+          <label>Tempo Source</label>
+          <div class="grid" style="grid-template-columns:1fr 1fr">
+            <button class="badge" id="rhythm-src-manual" onclick="setRhythmSource('manual')">Manual BPM</button>
+            <button class="badge" id="rhythm-src-audio" onclick="setRhythmSource('audio')">Follow Audio</button>
+          </div>
+        </div>
+        <div class="slider"><label>Base Tempo: <b><span id="l-rhythm-bpm">90 BPM</span></b></label><input type="range" id="rhythm-bpm-input" min="50" max="160" step="2" value="90" oninput="setRhythmBpm(this.value)"></div>
+        <div class="slider">
+          <label>Tempo Waves</label>
+          <button class="badge" id="rhythm-waves-toggle" onclick="toggleRhythmWaves()">ON</button>
+        </div>
+        <div class="slider">
+          <label>Speed Follows Tempo</label>
+          <button class="badge" id="rhythm-speed-toggle" onclick="toggleRhythmSpeedSync()">ON</button>
+        </div>
+        <div class="slider">
+          <label>Beat Sound</label>
+          <button class="badge" id="rhythm-sound-toggle" onclick="toggleRhythmSound()">OFF</button>
+        </div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Each beat lights the next tile in a snake through the grid, and every downbeat (1 of 4) kicks the screen-edge glow. Tempo Waves speed the beat up over about 70 seconds, then drop back to base - and with Speed Follows Tempo on, every tile's playback speed rides the same wave (about 0.95x at base up to 1.25x at the top), so each wave builds and releases. Follow Audio tries to lock onto a steady beat in what's playing; spoken-word tracks often don't have one, so it falls back to your manual tempo and says so above. Tap along with Space or the 🥁 pad at the bottom: every 8 in a row earns XP, every 16 earns a tile FX. Auto-Pilot's new Rhythm Zone and a Finale's build/peak switch this on by themselves while they run.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🆕 Fresh Drops</span><span class="settings-section-desc">New clips debut one at a time with a reveal, rationed per session.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider">
+          <label>Enabled</label>
+          <button class="badge" id="fresh-drop-toggle" onclick="toggleFreshDrop()">ON</button>
+        </div>
+        <div class="metric" id="fresh-drop-status"></div>
+        <button class="badge" onclick="runFreshDrop(true)">🆕 Drop One Now</button>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Clips you add to media_assets after today are held back from normal rotation (and from the floaters and mystery tiles) until each gets its own debut: a tile dims under a "fresh drop" shimmer with a riser, then the new clip lands with a reveal. They're rationed so a new batch isn't burned through in one sitting - none in the first ~90 seconds, at least ~3 minutes apart, and at most 4 per session (all adjustable in Tuning → Fresh Drops); the rest wait for next time. New files are picked up within a couple of minutes, no reload needed. Once a clip has debuted it joins normal rotation, where being lightly played already earns it extra discovery weight for a while. Everything already in your library before this feature counts as old, not fresh.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -226,6 +373,19 @@
         <div class="slider"><label>Overlay Track: <b><span id="l-overlay-vol">85%</span></b></label><input type="range" id="overlay-vol-input" min="0" max="100" value="85" oninput="setOverlayVolume(this.value)"></div>
         <div class="slider"><label>Tile Audio: <b><span id="l-tile-audio-vol">0%</span></b></label><input type="range" id="tile-audio-vol-input" min="0" max="100" value="0" oninput="setTileAudioVolume(this.value)"></div>
         <details class="hint-details"><summary>What does this do?</summary><p class="hint">Volume (binaural/overlay/tile) is just for this device. Rotation pace and the beat/carrier are the one exception - those stay in sync with every device watching the same session. Tile Audio is every tile's own clip audio, all at once, at this one shared level - 0% keeps every tile muted (the default). There's no per-tile solo; turning it up means every visible tile plays together at the same volume.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🎚️ Audio-Reactive FX</span><span class="settings-section-desc">Edge glow and tile pulses that move with what you're hearing.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider">
+          <label>Enabled</label>
+          <button class="badge" id="audio-react-toggle" onclick="toggleAudioReact()">ON</button>
+        </div>
+        <div class="slider"><label>Reactivity: <b><span id="l-audio-react">60%</span></b></label><input type="range" id="audio-react-input" min="0" max="100" value="60" oninput="setAudioReactivity(this.value)"></div>
+        <div class="audio-react-meter"><div id="audio-react-meter-fill"></div></div>
+        <div class="metric" id="audio-react-status"></div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Listens to the mix of everything you can hear - the overlay track, plus every tile's own audio whenever Tile Audio is above 0% - and drives a soft screen-edge glow from the loudness, with a quick glow flash on a tile whenever there's a real hit (a jump above the recent baseline, not just loud audio). It's tapped after each volume slider, so it follows what's actually audible. The binaural tone and sound effects are deliberately left out: one is a steady drone that would flatten every reading, the other would make effects trigger off their own sounds. The same hits also drive "On the Beat" mantras, Zoom Pulse kicks, and Rhythm Mode's Follow Audio tempo.</p></details>
       </div>
     </details>
   </div>
@@ -273,5 +433,6 @@
 <div id="toast"></div>
 <script>window.LAYOUT_PRESETS = {{ layout_presets_json | tojson }};</script>
 <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_layers.js') }}"></script>
 </body>
 </html>

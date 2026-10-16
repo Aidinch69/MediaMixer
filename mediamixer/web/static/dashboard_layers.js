@@ -1,0 +1,1361 @@
+// ---- Layers built on top of dashboard.js ----
+// Loaded right after dashboard.js as a plain (non-module) script, so it
+// shares that file's globals both ways - dashboard.js calls into the
+// hooks here (globalSpeedMult, maybeFxReward, finaleActive...) and this
+// file reads its state (tileElements, audioCtx, TUNING...) directly.
+// Split out only to keep each file a size you can still navigate; the
+// sections below follow the same conventions as everything in there.
+//
+//   Global speed multiplier - shared by Rhythm Mode and Finale
+//   Session stats           - this-visit counters for the recap card
+//   Audio-reactive          - one analyser fed by overlay + tile audio
+//   Mantra text             - phrases that drift/flash/pulse over the screen
+//   Visual FX rewards       - prism/kaleido/zoom/RGB/VHS/shockwave tile moments
+//   Catch-streak milestones - "one more" + the payoff when you land it
+//   Rhythm Mode             - beat walker, tempo waves, tap-along
+//   Fresh Drop              - rationed debuts for newly added clips
+//   Finale + recap          - one-shot build -> peak -> climax -> afterglow
+
+function loadJsonPref(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) return Object.assign({}, fallback, JSON.parse(raw));
+  } catch (e) {}
+  return Object.assign({}, fallback);
+}
+
+function saveJsonPref(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+}
+
+function setToggleBadge(id, on) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.innerText = on ? 'ON' : 'OFF';
+  btn.classList.toggle('active', on);
+}
+
+// ---- Global speed multiplier ----
+// Rhythm Mode's tempo waves and Finale's speed arc both scale every
+// tile's natural (server-driven) speed at once. render() multiplies this
+// into naturalSpeed, but render only runs when an SSE push arrives - this
+// tick re-applies it in between, the same independence the speed
+// controller's own 100ms tick has. Tiles with a registered speed effect
+// are skipped: the controller owns them until their effect expires.
+let tileNaturalBase = []; // per-tile s.speed * lock * manual, written by render()
+
+function globalSpeedMult() {
+  return finaleSpeedMult() * rhythmSpeedMult();
+}
+
+setInterval(() => {
+  const mult = globalSpeedMult();
+  tileElements.forEach((tile, i) => {
+    const effects = tileSpeedEffects[i];
+    if (effects && effects.size) return;
+    const base = tileNaturalBase[i];
+    const vid = getTileVideo(i);
+    if (!vid || !base) return;
+    const target = base * mult;
+    if (Math.abs(vid.playbackRate - target) > 0.01) vid.playbackRate = target;
+  });
+}, 200);
+
+// ---- Session stats ----
+// Counts for this visit only (page load to now) - the lifetime versions
+// live in mm_stats. Feeds the recap card at the end of a Finale, or any
+// time from the Progress section.
+const sessionStats = { hearts: 0, jackpots: 0, catches: 0, bestChain: 0, bonuses: 0, freshDrops: 0, rhythmBest: 0 };
+let sessionXpStart = 0;
+let sessionPrestigeStart = 0;
+
+// ---- Audio-reactive ----
+// One analysis bus that whatever you can actually hear feeds into: the
+// overlay track always, plus every tile's own audio whenever Tile Audio
+// is above 0%. Each source is tapped *after* its own volume gain, so the
+// visuals follow what's audible rather than raw file levels - and the
+// bus only ever feeds an analyser, never the speakers, so this tap can't
+// change what you hear. The binaural tone and SFX deliberately aren't on
+// it: one is a steady drone that would flatten every reading, and the
+// other would make effects trigger off their own sounds.
+let audioReactEnabled = true;
+let audioReactivity = 60; // 0-100
+let reactBus = null;
+let reactAnalyser = null;
+let reactTimeBuf = null;
+let overlaySourceNode = null;
+let overlayGainNode = null;
+let tileAudioGainNode = null;
+const tileSourceNodes = new Map(); // <video> -> MediaElementAudioSourceNode
+let audioLevel = 0; // fast follower, 0-1
+let audioLevelSlow = 0; // ~1s average, the baseline onsets are measured against
+let lastOnsetAt = 0;
+const audioOnsetListeners = [];
+
+function onAudioOnset(fn) { audioOnsetListeners.push(fn); }
+
+function ensureReactBus() {
+  if (!audioCtx) return null;
+  if (!reactBus) {
+    reactBus = audioCtx.createGain();
+    reactAnalyser = audioCtx.createAnalyser();
+    reactAnalyser.fftSize = 1024;
+    reactAnalyser.smoothingTimeConstant = 0.5;
+    reactBus.connect(reactAnalyser);
+    // A silent path to the destination keeps the analyser pulled by the
+    // audio graph in every browser, without it ever being audible.
+    const sink = audioCtx.createGain();
+    sink.gain.value = 0;
+    reactAnalyser.connect(sink);
+    sink.connect(audioCtx.destination);
+    reactTimeBuf = new Float32Array(reactAnalyser.fftSize);
+  }
+  return reactBus;
+}
+
+function hookOverlayAudio() {
+  if (!audioCtx || !overlayEl || overlaySourceNode) return;
+  try {
+    overlaySourceNode = audioCtx.createMediaElementSource(overlayEl);
+  } catch (e) { return; }
+  overlayGainNode = audioCtx.createGain();
+  overlaySourceNode.connect(overlayGainNode);
+  overlayGainNode.connect(audioCtx.destination);
+  overlayGainNode.connect(ensureReactBus());
+  applyVolumes();
+}
+
+// Only once Tile Audio is actually turned up - at 0% every tile is muted
+// anyway, so there'd be nothing to analyse, and leaving tiles unrouted
+// keeps the default setup exactly as it always was. A routed element
+// stays routed (createMediaElementSource is once-per-element), with its
+// level from the shared gain node from then on.
+function hookTileAudio(vid) {
+  if (!audioCtx || !vid || tileSourceNodes.has(vid) || tileAudioVolume <= 0) return;
+  if (!tileAudioGainNode) {
+    tileAudioGainNode = audioCtx.createGain();
+    tileAudioGainNode.gain.value = tileAudioVolume;
+    tileAudioGainNode.connect(audioCtx.destination);
+    tileAudioGainNode.connect(ensureReactBus());
+  }
+  try {
+    const src = audioCtx.createMediaElementSource(vid);
+    src.connect(tileAudioGainNode);
+    tileSourceNodes.set(vid, src);
+    vid.volume = 1;
+  } catch (e) {}
+}
+
+function hookAllTileAudio() {
+  tileElements.forEach((tile, i) => hookTileAudio(getTileVideo(i)));
+}
+
+let reactLastFrameAt = 0;
+let audioGlowLastOpacity = -1;
+let audioGlowKick = 0; // a decaying extra push on top of the level - Rhythm Mode's downbeats
+
+function audioReactFrame(ts) {
+  requestAnimationFrame(audioReactFrame);
+  if (ts - reactLastFrameAt < 33) return; // ~30fps is plenty for a glow and onset detection
+  reactLastFrameAt = ts;
+  if (reactAnalyser) analyseAudioFrame(ts);
+  updateAudioGlow();
+}
+requestAnimationFrame(audioReactFrame);
+
+function analyseAudioFrame(ts) {
+  reactAnalyser.getFloatTimeDomainData(reactTimeBuf);
+  let sum = 0;
+  for (let i = 0; i < reactTimeBuf.length; i++) sum += reactTimeBuf[i] * reactTimeBuf[i];
+  const rms = Math.sqrt(sum / reactTimeBuf.length);
+  const level = Math.min(1, rms * 5); // spoken/music tracks mostly sit around 0.03-0.2 rms
+  audioLevel = audioLevel * 0.6 + level * 0.4;
+  audioLevelSlow = audioLevelSlow * 0.97 + level * 0.03;
+  // Onset: a jump well clear of the recent baseline, not just loudness -
+  // a constantly loud track shouldn't fire constantly.
+  if (level > 0.06 && level > audioLevelSlow * 1.45 + 0.03 && ts - lastOnsetAt > 180) {
+    lastOnsetAt = ts;
+    const strength = Math.min(1, (level - audioLevelSlow) * 3);
+    audioOnsetListeners.forEach((fn) => { try { fn(strength, ts); } catch (e) {} });
+  }
+}
+
+// A soft edge glow in the current theme color that breathes with the
+// level - opacity only, on its own fixed element.
+function updateAudioGlow() {
+  const el = document.getElementById('audio-glow');
+  if (!el) return;
+  audioGlowKick *= 0.86;
+  const levelGlow = audioReactEnabled ? Math.min(0.85, audioLevel * (audioReactivity / 100) * 1.1) : 0;
+  const target = Math.max(levelGlow, audioGlowKick);
+  if (Math.abs(target - audioGlowLastOpacity) < 0.02) return;
+  audioGlowLastOpacity = target;
+  el.style.opacity = target.toFixed(2);
+}
+
+// A quick theme-colored flash on one tile's glow ring. Skips any tile
+// whose ring is mid-animation for something else (an ambient breathe or
+// a disco pulse) - a CSS animation would win over this inline opacity
+// anyway, so there's nothing to gain by fighting it.
+function reactPulseTile(idx, strength) {
+  const el = tileGlowEls[idx];
+  if (!el || el.classList.contains('ambient-breath') || el.classList.contains('disco-pulse')) return;
+  el.style.transition = 'opacity .08s ease-out';
+  el.style.opacity = Math.min(0.85, 0.2 + strength * 0.6).toFixed(2);
+  clearTimeout(el._reactFadeTimer);
+  el._reactFadeTimer = setTimeout(() => {
+    el.style.transition = 'opacity .45s ease-out';
+    el.style.opacity = '0';
+    setTimeout(() => { if (el.style.opacity === '0') el.style.transition = ''; }, 460);
+  }, 110);
+}
+
+let lastReactPulseAt = 0;
+onAudioOnset((strength, now) => {
+  if (!audioReactEnabled || anticipationActive || !tileGlowEls.length) return;
+  const reactivity = audioReactivity / 100;
+  if (now - lastReactPulseAt < TUNING.AUDIO_REACT_PULSE_GAP_MS * (1.6 - reactivity)) return;
+  if (strength < 0.3 * (1.2 - reactivity)) return;
+  lastReactPulseAt = now;
+  reactPulseTile(pickAmbientTarget(chaseFlashTileIndex), strength * (0.5 + reactivity * 0.5));
+});
+
+function loadAudioReactPrefs() {
+  const prefs = loadJsonPref('mm_audio_react', { enabled: true, reactivity: 60 });
+  audioReactEnabled = !!prefs.enabled;
+  audioReactivity = Number(prefs.reactivity) || 0;
+  setToggleBadge('audio-react-toggle', audioReactEnabled);
+  const input = document.getElementById('audio-react-input');
+  if (input) input.value = audioReactivity;
+  const lbl = document.getElementById('l-audio-react');
+  if (lbl) lbl.innerText = audioReactivity + '%';
+}
+
+function saveAudioReactPrefs() {
+  saveJsonPref('mm_audio_react', { enabled: audioReactEnabled, reactivity: audioReactivity });
+}
+
+function toggleAudioReact() {
+  audioReactEnabled = !audioReactEnabled;
+  setToggleBadge('audio-react-toggle', audioReactEnabled);
+  saveAudioReactPrefs();
+}
+
+function setAudioReactivity(v) {
+  audioReactivity = parseInt(v, 10) || 0;
+  const lbl = document.getElementById('l-audio-react');
+  if (lbl) lbl.innerText = audioReactivity + '%';
+  saveAudioReactPrefs();
+}
+
+function updateAudioReactStatus() {
+  const meter = document.getElementById('audio-react-meter-fill');
+  if (meter) meter.style.width = Math.round(audioLevel * 100) + '%';
+  const el = document.getElementById('audio-react-status');
+  if (!el) return;
+  if (!audioCtx || !overlaySourceNode) { el.innerText = 'Waiting for audio - tap anywhere on the page to enable it.'; return; }
+  const routedTiles = tileElements.filter((t, i) => tileSourceNodes.has(getTileVideo(i))).length;
+  const parts = ['overlay track'];
+  if (tileAudioVolume > 0 && routedTiles) parts.push('tile audio (' + routedTiles + ' tile' + (routedTiles === 1 ? '' : 's') + ')');
+  el.innerText = 'Listening to: ' + parts.join(' + ') + (tileAudioVolume > 0 ? '' : ' - turn Tile Audio up to add the tiles too.');
+}
+setInterval(updateAudioReactStatus, 150);
+
+// ---- Mantra text ----
+// Short phrases from your own list that surface over everything (above
+// the spiral, below the controls). Four looks: "drift" floats up and
+// fades somewhere on screen, "flash" is a brief centered word, "beat"
+// pops on a strong audio onset or a Rhythm Mode downbeat, and "trance"
+// is a slow centered breathe used while a spiral is up. Frequency rises
+// with whatever else is building (spiral, Surge, Auto-Pilot's climax,
+// Finale) so the text tracks the session's intensity.
+const MANTRA_DEFAULT_PHRASES = [
+  'Deeper', 'Keep watching', 'Let go', 'Sink in', 'Good', 'Just watch', "Don't look away",
+  'Relax', 'More', 'Focus', 'Breathe', 'Give in', 'Drift', 'Mmm',
+];
+const MANTRA_GAP_MS = [[25000, 45000], [9000, 20000], [3500, 8000]]; // low / medium / high
+const MANTRA_FREQ_LABELS = ['Low', 'Medium', 'High'];
+const MANTRA_MAX_ON_SCREEN = 8;
+let mantraEnabled = true;
+let mantraFrequency = 1;
+let mantraOpacity = 70;
+let mantraStyles = { drift: true, flash: true, beat: true };
+let mantraPhrases = MANTRA_DEFAULT_PHRASES.slice();
+let mantraNextAt = 0;
+let lastMantraBeatAt = 0;
+let lastMantraPhrase = '';
+
+function mantraIntensity() {
+  let k = 1;
+  if (spiralActive) k *= 2.2;
+  if (isSurgeActive()) k *= 1.3;
+  if (rhythmActive()) k *= 1.2;
+  k *= 1 + autopilotAmbientBoost * 0.8;
+  k *= finaleMantraMult();
+  return k;
+}
+
+function scheduleNextMantra() {
+  const [lo, hi] = MANTRA_GAP_MS[mantraFrequency] || MANTRA_GAP_MS[1];
+  mantraNextAt = Date.now() + (lo + Math.random() * (hi - lo)) / mantraIntensity();
+}
+
+function pickMantraPhrase() {
+  if (!mantraPhrases.length) return '';
+  if (mantraPhrases.length === 1) return mantraPhrases[0];
+  let pick = lastMantraPhrase;
+  for (let i = 0; i < 6 && pick === lastMantraPhrase; i++) pick = mantraPhrases[Math.floor(Math.random() * mantraPhrases.length)];
+  lastMantraPhrase = pick;
+  return pick;
+}
+
+function showMantra(style, text) {
+  const layer = document.getElementById('mantra-layer');
+  if (!layer) return;
+  text = text || pickMantraPhrase();
+  if (!text) return;
+  const el = document.createElement('div');
+  el.className = 'mantra mantra-' + style;
+  el.textContent = text;
+  const hue = COLOR_RUSH_HUES[Math.floor(Math.random() * COLOR_RUSH_HUES.length)];
+  el.style.setProperty('--mantra-hue', hue);
+  el.style.setProperty('--mantra-opacity', (mantraOpacity / 100).toFixed(2));
+  let sizeVw, x, y, durS;
+  if (style === 'flash') { sizeVw = 7 + Math.random() * 4; x = 40 + Math.random() * 20; y = 40 + Math.random() * 20; durS = 1.1; }
+  else if (style === 'beat') { sizeVw = 4 + Math.random() * 3; x = 15 + Math.random() * 70; y = 20 + Math.random() * 60; durS = 0.9; }
+  else if (style === 'trance') { sizeVw = 6 + Math.random() * 3; x = 50; y = 50; durS = 5.5; }
+  else { sizeVw = 3 + Math.random() * 3; x = 12 + Math.random() * 76; y = 18 + Math.random() * 62; durS = 4 + Math.random() * 2.5; }
+  el.style.fontSize = sizeVw.toFixed(1) + 'vw';
+  el.style.left = x.toFixed(1) + '%';
+  el.style.top = y.toFixed(1) + '%';
+  el.style.animationDuration = durS + 's';
+  el.addEventListener('animationend', () => el.remove());
+  layer.appendChild(el);
+  while (layer.children.length > MANTRA_MAX_ON_SCREEN) layer.firstChild.remove();
+}
+
+function mantraBurst(count) {
+  if (!mantraEnabled) return;
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => showMantra(Math.random() < 0.5 ? 'drift' : 'beat'), i * 380);
+  }
+}
+
+function maybeMantraOnBeat(strength) {
+  if (!mantraEnabled || !mantraStyles.beat || document.hidden) return;
+  const now = Date.now();
+  if (now - lastMantraBeatAt < 2600 / mantraIntensity()) return;
+  if (strength < 0.55) return;
+  lastMantraBeatAt = now;
+  showMantra('beat');
+}
+
+setInterval(() => {
+  if (!mantraEnabled || document.hidden) return;
+  if (!mantraNextAt) { scheduleNextMantra(); return; }
+  if (Date.now() < mantraNextAt) return;
+  scheduleNextMantra();
+  if (spiralActive && Math.random() < 0.6) { showMantra('trance'); return; }
+  const styles = ['drift', 'flash'].filter((s) => mantraStyles[s]);
+  if (!styles.length) return;
+  showMantra(styles[Math.floor(Math.random() * styles.length)]);
+}, 500);
+
+onAudioOnset((strength) => maybeMantraOnBeat(strength * (0.6 + audioReactivity / 250)));
+
+function loadMantraPrefs() {
+  const prefs = loadJsonPref('mm_mantra', { enabled: true, frequency: 1, opacity: 70, styles: mantraStyles, phrases: MANTRA_DEFAULT_PHRASES });
+  mantraEnabled = !!prefs.enabled;
+  mantraFrequency = Math.max(0, Math.min(2, Number(prefs.frequency) || 0));
+  mantraOpacity = Number(prefs.opacity) || 70;
+  mantraStyles = Object.assign({ drift: true, flash: true, beat: true }, prefs.styles);
+  mantraPhrases = Array.isArray(prefs.phrases) ? prefs.phrases.filter((p) => typeof p === 'string' && p.trim()) : MANTRA_DEFAULT_PHRASES.slice();
+  updateMantraUi();
+}
+
+function saveMantraPrefs() {
+  saveJsonPref('mm_mantra', { enabled: mantraEnabled, frequency: mantraFrequency, opacity: mantraOpacity, styles: mantraStyles, phrases: mantraPhrases });
+}
+
+function updateMantraUi() {
+  setToggleBadge('mantra-toggle', mantraEnabled);
+  MANTRA_FREQ_LABELS.forEach((_, i) => {
+    const b = document.getElementById('mantra-freq-' + i);
+    if (b) b.classList.toggle('active', i === mantraFrequency);
+  });
+  ['drift', 'flash', 'beat'].forEach((s) => {
+    const b = document.getElementById('mantra-style-' + s);
+    if (b) b.classList.toggle('active', !!mantraStyles[s]);
+  });
+  const op = document.getElementById('mantra-opacity-input');
+  if (op) op.value = mantraOpacity;
+  const opLbl = document.getElementById('l-mantra-opacity');
+  if (opLbl) opLbl.innerText = mantraOpacity + '%';
+  const ta = document.getElementById('mantra-phrases-input');
+  if (ta && document.activeElement !== ta) ta.value = mantraPhrases.join('\n');
+}
+
+function toggleMantra() { mantraEnabled = !mantraEnabled; saveMantraPrefs(); updateMantraUi(); }
+function setMantraFrequency(i) { mantraFrequency = i; mantraNextAt = 0; saveMantraPrefs(); updateMantraUi(); }
+function toggleMantraStyle(s) { mantraStyles[s] = !mantraStyles[s]; saveMantraPrefs(); updateMantraUi(); }
+function setMantraOpacity(v) { mantraOpacity = parseInt(v, 10) || 0; saveMantraPrefs(); updateMantraUi(); }
+
+function saveMantraPhrases() {
+  const ta = document.getElementById('mantra-phrases-input');
+  if (!ta) return;
+  mantraPhrases = ta.value.split('\n').map((p) => p.trim()).filter(Boolean);
+  saveMantraPrefs();
+  toast('💬 Saved ' + mantraPhrases.length + ' phrase' + (mantraPhrases.length === 1 ? '' : 's'));
+}
+
+function resetMantraPhrases() {
+  mantraPhrases = MANTRA_DEFAULT_PHRASES.slice();
+  saveMantraPrefs();
+  const ta = document.getElementById('mantra-phrases-input');
+  if (ta) ta.value = mantraPhrases.join('\n');
+  toast('💬 Phrases reset to defaults');
+}
+
+function previewMantra() {
+  ['drift', 'flash', 'beat', 'trance'].forEach((s, i) => setTimeout(() => showMantra(s), i * 900));
+}
+
+// ---- Visual FX rewards ----
+// Short visual moments on a single tile that ride along with a reward -
+// a new kind of thing to win that also pulls the eye straight to the
+// video it lands on. Each kind is either a CSS class on the tile (prism,
+// RGB split, VHS - filter/transform on that one <video> for a few
+// seconds), a canvas laid over it (kaleido), Web Animations kicks on its
+// transform (zoom pulse, synced to audio onsets/Rhythm beats when there
+// are any), or a one-shot ring (shockwave). One effect per tile at a
+// time; a second one on the same tile just waits its turn out.
+const TILE_FX_KINDS = {
+  prism: { label: '🌈 Prism', ms: 3200 },
+  kaleido: { label: '🔮 Kaleido', ms: 4500 },
+  zoom: { label: '💓 Zoom Pulse', ms: 4000 },
+  rgb: { label: '🎞 RGB Split', ms: 2600 },
+  vhs: { label: '📼 VHS', ms: 3500 },
+  shock: { label: '💥 Shockwave', ms: 900 },
+};
+const TILE_FX_NAMES = Object.keys(TILE_FX_KINDS);
+let fxRewardsEnabled = true;
+const tileFxBusyUntil = {}; // tile idx -> timestamp
+const zoomFxTiles = new Map(); // tile idx -> end timestamp
+let rgbSplitActiveUntil = 0; // the SVG filter is shared, so one RGB split at a time
+
+function pickFxKind() {
+  const pool = TILE_FX_NAMES.filter((k) => k !== 'shock' && !(k === 'rgb' && Date.now() < rgbSplitActiveUntil));
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function fireTileFx(idx, kind) {
+  const tile = tileElements[idx];
+  const vid = getTileVideo(idx);
+  if (!tile || !vid) return false;
+  const spec = TILE_FX_KINDS[kind];
+  if (!spec) return false;
+  const now = Date.now();
+  if (kind !== 'shock') {
+    if (now < (tileFxBusyUntil[idx] || 0)) return false;
+    tileFxBusyUntil[idx] = now + spec.ms;
+  }
+  if (kind === 'prism') {
+    tile.classList.remove('fx-prism');
+    void tile.offsetWidth;
+    tile.classList.add('fx-prism');
+    setTimeout(() => tile.classList.remove('fx-prism'), spec.ms);
+  } else if (kind === 'kaleido') {
+    startKaleidoFx(tile, vid, spec.ms);
+  } else if (kind === 'zoom') {
+    zoomFxTiles.set(idx, now + spec.ms);
+    kickZoomTile(idx, 0.8);
+  } else if (kind === 'rgb') {
+    if (now < rgbSplitActiveUntil) return false;
+    startRgbSplitFx(tile, spec.ms);
+  } else if (kind === 'vhs') {
+    startVhsFx(tile, vid, spec.ms);
+  } else if (kind === 'shock') {
+    const ring = document.createElement('div');
+    ring.className = 'fx-shock-ring';
+    ring.addEventListener('animationend', () => ring.remove());
+    tile.insertBefore(ring, vid.nextSibling);
+  }
+  return true;
+}
+
+// Returns the label of whatever fired (for the caller to fold into its
+// own reward label), or null if nothing did.
+function maybeFxReward(idx, chance) {
+  if (!fxRewardsEnabled || Math.random() >= chance) return null;
+  const kind = pickFxKind();
+  return fireTileFx(idx, kind) ? TILE_FX_KINDS[kind].label : null;
+}
+
+function fireRandomTileFx(count) {
+  if (!fxRewardsEnabled || !tileElements.length) return;
+  const used = new Set();
+  for (let n = 0; n < count && used.size < tileElements.length; n++) {
+    let idx = pickAmbientTarget();
+    for (let tries = 0; tries < 6 && used.has(idx); tries++) idx = Math.floor(Math.random() * tileElements.length);
+    if (used.has(idx)) continue;
+    used.add(idx);
+    const kind = pickFxKind();
+    setTimeout(() => {
+      if (fireTileFx(idx, kind)) showClaimRewardLabel(idx, TILE_FX_KINDS[kind].label);
+    }, n * 220);
+  }
+}
+
+// Four mirrored copies of a slowly drifting window into the video, drawn
+// to a canvas laid over just this tile at ~30fps. Inserted right after
+// the <video> so the glow/claim/label layers stay on top of it.
+function startKaleidoFx(tile, vid, ms) {
+  const canvas = document.createElement('canvas');
+  canvas.className = 'fx-kaleido-canvas';
+  tile.insertBefore(canvas, vid.nextSibling);
+  const g = canvas.getContext('2d');
+  const start = performance.now();
+  let last = 0;
+  function draw(ts) {
+    if (!canvas.isConnected) return;
+    const elapsed = ts - start;
+    if (elapsed > ms) {
+      canvas.classList.remove('show');
+      setTimeout(() => canvas.remove(), 600);
+      return;
+    }
+    requestAnimationFrame(draw);
+    if (ts - last < 33) return;
+    last = ts;
+    const w = tile.clientWidth, h = tile.clientHeight;
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+    const vw = vid.videoWidth, vh = vid.videoHeight;
+    if (!vw || !vh || !w || !h) return;
+    const sw = vw * 0.5, sh = vh * 0.5;
+    const t = elapsed / ms;
+    const sx = (vw - sw) * (0.5 + 0.4 * Math.sin(t * Math.PI * 2));
+    const sy = (vh - sh) * (0.5 + 0.4 * Math.cos(t * Math.PI * 2));
+    const hw = w / 2, hh = h / 2;
+    [[1, 1, 0, 0], [-1, 1, w, 0], [1, -1, 0, h], [-1, -1, w, h]].forEach(([scx, scy, tx, ty]) => {
+      g.setTransform(scx, 0, 0, scy, tx, ty);
+      g.drawImage(vid, sx, sy, sw, sh, 0, 0, hw, hh);
+    });
+    g.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  requestAnimationFrame(() => canvas.classList.add('show'));
+  requestAnimationFrame(draw);
+}
+
+function startRgbSplitFx(tile, ms) {
+  const offsets = document.querySelectorAll('#mm-rgb-split feOffset');
+  if (!offsets.length) return;
+  rgbSplitActiveUntil = Date.now() + ms;
+  tile.classList.add('fx-rgb');
+  const start = performance.now();
+  function step(ts) {
+    const t = (ts - start) / ms;
+    if (t >= 1) {
+      tile.classList.remove('fx-rgb');
+      offsets.forEach((o) => o.setAttribute('dx', '0'));
+      return;
+    }
+    // Swells in and out over the run, with a faster wobble riding on top.
+    const env = Math.sin(t * Math.PI);
+    const dx = (3 + 9 * env) * (0.75 + 0.25 * Math.sin(ts / 60));
+    offsets[0].setAttribute('dx', dx.toFixed(1));
+    if (offsets[1]) offsets[1].setAttribute('dx', (-dx).toFixed(1));
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function startVhsFx(tile, vid, ms) {
+  const overlay = document.createElement('div');
+  overlay.className = 'fx-vhs-overlay';
+  tile.insertBefore(overlay, vid.nextSibling);
+  tile.classList.add('fx-vhs');
+  requestAnimationFrame(() => overlay.classList.add('show'));
+  setTimeout(() => {
+    tile.classList.remove('fx-vhs');
+    overlay.classList.remove('show');
+    setTimeout(() => overlay.remove(), 450);
+  }, ms);
+}
+
+function kickZoomTile(idx, strength) {
+  const vid = getTileVideo(idx);
+  if (!vid || !vid.animate) return;
+  const scale = 1 + 0.05 + strength * 0.07;
+  vid.animate([{ transform: 'scale(' + scale.toFixed(3) + ')' }, { transform: 'scale(1)' }], { duration: 380, easing: 'ease-out' });
+}
+
+let lastZoomKickAt = 0;
+function kickAllZoomTiles(strength) {
+  const now = Date.now();
+  lastZoomKickAt = now;
+  zoomFxTiles.forEach((until, idx) => {
+    if (now > until) { zoomFxTiles.delete(idx); return; }
+    kickZoomTile(idx, strength);
+  });
+}
+onAudioOnset((strength) => { if (zoomFxTiles.size) kickAllZoomTiles(strength); });
+// Steady fallback beat for when nothing audible is driving the kicks.
+setInterval(() => { if (zoomFxTiles.size && Date.now() - lastZoomKickAt > 500) kickAllZoomTiles(0.5); }, 520);
+
+function loadFxRewardsPref() {
+  try { const raw = localStorage.getItem('mm_fx_rewards'); if (raw !== null) fxRewardsEnabled = raw === '1'; } catch (e) {}
+  setToggleBadge('fx-rewards-toggle', fxRewardsEnabled);
+}
+
+function toggleFxRewards() {
+  fxRewardsEnabled = !fxRewardsEnabled;
+  try { localStorage.setItem('mm_fx_rewards', fxRewardsEnabled ? '1' : '0'); } catch (e) {}
+  setToggleBadge('fx-rewards-toggle', fxRewardsEnabled);
+}
+
+function previewTileFx(kind) {
+  if (!tileElements.length) return;
+  const idx = pickAmbientTarget();
+  if (fireTileFx(idx, kind)) showClaimRewardLabel(idx, TILE_FX_KINDS[kind].label + ' (preview)');
+  else toast('That tile is still mid-effect - try again in a sec', true);
+}
+
+// ---- Catch-streak milestones ----
+// A chase chain landing on one of these pays a bonus on top of the
+// normal catch - and the flash right before one says "1 more" on the
+// tile (see activateChaseFlash), with a matching "1 away" if it slips.
+const CHASE_MILESTONES = [5, 10, 15, 20, 30, 40, 50, 75, 100];
+
+function awardChaseMilestone(idx, chain) {
+  const xp = Math.round(chain * TUNING.CHASE_MILESTONE_XP_MULT);
+  awardXp(xp);
+  bumpJackpotHeat(0.8);
+  playChimeSound(1.3, 1.08);
+  burstConfetti(18 + Math.min(chain, 30));
+  fireTileFx(idx, 'shock');
+  fireTileFx(idx, chain >= 10 ? 'kaleido' : 'prism');
+  showClaimRewardLabel(idx, '🏅 x' + chain + ' STREAK +' + xp + 'xp');
+  toast('🏅 Catch streak x' + chain + '! +' + xp + 'xp');
+  nudgeEngagement(0.15);
+}
+
+// ---- Rhythm Mode ----
+// A beat clock that the grid moves to: each beat lights the next tile
+// in a snake through the grid (the "beat walker"), every downbeat (1 of
+// 4) gives the edge glow a kick, and floaters/mantras/zoom FX can ride
+// it too. Tempo can breathe in waves - an accelerando over ~70s that
+// drops back to base - and with Speed Sync on, every tile's playback
+// speed follows the tempo (0.95x at base, up to ~1.25x at the top of a
+// wave), so each wave builds and releases. Tap along (Space, or the pad
+// that appears at the bottom) to build an in-sync streak worth XP.
+//
+// Engaged manually, or automatically for as long as Auto-Pilot's Rhythm
+// Zone runs (rhythmZoneActive) and during a Finale's build/peak.
+const RHYTHM_WAVE_PERIOD_MS = 80000;
+const RHYTHM_WAVE_RISE_FRAC = 0.85; // rises over 85% of the period, drops back over the last 15%
+const RHYTHM_WAVE_DEPTH = 0.45; // top of a wave = base bpm * 1.45
+let rhythmEnabled = false;
+let rhythmZoneActive = false;
+let rhythmBaseBpm = 90;
+let rhythmBpmSource = 'manual'; // 'manual' | 'audio'
+let rhythmWaves = true;
+let rhythmSound = false;
+let rhythmSpeedSync = true;
+let rhythmStartedAt = 0;
+let rhythmNextBeatAt = 0;
+let rhythmBeatCount = 0;
+let rhythmWasActive = false;
+let detectedBpm = null;
+let rhythmTapStreak = 0;
+let rhythmLastTappedBeat = -1;
+
+function rhythmActive() {
+  return rhythmEnabled || rhythmZoneActive || finaleWantsRhythm();
+}
+
+function rhythmWaveFrac() {
+  if (!rhythmWaves || !rhythmActive()) return 0;
+  const phase = ((Date.now() - rhythmStartedAt) % RHYTHM_WAVE_PERIOD_MS) / RHYTHM_WAVE_PERIOD_MS;
+  if (phase < RHYTHM_WAVE_RISE_FRAC) {
+    const t = phase / RHYTHM_WAVE_RISE_FRAC;
+    return t * t * (3 - 2 * t); // smoothstep - eases into the climb and into the top
+  }
+  const t = (phase - RHYTHM_WAVE_RISE_FRAC) / (1 - RHYTHM_WAVE_RISE_FRAC);
+  return 1 - t * t * (3 - 2 * t);
+}
+
+function rhythmEffectiveBaseBpm() {
+  return rhythmBpmSource === 'audio' && detectedBpm ? detectedBpm : rhythmBaseBpm;
+}
+
+function currentRhythmBpm() {
+  return rhythmEffectiveBaseBpm() * (1 + RHYTHM_WAVE_DEPTH * rhythmWaveFrac()) * finaleTempoMult();
+}
+
+function rhythmSpeedMult() {
+  if (!rhythmActive() || !rhythmSpeedSync) return 1;
+  return 0.95 + 0.3 * rhythmWaveFrac();
+}
+
+// Snake order through the grid (left-to-right, then right-to-left on the
+// next row) so the walker reads as one continuous path. Under Mosaic Fit
+// the visual order differs a bit from the index order - close enough.
+function rhythmWalkOrder() {
+  const n = tileElements.length;
+  const cols = Math.max(1, currentColumns || 1);
+  const order = [];
+  for (let r = 0; r * cols < n; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) { const i = r * cols + c; if (i < n) row.push(i); }
+    if (r % 2) row.reverse();
+    order.push(...row);
+  }
+  return order;
+}
+
+function onRhythmBeat(n) {
+  const downbeat = n % 4 === 0;
+  const order = rhythmWalkOrder();
+  if (order.length && !anticipationActive) reactPulseTile(order[n % order.length], downbeat ? 0.9 : 0.55);
+  if (downbeat) audioGlowKick = Math.max(audioGlowKick, 0.55); // updateAudioGlow decays it back down
+  if (rhythmSound) playRhythmClick(downbeat);
+  if (zoomFxTiles.size) kickAllZoomTiles(downbeat ? 0.9 : 0.5);
+  if (n % 8 === 0) maybeMantraOnBeat(0.8);
+  const pad = document.getElementById('rhythm-pad');
+  if (pad) {
+    pad.classList.remove('beat', 'downbeat');
+    void pad.offsetWidth;
+    pad.classList.add(downbeat ? 'downbeat' : 'beat');
+  }
+}
+
+function playRhythmClick(downbeat) {
+  const bus = ensureSfxBus();
+  if (!bus) return;
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  const g = audioCtx.createGain();
+  osc.connect(g); g.connect(bus);
+  osc.frequency.setValueAtTime(downbeat ? 95 : 70, now);
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(downbeat ? 0.14 : 0.08, now + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+  osc.start(now);
+  osc.stop(now + 0.13);
+}
+
+setInterval(() => {
+  const active = rhythmActive();
+  if (active !== rhythmWasActive) {
+    rhythmWasActive = active;
+    if (active) {
+      rhythmStartedAt = Date.now();
+      rhythmNextBeatAt = performance.now();
+      rhythmBeatCount = 0;
+    } else {
+      rhythmTapStreak = 0;
+    }
+    updateRhythmUi();
+  }
+  if (!active) return;
+  const now = performance.now();
+  if (now >= rhythmNextBeatAt) {
+    onRhythmBeat(rhythmBeatCount++);
+    const interval = 60000 / currentRhythmBpm();
+    rhythmNextBeatAt += interval;
+    if (rhythmNextBeatAt < now) rhythmNextBeatAt = now + interval; // fell behind (background tab) - resync instead of firing a burst
+  }
+}, 15);
+
+// Tempo from the audio: inter-onset intervals between nearby onsets,
+// folded into a 70-150 bpm range and histogrammed - the strongest bin
+// wins if it stands out enough. Spoken-word tracks often have no steady
+// pulse at all; then this stays null and the manual BPM is used.
+const rhythmOnsetTimes = [];
+onAudioOnset((strength, now) => {
+  rhythmOnsetTimes.push(now);
+  while (rhythmOnsetTimes.length && now - rhythmOnsetTimes[0] > 12000) rhythmOnsetTimes.shift();
+});
+
+function detectBpmFromOnsets() {
+  const t = rhythmOnsetTimes;
+  if (t.length < 10) return null;
+  const hist = new Map();
+  let total = 0;
+  for (let i = 0; i < t.length; i++) {
+    for (let j = i + 1; j < Math.min(t.length, i + 6); j++) {
+      const d = t[j] - t[i];
+      if (d < 250 || d > 2000) continue;
+      let bpm = 60000 / d;
+      while (bpm < 70) bpm *= 2;
+      while (bpm > 150) bpm /= 2;
+      const bin = Math.round(bpm / 3) * 3;
+      const w = 1 / (j - i);
+      hist.set(bin, (hist.get(bin) || 0) + w);
+      total += w;
+    }
+  }
+  let best = null, bestW = 0;
+  hist.forEach((w, bin) => { if (w > bestW) { bestW = w; best = bin; } });
+  return best && total > 0 && bestW / total >= 0.15 ? best : null;
+}
+
+setInterval(() => {
+  if (rhythmBpmSource !== 'audio') return;
+  detectedBpm = detectBpmFromOnsets();
+  updateRhythmUi();
+}, 4000);
+
+function rhythmTap() {
+  if (!rhythmActive()) return;
+  markInteraction();
+  const now = performance.now();
+  const interval = 60000 / currentRhythmBpm();
+  const prevBeat = rhythmNextBeatAt - interval;
+  const toPrev = now - prevBeat;
+  const toNext = rhythmNextBeatAt - now;
+  const beatIdx = toPrev <= toNext ? rhythmBeatCount - 1 : rhythmBeatCount;
+  const err = Math.min(Math.abs(toPrev), Math.abs(toNext));
+  const hitWindow = Math.min(140, interval * 0.22);
+  const pad = document.getElementById('rhythm-pad');
+  const flash = (cls) => { if (pad) { pad.classList.remove('hit', 'perfect', 'miss'); void pad.offsetWidth; pad.classList.add(cls); } };
+  if (err <= hitWindow && beatIdx !== rhythmLastTappedBeat) {
+    rhythmLastTappedBeat = beatIdx;
+    rhythmTapStreak++;
+    sessionStats.rhythmBest = Math.max(sessionStats.rhythmBest, rhythmTapStreak);
+    flash(err < 45 ? 'perfect' : 'hit');
+    nudgeEngagement(0.02);
+    if (rhythmTapStreak % 8 === 0) {
+      const xp = 4 + Math.floor(rhythmTapStreak / 8) * 2;
+      const mult = registerCombo();
+      awardXp(Math.round(xp * mult));
+      playChimeSound(0.6, 1 + Math.min(rhythmTapStreak, 64) * 0.004);
+      toast('🥁 In sync x' + rhythmTapStreak + '! +' + Math.round(xp * mult) + 'xp');
+      if (rhythmTapStreak % 16 === 0) {
+        const order = rhythmWalkOrder();
+        const idx = order.length ? order[(rhythmBeatCount - 1 + order.length) % order.length] : 0;
+        const kind = pickFxKind();
+        if (fxRewardsEnabled && fireTileFx(idx, kind)) showClaimRewardLabel(idx, '🥁 ' + TILE_FX_KINDS[kind].label);
+      }
+    }
+  } else {
+    flash('miss');
+    if (rhythmTapStreak >= 4) toast('🥁 Off beat - streak was x' + rhythmTapStreak, true);
+    rhythmTapStreak = 0;
+  }
+  updateRhythmPad();
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space' || !rhythmActive()) return;
+  const tag = (e.target && e.target.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  e.preventDefault(); // otherwise Space also "clicks" whatever button has focus
+  if (!e.repeat) rhythmTap();
+});
+
+function updateRhythmPad() {
+  const pad = document.getElementById('rhythm-pad');
+  if (!pad) return;
+  pad.classList.toggle('show', rhythmActive());
+  const streak = document.getElementById('rhythm-pad-streak');
+  if (streak) streak.innerText = rhythmTapStreak > 0 ? 'x' + rhythmTapStreak : 'tap / space';
+}
+
+function updateRhythmUi() {
+  setToggleBadge('rhythm-toggle', rhythmEnabled);
+  setToggleBadge('rhythm-waves-toggle', rhythmWaves);
+  setToggleBadge('rhythm-sound-toggle', rhythmSound);
+  setToggleBadge('rhythm-speed-toggle', rhythmSpeedSync);
+  ['manual', 'audio'].forEach((s) => {
+    const b = document.getElementById('rhythm-src-' + s);
+    if (b) b.classList.toggle('active', rhythmBpmSource === s);
+  });
+  const input = document.getElementById('rhythm-bpm-input');
+  if (input) input.value = rhythmBaseBpm;
+  const lbl = document.getElementById('l-rhythm-bpm');
+  if (lbl) lbl.innerText = rhythmBaseBpm + ' BPM';
+  const status = document.getElementById('rhythm-status');
+  if (status) {
+    const why = rhythmEnabled ? 'on' : rhythmZoneActive ? 'on (Rhythm Zone)' : finaleWantsRhythm() ? 'on (Finale)' : 'off';
+    const src = rhythmBpmSource === 'audio' ? (detectedBpm ? 'detected ~' + detectedBpm + ' BPM' : 'no steady beat in the audio - using ' + rhythmBaseBpm) : rhythmBaseBpm + ' BPM base';
+    status.innerText = 'Rhythm ' + why + ' · ' + src + (rhythmActive() ? ' · now ' + Math.round(currentRhythmBpm()) + ' BPM' : '');
+  }
+  updateRhythmPad();
+}
+setInterval(() => { if (rhythmActive()) updateRhythmUi(); }, 1000);
+
+function loadRhythmPrefs() {
+  const prefs = loadJsonPref('mm_rhythm', { enabled: false, bpm: 90, source: 'manual', waves: true, sound: false, speedSync: true });
+  rhythmEnabled = !!prefs.enabled;
+  rhythmBaseBpm = Math.max(50, Math.min(160, Number(prefs.bpm) || 90));
+  rhythmBpmSource = prefs.source === 'audio' ? 'audio' : 'manual';
+  rhythmWaves = !!prefs.waves;
+  rhythmSound = !!prefs.sound;
+  rhythmSpeedSync = !!prefs.speedSync;
+  updateRhythmUi();
+}
+
+function saveRhythmPrefs() {
+  saveJsonPref('mm_rhythm', { enabled: rhythmEnabled, bpm: rhythmBaseBpm, source: rhythmBpmSource, waves: rhythmWaves, sound: rhythmSound, speedSync: rhythmSpeedSync });
+  updateRhythmUi();
+}
+
+function toggleRhythm() { rhythmEnabled = !rhythmEnabled; saveRhythmPrefs(); }
+function toggleRhythmWaves() { rhythmWaves = !rhythmWaves; saveRhythmPrefs(); }
+function toggleRhythmSound() { rhythmSound = !rhythmSound; saveRhythmPrefs(); }
+function toggleRhythmSpeedSync() { rhythmSpeedSync = !rhythmSpeedSync; saveRhythmPrefs(); }
+function setRhythmBpm(v) { rhythmBaseBpm = parseInt(v, 10) || 90; saveRhythmPrefs(); }
+function setRhythmSource(s) { rhythmBpmSource = s; if (s === 'audio') detectedBpm = detectBpmFromOnsets(); saveRhythmPrefs(); }
+
+// ---- Fresh Drop ----
+// Newly added clips are held out of ordinary rotation server-side (see
+// _FRESH_CONDITION in db.py) and debut here one at a time instead: a
+// tile dims under a "fresh drop incoming" shimmer with a riser, then the
+// new clip lands with a reveal. Rationed so a batch isn't burned through
+// in one sitting - not before FRESH_DROP_FIRST_DELAY_MS into a session,
+// at least FRESH_DROP_MIN_GAP_MS apart, at most FRESH_DROP_SESSION_CAP
+// per visit. Whatever's left waits for the next session. Once a clip has
+// debuted it joins normal rotation, where its low play count already
+// earns it extra exploration weight for a while.
+const FRESH_DROP_REVEAL_DELAY_MS = 2200;
+let freshDropEnabled = true;
+let freshWaiting = 0;
+let freshDropsThisSession = 0;
+let lastFreshDropAt = 0;
+let freshDropInFlight = false;
+
+function checkFreshStatus(announce) {
+  fetch('/api/fresh_status')
+    .then((r) => r.json())
+    .then((d) => {
+      const prev = freshWaiting;
+      freshWaiting = (d && d.waiting) || 0;
+      if (announce && freshWaiting > 0) toast('🆕 ' + freshWaiting + ' fresh clip' + (freshWaiting === 1 ? '' : 's') + ' waiting to drop');
+      else if (!announce && freshWaiting > prev) toast('🆕 New clips noticed - they\'ll drop in over time');
+      updateFreshUi();
+    })
+    .catch(() => {});
+}
+
+function maybeTriggerFreshDrop() {
+  if (!freshDropEnabled || freshDropInFlight || freshWaiting <= 0 || !tileElements.length) return;
+  const now = Date.now();
+  if (now - sessionStartedAt < TUNING.FRESH_DROP_FIRST_DELAY_MS) return;
+  if (freshDropsThisSession >= TUNING.FRESH_DROP_SESSION_CAP) return;
+  if (now - lastFreshDropAt < TUNING.FRESH_DROP_MIN_GAP_MS) return;
+  if (anticipationActive || finalePhaseNow() === 'afterglow') return;
+  if (Math.random() >= TUNING.FRESH_DROP_PROBABILITY) return;
+  runFreshDrop();
+}
+
+function runFreshDrop(manual) {
+  if (freshDropInFlight || !tileElements.length) return;
+  if (freshWaiting <= 0) { if (manual) toast('🆕 No fresh clips waiting', true); return; }
+  freshDropInFlight = true;
+  lastFreshDropAt = Date.now();
+  const idx = pickAmbientTarget(chaseFlashTileIndex);
+  const tile = tileElements[idx];
+  if (tile) tile.classList.add('fresh-incoming');
+  playRiserSound(FRESH_DROP_REVEAL_DELAY_MS / 1000);
+  setTimeout(() => {
+    fetch('/api/fresh_drop?screen=' + idx)
+      .then((r) => r.json())
+      .then((d) => {
+        freshWaiting = (d && d.waiting) || 0;
+        if (!d || !d.picked) {
+          if (tile) tile.classList.remove('fresh-incoming');
+          playFizzleSound();
+          return;
+        }
+        freshDropsThisSession++;
+        sessionStats.freshDrops++;
+        // A beat for the new clip to actually start loading before the reveal.
+        setTimeout(() => {
+          if (tile) {
+            tile.classList.remove('fresh-incoming');
+            tile.classList.add('fresh-reveal');
+            setTimeout(() => tile.classList.remove('fresh-reveal'), 7000);
+          }
+          playChimeSound(1.15);
+          playBassDropSound(0.8);
+          fireTileFx(idx, 'shock');
+          burstConfetti(16);
+          showClaimRewardLabel(idx, '🆕 Fresh Drop!');
+          awardXp(10);
+          markNoveltyHappened();
+          nudgeEngagement(0.1);
+          toast('🆕 Fresh Drop! +10xp' + (freshWaiting ? ' (' + freshWaiting + ' still waiting)' : ''));
+        }, 600);
+      })
+      .catch(() => { if (tile) tile.classList.remove('fresh-incoming'); })
+      .finally(() => { freshDropInFlight = false; updateFreshUi(); });
+  }, FRESH_DROP_REVEAL_DELAY_MS);
+}
+
+function updateFreshUi() {
+  setToggleBadge('fresh-drop-toggle', freshDropEnabled);
+  const el = document.getElementById('fresh-drop-status');
+  if (el) {
+    el.innerText = freshWaiting + ' waiting · ' + freshDropsThisSession + ' / ' + TUNING.FRESH_DROP_SESSION_CAP + ' dropped this session';
+  }
+}
+
+function loadFreshDropPref() {
+  try { const raw = localStorage.getItem('mm_fresh_drop_enabled'); if (raw !== null) freshDropEnabled = raw === '1'; } catch (e) {}
+  updateFreshUi();
+}
+
+function toggleFreshDrop() {
+  freshDropEnabled = !freshDropEnabled;
+  try { localStorage.setItem('mm_fresh_drop_enabled', freshDropEnabled ? '1' : '0'); } catch (e) {}
+  updateFreshUi();
+}
+
+// ---- Finale ----
+// A one-shot planned peak, distinct from Auto-Pilot's repeating arc:
+// Auto-Pilot keeps cycling calm -> climax -> cooldown for as long as it
+// runs, while a Finale is a single longer climb that goes further than
+// any one cycle does and then actually lands, with a recap at the end.
+//
+//   build (0-55%)      pace quickens, barrage/jackpot odds and floaters
+//                      climb, selection leans toward your favorites,
+//                      speed eases up, mantras get more frequent
+//   peak (55-85%)      spiral fades in, a Surge runs for the whole
+//                      stretch, color splashes and tile FX keep firing
+//   climax (85%)       a forced MEGA jackpot + full Color Rush + mantra
+//                      flood, all at once
+//   afterglow (85-100) everything eases back below normal and settles,
+//                      then the recap card
+//
+// While it runs it owns every control Auto-Pilot would otherwise drive
+// (autopilotTick steps aside) and hands them back when it ends. Rhythm
+// Mode rides along through build and peak. With Auto-Pilot on, it can
+// also offer itself once a session has run long (see maybeOfferFinale).
+const FINALE_BUILD_END = 0.55;
+const FINALE_CLIMAX_AT = 0.85;
+const FINALE_TICK_MS = 2000;
+const FINALE_OFFER_CHECK_MS = 60000;
+const FINALE_OFFER_MIN_SESSION_MS = 15 * 60000;
+const FINALE_OFFER_COOLDOWN_MS = 25 * 60000;
+const FINALE_OFFER_WINDOW_MS = 12000;
+let finaleActive = false;
+let finaleMinutes = 5;
+let finaleOfferEnabled = true;
+let finaleStartedAt = 0;
+let finaleDurationMs = 0;
+let finaleClimaxFired = false;
+let finaleLastPhase = null;
+let finaleLastPace = null;
+let finaleSavedPace = 2;
+let finaleSavedFxCount = null;
+let finaleTimer = null;
+let lastFinaleOfferAt = 0;
+let finaleOfferTimer = null;
+
+function finaleProgress() {
+  return finaleActive ? Math.min(1, (Date.now() - finaleStartedAt) / finaleDurationMs) : 0;
+}
+
+function finalePhaseNow() {
+  if (!finaleActive) return null;
+  const p = finaleProgress();
+  return p < FINALE_BUILD_END ? 'build' : p < FINALE_CLIMAX_AT ? 'peak' : 'afterglow';
+}
+
+function finaleSpeedMult() {
+  if (!finaleActive) return 1;
+  const p = finaleProgress();
+  if (p < FINALE_BUILD_END) { const t = p / FINALE_BUILD_END; return 1 + 0.12 * t * t; }
+  if (p < FINALE_CLIMAX_AT) return 1.12 + 0.16 * ((p - FINALE_BUILD_END) / (FINALE_CLIMAX_AT - FINALE_BUILD_END));
+  // Afterglow dips below normal (a real exhale), then settles back to 1x
+  // by the end so handing control back doesn't jump.
+  const t = (p - FINALE_CLIMAX_AT) / (1 - FINALE_CLIMAX_AT);
+  return t < 0.6 ? lerp(1.28, 0.85, t / 0.6) : lerp(0.85, 1, (t - 0.6) / 0.4);
+}
+
+function finaleAmbientBoost() {
+  const phase = finalePhaseNow();
+  if (phase === 'build') return 0.6 * (finaleProgress() / FINALE_BUILD_END);
+  if (phase === 'peak') return 1.0;
+  return 0;
+}
+
+function finaleMantraMult() {
+  const phase = finalePhaseNow();
+  if (phase === 'build') return 1 + finaleProgress() / FINALE_BUILD_END;
+  if (phase === 'peak') return 3;
+  if (phase === 'afterglow') return 0.6;
+  return 1;
+}
+
+function finaleTempoMult() {
+  const phase = finalePhaseNow();
+  if (phase === 'build') return 1 + 0.15 * (finaleProgress() / FINALE_BUILD_END);
+  if (phase === 'peak') return 1.2;
+  return 1;
+}
+
+function finaleWantsRhythm() {
+  const phase = finalePhaseNow();
+  return phase === 'build' || phase === 'peak';
+}
+
+function finaleStatusText() {
+  const phase = finalePhaseNow();
+  const pct = Math.round(finaleProgress() * 100);
+  const names = { build: 'Building', peak: 'Peak', afterglow: 'Afterglow' };
+  return '🎆 Finale · ' + (names[phase] || '') + ' ' + pct + '%';
+}
+
+function startFinale() {
+  if (finaleActive) return;
+  markInteraction();
+  hideFinaleOffer();
+  finaleActive = true;
+  finaleStartedAt = Date.now();
+  finaleDurationMs = finaleMinutes * 60000;
+  finaleClimaxFired = false;
+  finaleLastPhase = null;
+  finaleLastPace = null;
+  const paceInput = document.getElementById('pace-input');
+  finaleSavedPace = paceInput ? parseInt(paceInput.value, 10) : 2;
+  finaleSavedFxCount = fxCount;
+  toast('🎆 Finale starting - ' + finaleMinutes + ' min');
+  mantraBurst(2);
+  finaleTick();
+  finaleTimer = setInterval(finaleTick, FINALE_TICK_MS);
+  updateFinaleUi();
+}
+
+function onFinalePhaseChange(phase) {
+  if (phase === 'peak') {
+    toast('🎆 Finale: Peak');
+    maybeTriggerSpiralOverlay();
+    // A Surge for the whole peak stretch - the badge and every odds roll
+    // that already reads isSurgeActive() pick it up for free.
+    surgeExpireAt = Math.max(surgeExpireAt, finaleStartedAt + finaleDurationMs * FINALE_CLIMAX_AT);
+    mantraBurst(3);
+    fireColorSplashPiece('border');
+  } else if (phase === 'afterglow') {
+    const theater = document.getElementById('theater-box');
+    if (theater) {
+      theater.style.setProperty('--afterglow-duration', Math.round(finaleDurationMs * (1 - FINALE_CLIMAX_AT) / 1000) + 's');
+      theater.classList.remove('afterglow');
+      void theater.offsetWidth;
+      theater.classList.add('afterglow');
+    }
+  }
+}
+
+function finaleClimax() {
+  finaleClimaxFired = true;
+  pendingServerTier = 'mega'; // consumed by resolveTier inside runPayoff
+  runPayoff();
+  triggerColorRush();
+  mantraBurst(5);
+  fireRandomTileFx(4);
+  playBassDropSound(2);
+  awardXp(50);
+  toast('🎆 FINALE! +50xp');
+}
+
+function finaleTick() {
+  if (!finaleActive) return;
+  const p = finaleProgress();
+  const phase = finalePhaseNow();
+  if (phase !== finaleLastPhase) { finaleLastPhase = phase; onFinalePhaseChange(phase); }
+  if (p >= FINALE_CLIMAX_AT && !finaleClimaxFired) finaleClimax();
+  let barrage, jackpot, novelty, paceIdx, fxTarget;
+  if (phase === 'build') {
+    const t = p / FINALE_BUILD_END;
+    barrage = lerp(0.03, 0.18, t);
+    jackpot = lerp(0.06, 0.3, t);
+    novelty = lerp(0.25, 0.05, t); // leans into favorites as it builds
+    paceIdx = t < 0.4 ? 2 : 1;
+    fxTarget = Math.round(lerp(2, 5, t));
+  } else if (phase === 'peak') {
+    barrage = 0.28;
+    jackpot = 0.45;
+    novelty = 0.05;
+    paceIdx = 0;
+    fxTarget = 7;
+    if (Math.random() < 0.3) fireColorSplashPiece();
+    if (Math.random() < 0.3) fireRandomTileFx(1);
+  } else {
+    barrage = 0.01;
+    jackpot = 0.02;
+    novelty = 0.2;
+    paceIdx = 3;
+    fxTarget = 1;
+  }
+  fetch('/api/intensity?barrage=' + barrage.toFixed(3) + '&jackpot=' + jackpot.toFixed(3));
+  fetch('/api/novelty?bonus=' + novelty.toFixed(3));
+  if (paceIdx !== finaleLastPace) { finaleLastPace = paceIdx; pace(paceIdx, true); }
+  if (fxEnabled && fxCount !== fxTarget) setFxCount(fxTarget);
+  updateFinaleUi();
+  if (p >= 1) endFinale(false);
+}
+
+function endFinale(early) {
+  if (!finaleActive) return;
+  finaleActive = false;
+  clearInterval(finaleTimer);
+  finaleTimer = null;
+  if (fxEnabled && finaleSavedFxCount != null) setFxCount(finaleSavedFxCount);
+  if (autopilotEnabled) {
+    autopilotLastPace = null; // force its next tick to re-send pace rather than assume it's unchanged
+    autopilotTick();
+  } else {
+    fetch('/api/intensity?reset=1');
+    applyVibeDial(vibeDialValue);
+    pace(finaleSavedPace, true);
+  }
+  updateFinaleUi();
+  showSessionRecap(early ? '🎆 Finale (ended early)' : '🎆 Finale complete');
+}
+
+function toggleFinale() {
+  if (finaleActive) endFinale(true);
+  else startFinale();
+}
+
+function setFinaleMinutes(v) {
+  finaleMinutes = Math.max(2, Math.min(15, parseInt(v, 10) || 5));
+  saveFinalePrefs();
+  updateFinaleUi();
+}
+
+function toggleFinaleOffer() {
+  finaleOfferEnabled = !finaleOfferEnabled;
+  saveFinalePrefs();
+  updateFinaleUi();
+}
+
+function saveFinalePrefs() {
+  saveJsonPref('mm_finale', { minutes: finaleMinutes, offer: finaleOfferEnabled });
+}
+
+function loadFinalePrefs() {
+  const prefs = loadJsonPref('mm_finale', { minutes: 5, offer: true });
+  finaleMinutes = Math.max(2, Math.min(15, Number(prefs.minutes) || 5));
+  finaleOfferEnabled = !!prefs.offer;
+  updateFinaleUi();
+}
+
+function updateFinaleUi() {
+  const btn = document.getElementById('finale-btn');
+  if (btn) {
+    btn.innerText = finaleActive ? '⏹ End Finale Now' : '🎆 Start Finale';
+    btn.classList.toggle('active', finaleActive);
+  }
+  const input = document.getElementById('finale-minutes-input');
+  if (input) input.value = finaleMinutes;
+  const lbl = document.getElementById('l-finale-minutes');
+  if (lbl) lbl.innerText = finaleMinutes + ' min';
+  setToggleBadge('finale-offer-toggle', finaleOfferEnabled);
+  const status = document.getElementById('finale-status');
+  if (status) status.innerText = finaleActive ? finaleStatusText() : 'Ready.';
+}
+
+// Only offers itself while Auto-Pilot is steering and the session has
+// genuinely run long - a suggestion to land the session on a high, not
+// a nag. Ignoring it just lets it fade; it won't ask again for a while.
+function maybeOfferFinale() {
+  if (!finaleOfferEnabled || finaleActive || !autopilotEnabled || document.hidden || anticipationActive) return;
+  const now = Date.now();
+  if (now - sessionStartedAt < Math.max(FINALE_OFFER_MIN_SESSION_MS, typicalSessionLenMs * 0.8)) return;
+  if (now - lastFinaleOfferAt < FINALE_OFFER_COOLDOWN_MS) return;
+  lastFinaleOfferAt = now;
+  showFinaleOffer();
+}
+setInterval(maybeOfferFinale, FINALE_OFFER_CHECK_MS);
+
+function showFinaleOffer() {
+  const box = document.getElementById('finale-offer-prompt');
+  if (!box) return;
+  box.style.display = 'flex';
+  void box.offsetWidth;
+  box.classList.add('show');
+  const fill = box.querySelector('.finale-offer-timer-fill');
+  if (fill) {
+    fill.style.transition = 'none';
+    fill.style.width = '100%';
+    void fill.offsetWidth;
+    fill.style.transition = 'width ' + (FINALE_OFFER_WINDOW_MS / 1000) + 's linear';
+    fill.style.width = '0%';
+  }
+  clearTimeout(finaleOfferTimer);
+  finaleOfferTimer = setTimeout(hideFinaleOffer, FINALE_OFFER_WINDOW_MS);
+}
+
+function hideFinaleOffer() {
+  clearTimeout(finaleOfferTimer);
+  const box = document.getElementById('finale-offer-prompt');
+  if (!box) return;
+  box.classList.remove('show');
+  setTimeout(() => { if (!box.classList.contains('show')) box.style.display = 'none'; }, 260);
+}
+
+// ---- Session recap ----
+const RECAP_AUTO_HIDE_MS = 30000;
+let recapHideTimer = null;
+
+function formatDuration(ms) {
+  const totalMin = Math.floor(ms / 60000);
+  const h = Math.floor(totalMin / 60), m = totalMin % 60;
+  return h ? h + 'h ' + m + 'm' : m + 'm';
+}
+
+function showSessionRecap(title) {
+  const box = document.getElementById('session-recap');
+  if (!box) return;
+  // Prestiging resets xpTotal to 0 - count from wherever it restarted.
+  const xpGained = prestigeCount > sessionPrestigeStart ? xpTotal : Math.max(0, xpTotal - sessionXpStart);
+  const rows = [
+    ['⏱', 'Session', formatDuration(Date.now() - sessionStartedAt)],
+    ['⭐', 'XP earned', '+' + xpGained + ' (LV ' + xpLevel + ')'],
+    ['❤️', 'Hearts given', sessionStats.hearts],
+    ['🎰', 'Jackpots', sessionStats.jackpots],
+    ['🏃', 'Catches', sessionStats.catches + (sessionStats.bestChain ? ' (best chain x' + sessionStats.bestChain + ')' : '')],
+    ['✨', 'Bonus taps', sessionStats.bonuses],
+    ['🥁', 'Best in-sync run', sessionStats.rhythmBest ? 'x' + sessionStats.rhythmBest : '-'],
+    ['🆕', 'Fresh drops', sessionStats.freshDrops],
+  ];
+  document.getElementById('session-recap-title').innerText = title || '📊 Session Recap';
+  document.getElementById('session-recap-grid').innerHTML = rows.map(([icon, label, value]) =>
+    '<div class="recap-row"><span class="recap-icon">' + icon + '</span><span class="recap-label">' + label + '</span><span class="recap-value">' + value + '</span></div>'
+  ).join('');
+  box.style.display = 'flex';
+  void box.offsetWidth;
+  box.classList.add('show');
+  clearTimeout(recapHideTimer);
+  recapHideTimer = setTimeout(hideSessionRecap, RECAP_AUTO_HIDE_MS);
+}
+
+function hideSessionRecap() {
+  clearTimeout(recapHideTimer);
+  const box = document.getElementById('session-recap');
+  if (!box) return;
+  box.classList.remove('show');
+  setTimeout(() => { if (!box.classList.contains('show')) box.style.display = 'none'; }, 300);
+}
+
+// ---- Init ----
+// Called from dashboard.js's window.onload, after its own prefs/state
+// have loaded (XP in particular, for the recap's starting point).
+function initLayers() {
+  sessionXpStart = xpTotal;
+  sessionPrestigeStart = prestigeCount;
+  loadAudioReactPrefs();
+  loadMantraPrefs();
+  loadFxRewardsPref();
+  loadRhythmPrefs();
+  loadFreshDropPref();
+  loadFinalePrefs();
+  startTunableInterval('FRESH_DROP_CHECK_MS', maybeTriggerFreshDrop);
+  checkFreshStatus(true);
+  setInterval(() => checkFreshStatus(false), 120000);
+}

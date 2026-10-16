@@ -37,13 +37,16 @@ def sync_library(db: Database, config: Config) -> List[str]:
     os.makedirs(config.media_dir, exist_ok=True)
     os.makedirs(config.audio_dir, exist_ok=True)
     folders = list_folders(config)
+    # The very first scan of an empty DB is the library itself, not a
+    # "drop" - only clips appearing after that count as fresh.
+    library_existed = db.video_count() > 0
     for folder in folders:
         db.ensure_folder(folder)
         fdir = config.media_dir if folder == GENERAL_FOLDER else os.path.join(config.media_dir, folder)
         for entry in os.listdir(fdir):
             full = os.path.join(fdir, entry)
             if os.path.isfile(full) and entry.lower().endswith(config.video_exts):
-                db.ensure_video(full, folder)
+                db.ensure_video(full, folder, fresh=library_existed)
     db.commit()
     return folders
 
@@ -118,6 +121,8 @@ def pick_video(
     now = time.time()
     bonus = config.exploration_bonus_c if exploration_bonus is None else exploration_bonus
     rows = db.favorite_video_rewards() if folder == FAVORITES_FOLDER else db.video_rewards(folder)
+    if not rows and folder != FAVORITES_FOLDER:
+        rows = db.video_rewards(folder, include_fresh=True)  # a folder holding nothing but fresh clips still has to play something
     if not rows:
         return None
     if exclude:
@@ -179,6 +184,20 @@ def pick_unplayed_video(db: Database, folder: Optional[str] = None) -> Optional[
     folder, since "something you've truly never seen" shouldn't be scoped
     to whatever's rotating today."""
     return db.random_unplayed_video(folder)
+
+
+def fresh_video_paths(db: Database) -> List[str]:
+    """Clips waiting on their Fresh Drop debut, oldest arrival first."""
+    return db.fresh_video_paths()
+
+
+def pick_fresh_video(db: Database) -> Optional[str]:
+    paths = db.fresh_video_paths()
+    return paths[0] if paths else None
+
+
+def mark_debuted(db: Database, path: str):
+    db.mark_debuted(path)
 
 
 def bump_loop_anchor(db: Database, path: Optional[str], position: Optional[float]) -> Optional[dict]:
