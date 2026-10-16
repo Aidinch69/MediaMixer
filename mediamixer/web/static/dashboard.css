@@ -375,23 +375,34 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    closed-by-default <details> fixes that: a tab opens as a short list of
    titles with a one-line description each, and any one section expands
    on its own without needing to scroll past every other section's
-   controls to get there. */
-.settings-section{background:#0e081f;border:1px solid #221435;border-radius:8px;overflow:hidden}
-.settings-section>summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:3px;padding:10px 12px;user-select:none}
+   controls to get there.
+
+   First pass only changed the interaction (collapse/expand) and left the
+   actual visual design untouched, which read as "still looks the same" -
+   this pass gives the section card real visual weight of its own:
+   a richer gradient background and a colored left spine (one tab-accent
+   variable instead of five repeated color lists) so it reads as a
+   distinct container, not just indented text; a visible hover state and
+   an open-state border/glow so which sections are expanded is obvious at
+   a glance while scrolling; and a bit more breathing room throughout. */
+.panel-tab[data-tab="display"]{--tab-accent:#4dd4ff}
+.panel-tab[data-tab="autopilot"]{--tab-accent:#ffa94d}
+.panel-tab[data-tab="engagement"]{--tab-accent:#ffd43b}
+.panel-tab[data-tab="audio"]{--tab-accent:#ff8fc7}
+.panel-tab[data-tab="more"]{--tab-accent:#b399ff}
+.panel-tab[data-tab="tuning"]{--tab-accent:#8fffb3}
+.settings-section{background:linear-gradient(165deg,#160d2c,#0c0620 65%);border:1px solid #2a1540;border-left:3px solid var(--tab-accent,#8a7aa8);border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.35);transition:border-color .2s ease,box-shadow .2s ease}
+.settings-section[open]{border-color:var(--tab-accent,#8a7aa8);box-shadow:0 0 0 1px var(--tab-accent,#8a7aa8) inset,0 2px 12px rgba(0,0,0,.45)}
+.settings-section>summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:5px;padding:13px 15px;user-select:none;transition:background .15s ease}
+.settings-section>summary:hover{background:rgba(255,255,255,.04)}
+.settings-section[open]>summary{border-bottom:1px solid rgba(255,255,255,.08)}
 .settings-section>summary::-webkit-details-marker{display:none}
-.section-title{display:flex;align-items:center;gap:6px;color:#c999ff;text-transform:uppercase;letter-spacing:1px;font-size:1.05rem}
-.section-title::before{content:'▸';display:inline-block;transition:transform .15s ease;font-size:.65rem;color:#8a7aa8}
-.settings-section[open]>summary .section-title::before{transform:rotate(90deg)}
-.settings-section>summary:hover .section-title::before{color:#c999ff}
-.settings-section-desc{font-size:.68rem;color:#6e6e7a;padding-left:15px}
-.settings-section-body{display:flex;flex-direction:column;gap:12px;padding:0 12px 12px}
-#tuning-groups{display:flex;flex-direction:column;gap:14px}
-.panel-tab[data-tab="display"] .section-title{color:#4dd4ff}
-.panel-tab[data-tab="autopilot"] .section-title{color:#ffa94d}
-.panel-tab[data-tab="engagement"] .section-title{color:#ffd43b}
-.panel-tab[data-tab="audio"] .section-title{color:#ff8fc7}
-.panel-tab[data-tab="more"] .section-title{color:#b399ff}
-.panel-tab[data-tab="tuning"] .section-title{color:#8fffb3}
+.section-title{display:flex;align-items:center;gap:8px;color:var(--tab-accent,#c999ff);text-transform:uppercase;letter-spacing:1px;font-size:1.08rem}
+.section-title::before{content:'▸';display:inline-block;transition:transform .15s ease;font-size:.65rem;color:var(--tab-accent,#8a7aa8);opacity:.75}
+.settings-section[open]>summary .section-title::before{transform:rotate(90deg);opacity:1}
+.settings-section-desc{font-size:.7rem;color:#8a8a96;padding-left:16px;line-height:1.4}
+.settings-section-body{display:flex;flex-direction:column;gap:12px;padding:12px 15px 15px}
+#tuning-groups{display:flex;flex-direction:column;gap:16px}
 .panel{position:fixed;top:0;right:0;width:min(400px,92vw);height:100vh;height:100dvh;background:linear-gradient(180deg,#0e0720,#0a0515 40%);border-left:1px solid #2a1540;box-shadow:-10px 0 30px rgba(0,0,0,.5);padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;overflow-y:auto;z-index:25;transform:translateX(0);transition:transform .25s ease}
 /* Tabs group what used to be one long scroll into a handful of pages -
    Display / Engagement / Audio / More - so finding a given option means
@@ -402,7 +413,7 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .panel-tab-btn{flex:1;background:linear-gradient(180deg,#1a0f2b,#140a22);border:1px solid #361e52;color:#9a7ab8;padding:9px 4px;border-radius:8px;cursor:pointer;font-weight:bold;text-transform:uppercase;font-size:.68rem;transition:.15s}
 .panel-tab-btn:hover{border-color:#b84dff;color:#d6a3ff}
 .panel-tab-btn.active{background:linear-gradient(180deg,#3a1d5c,#241038);border-color:#d699ff;color:#fff;box-shadow:0 0 10px rgba(184,77,255,.35)}
-.panel-tab{display:none;flex-direction:column;gap:14px}
+.panel-tab{display:none;flex-direction:column;gap:16px}
 .panel-tab.active{display:flex}
 .panel.collapsed{transform:translateX(100%)}
 .panel-toggle{position:fixed;top:16px;right:16px;z-index:30;width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;background:#150a28;color:#fff;border:1px solid #2d163f;border-radius:8px;cursor:pointer;font-size:14px}
@@ -432,11 +443,7 @@ h2{font-size:1.25rem;border-bottom:none;padding-bottom:0;display:flex;justify-co
    every h3 in the panel being the same plain purple - a quick visual
    cue for which page you're on as you scroll, not just the tab bar
    itself. */
-.panel-tab[data-tab="display"] h3{color:#4dd4ff}
-.panel-tab[data-tab="engagement"] h3{color:#ffd43b}
-.panel-tab[data-tab="audio"] h3{color:#ff8fc7}
-.panel-tab[data-tab="more"] h3{color:#b399ff}
-.panel-tab[data-tab="tuning"] h3{color:#8fffb3}
+.panel-tab h3{color:var(--tab-accent,#c999ff)}
 .metric{background:#0e081f;padding:10px;border-radius:8px;border:1px solid #221435;font-size:.82rem;display:flex;flex-direction:column;gap:4px}
 .trophy-case{display:flex;flex-wrap:wrap;gap:6px;background:#0e081f;padding:10px;border-radius:8px;border:1px solid #221435}
 .trophy-chip{font-size:.72rem;padding:4px 8px;border-radius:12px;background:#150a28;border:1px solid #2d163f;color:#5c5c66;white-space:nowrap}
