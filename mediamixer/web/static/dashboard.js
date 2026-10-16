@@ -54,6 +54,7 @@ const TUNING_DEFAULTS = {
   CHASE_CAUGHT_MAX_PULSES: 3,
   DUE_AURA_THRESHOLD_MS: 45000,
   DUE_AURA_MIN_HOLD_MS: 15000,
+  DUE_AURA_EXIT_FADE_MS: 2000,
   MYSTERY_TILE_CHECK_MS: 30000,
   MYSTERY_TILE_PROBABILITY: 0.15,
   MYSTERY_TILE_DURATION_MS: 1600,
@@ -84,6 +85,11 @@ const TUNING_DEFAULTS = {
   DYNAMIC_MOSAIC_CHECK_MS: 10000,
   DYNAMIC_MOSAIC_DRIFT_PROBABILITY: 0.1,
   BARRAGE_SPEED_FADE_MS: 3000,
+  BARRAGE_DIM_OPACITY: 0.6,
+  BARRAGE_DIM_FADE_IN_MS: 1500,
+  BARRAGE_DIM_FADE_OUT_MS: 3000,
+  BARRAGE_DIM_SPEED_MULT: 0.65,
+  BONUS_CLAIM_SPEED_FADE_MS: 2000,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -172,9 +178,9 @@ const TUNING_GROUPS = [
   { label: 'Spiral', desc: 'Full-screen spiral overlay opacity, hold, and fade timing.', keys: ['SPIRAL_OPACITY_MIN', 'SPIRAL_OPACITY_RANGE', 'SPIRAL_HOLD_MIN_MS', 'SPIRAL_HOLD_RANGE_MS', 'SPIRAL_FADE_MIN_MS', 'SPIRAL_FADE_RANGE_MS', 'SPIRAL_BREATHE_PROBABILITY', 'SPIRAL_BREATHE_INTERVAL_MS'] },
   { label: 'Sealed Tile', desc: 'Lock odds, duration, slowdown, and miss/unlock fade timing.', keys: ['SEALED_PROBABILITY', 'SEALED_CHECK_MS', 'SEALED_DURATION_MS', 'SEALED_LOCK_SPEED_MULT', 'SEALED_MISS_HOLD_MS', 'SEALED_MISS_FADE_MS', 'SEALED_UNLOCK_FADE_MS'] },
   { label: 'Chase', desc: 'Chase-flash odds, window timing, hop delay, and catch XP.', keys: ['CHASE_PROBABILITY', 'CHASE_CHECK_MS', 'CHASE_FLASH_START_MS', 'CHASE_FLASH_MIN_MS', 'CHASE_HOP_DELAY_MS', 'CHASE_CAUGHT_MAX_PULSES', 'CHASE_XP_BASE', 'CHASE_XP_PER_CATCH'] },
-  { label: 'Bonus Window', desc: 'Bonus-tile odds, check interval, and duration.', keys: ['BONUS_WINDOW_PROBABILITY', 'BONUS_WINDOW_CHECK_MS', 'BONUS_WINDOW_DURATION_MS'] },
+  { label: 'Bonus Window', desc: 'Bonus-tile odds, check interval, duration, and claim speed fade.', keys: ['BONUS_WINDOW_PROBABILITY', 'BONUS_WINDOW_CHECK_MS', 'BONUS_WINDOW_DURATION_MS', 'BONUS_CLAIM_SPEED_FADE_MS'] },
   { label: 'Color Rush / Splash', desc: 'Odds and check intervals for both color effects.', keys: ['COLOR_RUSH_PROBABILITY', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_PROBABILITY', 'COLOR_SPLASH_CHECK_MS'] },
-  { label: 'Mystery Tile & Due-Aura', desc: 'Mystery-tile odds/duration and the idle due-aura threshold.', keys: ['MYSTERY_TILE_PROBABILITY', 'MYSTERY_TILE_CHECK_MS', 'MYSTERY_TILE_DURATION_MS', 'TRUE_MYSTERY_PROBABILITY', 'DUE_AURA_THRESHOLD_MS', 'DUE_AURA_MIN_HOLD_MS'] },
+  { label: 'Mystery Tile & Due-Aura', desc: 'Mystery-tile odds/duration and the idle due-aura threshold/fade.', keys: ['MYSTERY_TILE_PROBABILITY', 'MYSTERY_TILE_CHECK_MS', 'MYSTERY_TILE_DURATION_MS', 'TRUE_MYSTERY_PROBABILITY', 'DUE_AURA_THRESHOLD_MS', 'DUE_AURA_MIN_HOLD_MS', 'DUE_AURA_EXIT_FADE_MS'] },
   { label: 'Spin & Spawning', desc: 'Spin cooldown and the minimum gap between ambient spawns.', keys: ['SPIN_COOLDOWN_MS', 'AMBIENT_SPAWN_SEPARATION_MS'] },
   { label: 'Patience Hold', desc: 'No-touch idle threshold, check interval, and bonus XP.', keys: ['PATIENCE_CHECK_MS', 'PATIENCE_HOLD_MS', 'PATIENCE_XP'] },
   { label: 'Hold-to-Heart', desc: 'Press duration and strength of a held heart tap.', keys: ['HOLD_TO_HEART_MS', 'HOLD_TO_HEART_STRENGTH'] },
@@ -183,7 +189,7 @@ const TUNING_GROUPS = [
   { label: 'Lock Slowdown', desc: 'How much a locked screen slows down.', keys: ['LOCK_SLOWDOWN_MULT'] },
   { label: 'Double Feature', desc: 'Odds and check interval for a surprise second feature.', keys: ['DOUBLE_FEATURE_CHECK_MS', 'DOUBLE_FEATURE_PROBABILITY'] },
   { label: 'Layout Fade / Dynamic Mosaic', desc: 'Fade timing and the automatic-layout-change cooldown/cadence.', keys: ['LAYOUT_FADE_MS', 'LAYOUT_FADE_HOLD_MS', 'LAYOUT_CHANGE_COOLDOWN_MS', 'DYNAMIC_MOSAIC_CHECK_MS', 'DYNAMIC_MOSAIC_DRIFT_PROBABILITY'] },
-  { label: 'Barrage/Jackpot Hype', desc: 'How long the hype speed-up takes to fade in and back out.', keys: ['BARRAGE_SPEED_FADE_MS'] },
+  { label: 'Barrage/Jackpot Hype', desc: 'Speed-up fade timing, plus the non-selected tiles\' dim/slowdown.', keys: ['BARRAGE_SPEED_FADE_MS', 'BARRAGE_DIM_OPACITY', 'BARRAGE_DIM_FADE_IN_MS', 'BARRAGE_DIM_FADE_OUT_MS', 'BARRAGE_DIM_SPEED_MULT'] },
   { label: 'Multipliers & XP', desc: 'Heat/heart multiplier caps and decay, hidden-window odds, XP amounts.', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
 ];
 const TUNING_META = {
@@ -196,6 +202,7 @@ const TUNING_META = {
   BONUS_WINDOW_CHECK_MS: { label: 'Bonus-window check interval', unit: 's', min: 5000, max: 60000, step: 1000 },
   BONUS_WINDOW_PROBABILITY: { label: 'Bonus-window odds', unit: 'pct', min: 0, max: 0.6, step: 0.01 },
   BONUS_WINDOW_DURATION_MS: { label: 'Bonus-window duration', unit: 's', min: 1000, max: 15000, step: 500 },
+  BONUS_CLAIM_SPEED_FADE_MS: { label: 'Bonus claim speed fade (up & down)', unit: 's', min: 250, max: 6000, step: 250 },
   SEALED_CHECK_MS: { label: 'Sealed-tile check interval', unit: 's', min: 5000, max: 90000, step: 1000 },
   SEALED_PROBABILITY: { label: 'Sealed-tile odds', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
   SEALED_DURATION_MS: { label: 'Sealed-tile duration', unit: 's', min: 2000, max: 20000, step: 500 },
@@ -229,6 +236,7 @@ const TUNING_META = {
   TRUE_MYSTERY_PROBABILITY: { label: 'True Mystery odds (of a trigger)', unit: 'pct', min: 0, max: 1, step: 0.05 },
   DUE_AURA_THRESHOLD_MS: { label: 'Due-aura idle threshold', unit: 's', min: 10000, max: 180000, step: 5000 },
   DUE_AURA_MIN_HOLD_MS: { label: 'Due-aura min hold (before handoff)', unit: 's', min: 2000, max: 60000, step: 1000 },
+  DUE_AURA_EXIT_FADE_MS: { label: 'Due-aura exit fade (handoff or rated away)', unit: 's', min: 500, max: 6000, step: 250 },
   SPIN_COOLDOWN_MS: { label: 'Spin cooldown', unit: 's', min: 5000, max: 120000, step: 5000 },
   AMBIENT_SPAWN_SEPARATION_MS: { label: 'Ambient-spawn separation', unit: 's', min: 0, max: 10000, step: 250 },
   PATIENCE_CHECK_MS: { label: 'Patience check interval', unit: 's', min: 5000, max: 60000, step: 1000 },
@@ -251,6 +259,10 @@ const TUNING_META = {
   DYNAMIC_MOSAIC_CHECK_MS: { label: 'Dynamic Mosaic check interval', unit: 's', min: 10000, max: 180000, step: 5000 },
   DYNAMIC_MOSAIC_DRIFT_PROBABILITY: { label: 'Dynamic Mosaic drift odds (per check)', unit: 'pct', min: 0, max: 1, step: 0.05 },
   BARRAGE_SPEED_FADE_MS: { label: 'Barrage/Jackpot hype speed fade (up & down)', unit: 's', min: 500, max: 8000, step: 250 },
+  BARRAGE_DIM_OPACITY: { label: 'Barrage non-selected dim amount', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  BARRAGE_DIM_FADE_IN_MS: { label: 'Barrage dim/slowdown fade in', unit: 's', min: 250, max: 6000, step: 250 },
+  BARRAGE_DIM_FADE_OUT_MS: { label: 'Barrage dim/slowdown fade out', unit: 's', min: 250, max: 8000, step: 250 },
+  BARRAGE_DIM_SPEED_MULT: { label: 'Barrage non-selected slowdown', unit: 'x', min: 0.3, max: 1, step: 0.05 },
   JACKPOT_HEAT_DECAY_PER_TICK: { label: 'Jackpot-heat decay (per 5s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   HEART_MULT_DECAY_PER_TICK: { label: 'Heart-multiplier decay (per 6s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   GOLDEN_HOUR_MULTIPLIER: { label: 'Golden Hour odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
@@ -480,22 +492,24 @@ let mosaicSettleTimer = null;
 // straight to 0 mid-decay, which read as a jarring cut rather than a
 // fade. This client-side chase is independent of the server's own
 // timing entirely: whenever a tile's barrage-selected status flips, it
-// glides from whatever rate it's currently at to the new target over
-// BARRAGE_SPEED_FADE_MS, so the fade is always smooth regardless of how
-// abruptly the backend's own window ends.
+// glides from whatever rate it's currently at to the new target over an
+// explicit fade-in/fade-out duration, so the fade is always smooth
+// regardless of how abruptly the backend's own window ends. Used both
+// for the selected tiles' speed-up (symmetric fade both ways) and the
+// non-selected tiles' slowdown (its own, usually asymmetric, fade).
 let barrageFadeState = {};
 let wasBarrageActiveForTile = {};
 
-function applyBarrageSmoothedSpeed(i, vid, targetSpeed, tileActive) {
+function applyBarrageSmoothedSpeed(i, vid, targetSpeed, tileActive, fadeInMs, fadeOutMs) {
   const now = Date.now();
   if (tileActive !== wasBarrageActiveForTile[i]) {
-    barrageFadeState[i] = { startAt: now, fromRate: vid.playbackRate };
+    barrageFadeState[i] = { startAt: now, fromRate: vid.playbackRate, dur: tileActive ? fadeInMs : fadeOutMs };
     wasBarrageActiveForTile[i] = tileActive;
   }
   const fade = barrageFadeState[i];
   if (fade) {
     const elapsed = now - fade.startAt;
-    const dur = TUNING.BARRAGE_SPEED_FADE_MS;
+    const dur = fade.dur;
     if (elapsed >= dur) {
       delete barrageFadeState[i];
       vid.playbackRate = targetSpeed;
@@ -656,6 +670,17 @@ let fxSource = 'library';
 let fxSourceLists = { dedicated: null, library: null };
 let fxSprites = [];
 
+// Every floater sharing the exact same opacity read as flatter/more
+// uniform than intended - each one now gets its own randomized value
+// within a band under the configured ceiling, so a handful on screen at
+// once show some genuine variety instead of looking like identical
+// copies at different positions.
+function randomFloaterOpacity() {
+  const maxOp = fxOpacity / 100;
+  const minOp = maxOp * 0.5;
+  return minOp + Math.random() * (maxOp - minOp);
+}
+
 function loadFxPrefs() {
   try {
     const en = localStorage.getItem('mm_fx_enabled');
@@ -709,7 +734,7 @@ function setFxOpacity(v) {
   fxOpacity = parseInt(v, 10);
   document.getElementById('l-fx-opacity').innerText = fxOpacity + '%';
   try { localStorage.setItem('mm_fx_opacity', fxOpacity); } catch (e) {}
-  fxSprites.forEach(s => { if (s && s.state === 'visible') s.el.style.opacity = String(fxOpacity / 100); });
+  fxSprites.forEach(s => { if (s && s.state === 'visible') { s.opacity = randomFloaterOpacity(); s.el.style.opacity = String(s.opacity); } });
 }
 
 function fetchFxList(source) {
@@ -830,7 +855,8 @@ function activateFxSprite(sprite) {
       requestAnimationFrame(() => {
         el.style.transition = `transform ${lifetime}s linear, opacity ${FX_FADE_S}s ease`;
         el.style.transform = `translate(${endX}px, ${endY}px)`;
-        el.style.opacity = String(fxOpacity / 100);
+        sprite.opacity = randomFloaterOpacity();
+        el.style.opacity = String(sprite.opacity);
       });
     });
 
@@ -1298,7 +1324,7 @@ function runAnticipationBuildUp(durationS, isReal, weightedTiles, tierName) {
   // on the video itself.
   if (isReal && weightedTiles.length) {
     tileElements.forEach((tile, idx) => {
-      if (tile && !weightedTiles.includes(idx)) tile.classList.add('tile-dimmed');
+      if (tile && !weightedTiles.includes(idx)) startBarrageDim(tile);
     });
   }
 
@@ -1340,7 +1366,39 @@ function runAnticipationBuildUp(durationS, isReal, weightedTiles, tierName) {
 
 function clearTileGlow() {
   tileGlowEls.forEach(el => { if (el) el.style.opacity = '0'; });
-  tileElements.forEach(tile => { if (tile) tile.classList.remove('tile-dimmed'); });
+  tileElements.forEach(tile => { if (tile) endBarrageDim(tile); });
+}
+
+// Mirrors fadeSealedDim's technique: the ::after's opacity is driven by
+// a custom property rather than the class itself, so the class can stay
+// in place for the whole fade (entering AND leaving) instead of a
+// toggle that would kill the element - and its CSS transition - the
+// instant it's removed. The forced reflow (offsetWidth read) between
+// setting the starting opacity and the real target is what makes the
+// fade-IN work too: without it, both writes would land in the same
+// style recalculation and the browser would never see the 0-opacity
+// starting point to animate away from.
+function startBarrageDim(tile) {
+  if (!tile) return;
+  if (!tile.classList.contains('tile-dimmed')) {
+    tile.style.setProperty('--dim-opacity', '0');
+    tile.style.setProperty('--dim-fade-ms', '0ms');
+    tile.classList.add('tile-dimmed');
+    void tile.offsetWidth;
+  }
+  tile.style.setProperty('--dim-fade-ms', TUNING.BARRAGE_DIM_FADE_IN_MS + 'ms');
+  tile.style.setProperty('--dim-opacity', String(TUNING.BARRAGE_DIM_OPACITY));
+}
+
+function endBarrageDim(tile) {
+  if (!tile || !tile.classList.contains('tile-dimmed')) return;
+  tile.style.setProperty('--dim-fade-ms', TUNING.BARRAGE_DIM_FADE_OUT_MS + 'ms');
+  tile.style.setProperty('--dim-opacity', '0');
+  setTimeout(() => {
+    tile.classList.remove('tile-dimmed');
+    tile.style.removeProperty('--dim-opacity');
+    tile.style.removeProperty('--dim-fade-ms');
+  }, TUNING.BARRAGE_DIM_FADE_OUT_MS);
 }
 
 function fizzleAnticipation(runId) {
@@ -1442,6 +1500,26 @@ let tileLastRatedAt = {};
 
 let dueAuraTileIndex = -1;
 let dueAuraSetAt = 0;
+let dueAuraExitTimers = {};
+
+// Instead of just removing the class (which killed the glow in the same
+// frame it moved on - reported as "hopping... instantly" - and also
+// didn't cover the "I rated it, why's it still glowing" gap below), this
+// drives --due-exit-mult to 0 while the class (and its pulse/hue
+// animations) stay in place, only actually removing the class once the
+// transition has had time to finish.
+function startDueAuraExitFade(idx) {
+  const el = tileAmbientEls[idx];
+  if (!el || !el.classList.contains('due-aura')) return;
+  el.style.setProperty('--due-exit-fade-ms', TUNING.DUE_AURA_EXIT_FADE_MS + 'ms');
+  el.style.setProperty('--due-exit-mult', '0');
+  clearTimeout(dueAuraExitTimers[idx]);
+  dueAuraExitTimers[idx] = setTimeout(() => {
+    el.classList.remove('due-aura');
+    el.style.removeProperty('--due-exit-mult');
+    el.style.removeProperty('--due-exit-fade-ms');
+  }, TUNING.DUE_AURA_EXIT_FADE_MS);
+}
 
 function tickDueAura() {
   // Only ever the single most-idle tile, not every tile past the threshold -
@@ -1467,11 +1545,15 @@ function tickDueAura() {
     }
   }
 
-  if (mostIdleTile !== dueAuraTileIndex) dueAuraSetAt = now;
-  dueAuraTileIndex = mostIdleTile;
-  tileAmbientEls.forEach((el, i) => {
-    if (el) el.classList.toggle('due-aura', i === mostIdleTile);
-  });
+  if (mostIdleTile !== dueAuraTileIndex) {
+    if (dueAuraTileIndex >= 0) startDueAuraExitFade(dueAuraTileIndex);
+    dueAuraSetAt = now;
+    dueAuraTileIndex = mostIdleTile;
+    if (mostIdleTile >= 0) {
+      const el = tileAmbientEls[mostIdleTile];
+      if (el) el.classList.add('due-aura');
+    }
+  }
 }
 
 // Tapping a due-aura tile acknowledges it without forcing an actual
@@ -1482,8 +1564,7 @@ function tickDueAura() {
 function dismissDueAura(idx) {
   if (idx !== dueAuraTileIndex) return;
   tileLastRatedAt[idx] = Date.now();
-  const el = tileAmbientEls[idx];
-  if (el) el.classList.remove('due-aura');
+  startDueAuraExitFade(idx);
   dueAuraTileIndex = -1;
   toast('👁 Noted - won\'t ask about this one for a while');
 }
@@ -1552,9 +1633,10 @@ function updateModeBadge() {
     text = '🔥 Odds heating up';
   } else if (autopilotZone) {
     // Lowest priority - only shown when nothing more pressing is. Auto-
-    // Pilot's zone otherwise only showed in the panel itself, which
-    // "can't tell if you're not in the menu."
-    text = '🎬 ' + AUTOPILOT_ZONES[autopilotZone].label;
+    // Pilot's zone (and status phrase, same format as the settings
+    // panel's own "Current Zone" row) otherwise only showed in the panel
+    // itself, which "can't tell if you're not in the menu."
+    text = '🎬 ' + AUTOPILOT_ZONES[autopilotZone].label + (autopilotCurrentStatusPhrase ? ' · ' + autopilotCurrentStatusPhrase : '');
   }
   if (text) {
     el.innerText = text;
@@ -3642,9 +3724,17 @@ function render(d) {
       // at normal speed. Composes with the player's own manual speed
       // slider rather than overriding it.
       const lockMult = d.locked ? TUNING.LOCK_SLOWDOWN_MULT : 1;
-      const targetSpeed = s.speed * lockMult * manualSpeedMult;
-      const tileActive = d.barrage > 0 && (d.barrage_tiles || []).includes(i);
-      applyBarrageSmoothedSpeed(i, vid, targetSpeed, tileActive);
+      const barrageTiles = d.barrage > 0 ? (d.barrage_tiles || []) : [];
+      const isSelected = barrageTiles.includes(i);
+      const isDimmed = barrageTiles.length > 0 && !isSelected;
+      let targetSpeed = s.speed * lockMult * manualSpeedMult;
+      let fadeInMs = TUNING.BARRAGE_SPEED_FADE_MS, fadeOutMs = TUNING.BARRAGE_SPEED_FADE_MS;
+      if (isDimmed) {
+        targetSpeed = TUNING.BARRAGE_DIM_SPEED_MULT * lockMult * manualSpeedMult;
+        fadeInMs = TUNING.BARRAGE_DIM_FADE_IN_MS;
+        fadeOutMs = TUNING.BARRAGE_DIM_FADE_OUT_MS;
+      }
+      applyBarrageSmoothedSpeed(i, vid, targetSpeed, isSelected || isDimmed, fadeInMs, fadeOutMs);
     }
     const sat = Math.floor((s.tension - 1.0) * 60 + 100);
     const cont = Math.floor((s.tension - 1.0) * 40 + 100);
@@ -3767,6 +3857,13 @@ function rateScreen(i, dir, btn, strength) {
   awardXp(Math.round(TUNING.RATE_XP_BASE * mult * strength));
   incrementQuestMetric('rates', 1);
   tileLastRatedAt[i] = Date.now();
+  // Otherwise this tile's due-aura (if it had one) would keep glowing
+  // until tickDueAura's next 5s poll noticed it no longer qualifies -
+  // reported as "takes about 4 seconds to clear" after rating it.
+  if (i === dueAuraTileIndex) {
+    startDueAuraExitFade(i);
+    dueAuraTileIndex = -1;
+  }
   pulseTileGlow(i, mult, dir !== 'up');
   if (btn) {
     btn.classList.remove('pop');
@@ -3936,7 +4033,7 @@ function claimBonusTile(idx) {
     el.classList.add('bonus-claimed');
     setTimeout(() => el.classList.remove('bonus-claimed'), BONUS_CLAIM_CELEBRATION_MS);
   }
-  burstTileSpeed(idx, BONUS_CLAIM_CELEBRATION_MS, 1.175, 1.35); // tapered per direct feedback
+  burstTileSpeedFading(idx, BONUS_CLAIM_CELEBRATION_MS, 1.175, 1.35, TUNING.BONUS_CLAIM_SPEED_FADE_MS);
   bumpJackpotHeat(0.5); // a smaller, flat nudge than a chase catch's - see bumpJackpotHeat
   triggerMiniPayoff(idx);
 }
@@ -4017,6 +4114,15 @@ function fadeTileSpeedTo(idx, fadeMs, targetMin, targetMax, holdAfterMs) {
     if (t < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
+}
+
+// A burst that genuinely fades both ways instead of snapping to the
+// random target and then snapping back to normal the instant the hold
+// expires - fades up over fadeMs, holds for holdMs, then fades back
+// down to normal over fadeMs again.
+function burstTileSpeedFading(idx, holdMs, minMult, maxMult, fadeMs) {
+  fadeTileSpeedTo(idx, fadeMs, minMult, maxMult, holdMs);
+  setTimeout(() => fadeTileSpeedTo(idx, fadeMs, 1, 1, 0), fadeMs + holdMs);
 }
 
 function activateSealedTile(idx) {

@@ -200,8 +200,18 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    this one never did, so clicks always fell through to whatever was under
    it and only the heart/thumb buttons ever reached dismissDueAura. */
 @property --due-hue{syntax:'<number>';inherits:false;initial-value:240}
-.tile-ambient-fx.due-aura{--due-hue:240;opacity:1;border-radius:inherit;pointer-events:auto;cursor:pointer;background:radial-gradient(circle,hsla(var(--due-hue),85%,70%,.6),hsla(var(--due-hue),85%,70%,0) 70%);animation:due-pulse-opacity 3s ease-in-out infinite,due-aura-hue-cycle 16s linear infinite}
-@keyframes due-pulse-opacity{0%,100%{opacity:.3}50%{opacity:.7}}
+@property --due-pulse{syntax:'<number>';inherits:false;initial-value:.5}
+@property --due-exit-mult{syntax:'<number>';inherits:false;initial-value:1}
+/* Opacity itself is never animated directly - the continuous breathing
+   pulse drives --due-pulse via keyframes, and the exit fade drives
+   --due-exit-mult via a plain transition, with opacity just multiplying
+   the two together. Animations and transitions fighting over the same
+   property don't compose (the animation would just keep overriding any
+   transition), so splitting them into two independently-animatable
+   custom properties is what makes a slow, independent fade-out possible
+   at all while the pulse keeps breathing during the hold. */
+.tile-ambient-fx.due-aura{--due-hue:240;--due-pulse:.5;--due-exit-mult:1;opacity:calc(var(--due-pulse) * var(--due-exit-mult));border-radius:inherit;pointer-events:auto;cursor:pointer;background:radial-gradient(circle,hsla(var(--due-hue),85%,70%,.6),hsla(var(--due-hue),85%,70%,0) 70%);animation:due-pulse-value 3s ease-in-out infinite,due-aura-hue-cycle 16s linear infinite;transition:--due-exit-mult var(--due-exit-fade-ms,2000ms) ease}
+@keyframes due-pulse-value{0%,100%{--due-pulse:.3}50%{--due-pulse:.7}}
 @keyframes due-aura-hue-cycle{
   0%{--due-hue:240}
   16.6%{--due-hue:270}
@@ -216,7 +226,7 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    tile or video itself - same reasoning as every other glow effect in
    this file: opacity-only stays compositor-only and never forces a
    repaint of the video underneath). */
-.tile-dimmed::after{content:'';position:absolute;inset:0;background:#000;opacity:.6;pointer-events:none;z-index:1;transition:opacity .3s ease}
+.tile-dimmed::after{content:'';position:absolute;inset:0;background:#000;opacity:var(--dim-opacity,.6);pointer-events:none;z-index:1;transition:opacity var(--dim-fade-ms,300ms) ease}
 /* A sealed tile actually looks locked - its own dim class (not shared
    with tile-dimmed above) so the mega-barrage dim and this one can
    never fight over clearing the same class on the same tile. Paired
