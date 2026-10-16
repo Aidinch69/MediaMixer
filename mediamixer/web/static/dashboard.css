@@ -302,6 +302,14 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .mosaic-row{display:flex;flex-direction:row;width:100%;flex-shrink:0}
 .mosaic-row .tile{flex-grow:0;flex-shrink:0;height:100%}
 .tile{position:relative;background:#020105;border-radius:8px;border:1px solid #140a1a;overflow:hidden;transition:transform .4s ease,box-shadow .4s ease}
+/* Dip-to-dim layout transition: a brief fade to black bridges a tile-
+   count change (manual or Dynamic Mosaic) instead of the grid cutting
+   straight to the new arrangement. Deliberately a single full-screen
+   dim rather than animating each tile's own resize - dual vs 4x4 are
+   proportioned nothing alike, so a live reflow animation would need to
+   handle wildly different aspect changes; dipping through black
+   sidesteps that entirely while this gets tried out. */
+#layout-fade-overlay{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;z-index:50}
 /* Featured Tile: a steady-state highlight for a tile currently playing
    actual favorited content (heart_count >= FEATURED_HEART_THRESHOLD),
    not a one-shot celebration - transition, not animation, since this is

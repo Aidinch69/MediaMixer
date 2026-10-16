@@ -186,6 +186,7 @@ def create_app(ctx: AppContext) -> Flask:
             pace_idx=pace_idx,
             pace_label=config.pace_presets[pace_idx].label,
             layout_presets=config.layout_presets,
+            layout_presets_json=[{"name": p.name, "tile_count": p.tile_count} for p in config.layout_presets],
             layout=snap["layout"],
             preload_enabled=snap["preload_enabled"],
             phone_url=phone_url,

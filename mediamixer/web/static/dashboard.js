@@ -74,6 +74,10 @@ const TUNING_DEFAULTS = {
   TRUE_MYSTERY_PROBABILITY: 0.35,
   DOUBLE_FEATURE_CHECK_MS: 120000,
   DOUBLE_FEATURE_PROBABILITY: 0.12,
+  LAYOUT_FADE_MS: 350,
+  LAYOUT_FADE_HOLD_MS: 450,
+  DYNAMIC_MOSAIC_CHECK_MS: 45000,
+  DYNAMIC_MOSAIC_DRIFT_PROBABILITY: 0.4,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -172,6 +176,7 @@ const TUNING_GROUPS = [
   { label: 'Choice Moments', keys: ['CHOICE_MOMENT_CHECK_MS', 'CHOICE_MOMENT_PROBABILITY', 'CHOICE_MOMENT_WINDOW_MS', 'CHOICE_MOMENT_XP'] },
   { label: 'Lock Slowdown', keys: ['LOCK_SLOWDOWN_MULT'] },
   { label: 'Double Feature', keys: ['DOUBLE_FEATURE_CHECK_MS', 'DOUBLE_FEATURE_PROBABILITY'] },
+  { label: 'Layout Fade / Dynamic Mosaic', keys: ['LAYOUT_FADE_MS', 'LAYOUT_FADE_HOLD_MS', 'DYNAMIC_MOSAIC_CHECK_MS', 'DYNAMIC_MOSAIC_DRIFT_PROBABILITY'] },
   { label: 'Multipliers & XP', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
 ];
 const TUNING_META = {
@@ -229,6 +234,10 @@ const TUNING_META = {
   LOCK_SLOWDOWN_MULT: { label: 'Lock slowdown (25-35% slower = 0.65-0.75)', unit: 'x', min: 0.5, max: 1, step: 0.01 },
   DOUBLE_FEATURE_CHECK_MS: { label: 'Double Feature check interval', unit: 's', min: 30000, max: 300000, step: 15000 },
   DOUBLE_FEATURE_PROBABILITY: { label: 'Double Feature odds', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
+  LAYOUT_FADE_MS: { label: 'Layout fade (one-way)', unit: 's', min: 0, max: 1500, step: 50 },
+  LAYOUT_FADE_HOLD_MS: { label: 'Layout fade hold (dimmed)', unit: 's', min: 0, max: 2000, step: 50 },
+  DYNAMIC_MOSAIC_CHECK_MS: { label: 'Dynamic Mosaic check interval', unit: 's', min: 10000, max: 180000, step: 5000 },
+  DYNAMIC_MOSAIC_DRIFT_PROBABILITY: { label: 'Dynamic Mosaic drift odds (per check)', unit: 'pct', min: 0, max: 1, step: 0.05 },
   JACKPOT_HEAT_DECAY_PER_TICK: { label: 'Jackpot-heat decay (per 5s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   HEART_MULT_DECAY_PER_TICK: { label: 'Heart-multiplier decay (per 6s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   GOLDEN_HOUR_MULTIPLIER: { label: 'Golden Hour odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
@@ -2378,11 +2387,20 @@ let autopilotLastMosaic = null;
 // scales the odds of things that were already going to happen somewhat
 // - a "quiet" zone's systems still fire, just less often, so turning
 // Auto-Pilot on never silently disables something you'd otherwise see.
+// tileBias is Dynamic Mosaic's zone-driven mode reading each zone's own
+// already-authored "feel" instead of computing a tile count from pace/
+// heat/vibe trying to agree on one number - which direction tile count
+// should move is genuinely ambiguous from a single formula (more tiles
+// can mean "amping up" OR "calming down" depending on what's actually
+// happening), so this sidesteps that by just hand-picking per zone:
+// 'low' = few tiles (vault's patient sealed-tile hunting wants focus),
+// 'high' = many tiles (jackpot/color's spectacle wants breadth), 'mid'
+// = chase's reflexive middle ground.
 const AUTOPILOT_ZONES = {
-  chase: { label: 'Chase Zone', chase: 1.9, bonus: 1.3, sealed: 0.6, colorRush: 0.5, barrage: 1.0 },
-  color: { label: 'Color Zone', chase: 0.6, bonus: 0.8, sealed: 0.8, colorRush: 2.4, barrage: 1.0 },
-  jackpot: { label: 'Jackpot Zone', chase: 0.7, bonus: 0.9, sealed: 1.0, colorRush: 0.7, barrage: 1.6 },
-  vault: { label: 'Vault Zone', chase: 0.6, bonus: 0.7, sealed: 2.2, colorRush: 0.6, barrage: 0.9 },
+  chase: { label: 'Chase Zone', chase: 1.9, bonus: 1.3, sealed: 0.6, colorRush: 0.5, barrage: 1.0, tileBias: 'mid' },
+  color: { label: 'Color Zone', chase: 0.6, bonus: 0.8, sealed: 0.8, colorRush: 2.4, barrage: 1.0, tileBias: 'high' },
+  jackpot: { label: 'Jackpot Zone', chase: 0.7, bonus: 0.9, sealed: 1.0, colorRush: 0.7, barrage: 1.6, tileBias: 'high' },
+  vault: { label: 'Vault Zone', chase: 0.6, bonus: 0.7, sealed: 2.2, colorRush: 0.6, barrage: 0.9, tileBias: 'low' },
 };
 const AUTOPILOT_ZONE_NAMES = Object.keys(AUTOPILOT_ZONES);
 let autopilotZone = null;
@@ -2435,7 +2453,10 @@ function autopilotTick() {
   // below where it was last tick) - not on every tick, so the zone
   // holds steady for a whole cycle's calm->climax->cooldown arc rather
   // than flickering between zones mid-arc.
-  if (!autopilotZone || frac < autopilotLastFrac) autopilotZone = pickAutopilotZone(autopilotZone);
+  if (!autopilotZone || frac < autopilotLastFrac) {
+    autopilotZone = pickAutopilotZone(autopilotZone);
+    maybeApplyZoneDrivenMosaic(autopilotZone);
+  }
   autopilotLastFrac = frac;
   updateAutopilotZoneUi();
 
@@ -2463,6 +2484,104 @@ function updateAutopilotZoneUi() {
   if (el) el.innerText = autopilotZone ? AUTOPILOT_ZONES[autopilotZone].label : '';
   if (row) row.style.display = autopilotZone ? 'flex' : 'none';
 }
+
+// ---- Dynamic Mosaic ----
+// Two independent toggles rather than one auto-computed formula, since
+// "ramp tile count" doesn't have one right direction - see AUTOPILOT_ZONES'
+// tileBias comment. Zone-driven only matters while Auto-Pilot is on;
+// ambient drift works with or without it and takes over whenever zone-
+// driven isn't actively steering (so the two don't fight over the same
+// layout moments apart).
+let dynamicMosaicZoneMode = false;
+let dynamicMosaicDriftMode = false;
+let dynamicMosaicMinTiles = 2;
+let dynamicMosaicMaxTiles = 16;
+
+function layoutsInRange(min, max) {
+  return (window.LAYOUT_PRESETS || []).filter((p) => p.tile_count >= min && p.tile_count <= max);
+}
+
+function pickLayoutForTileCount(targetCount) {
+  const presets = window.LAYOUT_PRESETS || [];
+  if (!presets.length) return null;
+  let best = presets[0];
+  let bestDiff = Math.abs(best.tile_count - targetCount);
+  for (const p of presets) {
+    const diff = Math.abs(p.tile_count - targetCount);
+    if (diff < bestDiff) { best = p; bestDiff = diff; }
+  }
+  return best;
+}
+
+function maybeApplyZoneDrivenMosaic(zoneName) {
+  if (!dynamicMosaicZoneMode || !zoneName) return;
+  const bias = AUTOPILOT_ZONES[zoneName].tileBias;
+  const min = dynamicMosaicMinTiles, max = dynamicMosaicMaxTiles;
+  const target = bias === 'low' ? min : bias === 'high' ? max : Math.round((min + max) / 2);
+  const preset = pickLayoutForTileCount(target);
+  if (preset && preset.name !== currentLayout) setLayout(preset.name, true);
+}
+
+function maybeTriggerMosaicDrift() {
+  if (!dynamicMosaicDriftMode) return;
+  if (dynamicMosaicZoneMode && autopilotEnabled && autopilotZone) return; // zone-driven owns it right now
+  if (Math.random() >= TUNING.DYNAMIC_MOSAIC_DRIFT_PROBABILITY) return;
+  const candidates = layoutsInRange(dynamicMosaicMinTiles, dynamicMosaicMaxTiles).filter((p) => p.name !== currentLayout);
+  if (!candidates.length) return;
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  setLayout(pick.name, true);
+}
+startTunableInterval('DYNAMIC_MOSAIC_CHECK_MS', maybeTriggerMosaicDrift);
+
+function setDynamicMosaicZoneMode(enabled) {
+  dynamicMosaicZoneMode = enabled;
+  saveDynamicMosaicPrefs();
+}
+
+function setDynamicMosaicDriftMode(enabled) {
+  dynamicMosaicDriftMode = enabled;
+  saveDynamicMosaicPrefs();
+}
+
+function setDynamicMosaicRange(min, max) {
+  dynamicMosaicMinTiles = Math.max(1, parseInt(min, 10) || 1);
+  dynamicMosaicMaxTiles = Math.max(dynamicMosaicMinTiles, parseInt(max, 10) || dynamicMosaicMinTiles);
+  const lbl = document.getElementById('l-dynamic-mosaic-range');
+  if (lbl) lbl.innerText = dynamicMosaicMinTiles + ' - ' + dynamicMosaicMaxTiles;
+  saveDynamicMosaicPrefs();
+}
+
+function saveDynamicMosaicPrefs() {
+  try {
+    localStorage.setItem('mm_dynamic_mosaic', JSON.stringify({
+      zoneMode: dynamicMosaicZoneMode, driftMode: dynamicMosaicDriftMode,
+      min: dynamicMosaicMinTiles, max: dynamicMosaicMaxTiles,
+    }));
+  } catch (e) {}
+}
+
+function loadDynamicMosaicPrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('mm_dynamic_mosaic') || '{}');
+    dynamicMosaicZoneMode = !!saved.zoneMode;
+    dynamicMosaicDriftMode = !!saved.driftMode;
+    dynamicMosaicMinTiles = Number.isFinite(saved.min) ? saved.min : 2;
+    dynamicMosaicMaxTiles = Number.isFinite(saved.max) ? saved.max : 16;
+  } catch (e) {}
+  const zoneBtn = document.getElementById('dynamic-mosaic-zone-toggle');
+  if (zoneBtn) { zoneBtn.innerText = dynamicMosaicZoneMode ? 'ON' : 'OFF'; zoneBtn.classList.toggle('active', dynamicMosaicZoneMode); }
+  const driftBtn = document.getElementById('dynamic-mosaic-drift-toggle');
+  if (driftBtn) { driftBtn.innerText = dynamicMosaicDriftMode ? 'ON' : 'OFF'; driftBtn.classList.toggle('active', dynamicMosaicDriftMode); }
+  const minInput = document.getElementById('dynamic-mosaic-min-input');
+  if (minInput) minInput.value = dynamicMosaicMinTiles;
+  const maxInput = document.getElementById('dynamic-mosaic-max-input');
+  if (maxInput) maxInput.value = dynamicMosaicMaxTiles;
+  const lbl = document.getElementById('l-dynamic-mosaic-range');
+  if (lbl) lbl.innerText = dynamicMosaicMinTiles + ' - ' + dynamicMosaicMaxTiles;
+}
+
+function toggleDynamicMosaicZone() { setDynamicMosaicZoneMode(!dynamicMosaicZoneMode); loadDynamicMosaicPrefs(); }
+function toggleDynamicMosaicDrift() { setDynamicMosaicDriftMode(!dynamicMosaicDriftMode); loadDynamicMosaicPrefs(); }
 
 function startAutopilot() {
   autopilotStartTime = Date.now();
@@ -2923,7 +3042,27 @@ function skip() { fetch('/api/skip').then(() => toast('⬇️ Skipped All', true
 function lock() { fetch('/api/lock').then(() => toast('60s Locked')); }
 function cycleTone() { fetch('/api/cycle_tone'); }
 function cat(f) { fetch('/api/folder?folder=' + encodeURIComponent(f)).then(() => toast('Category: ' + f.toUpperCase())); }
-function setLayout(mode) { fetch('/api/layout?mode=' + mode).then(() => toast('Layout: ' + mode.toUpperCase())); }
+// Dip-to-dim: bridges a layout/tile-count change (manual click or Dynamic
+// Mosaic below) with a brief fade to black instead of the grid cutting
+// straight to the new arrangement - see the CSS comment on
+// #layout-fade-overlay for why a full dim rather than an animated reflow.
+// Not perfectly synced to the moment new tiles actually populate (that's
+// driven by whatever snapshot tick happens to land during the dim hold),
+// just a fixed, tunable dip-and-return - simple to feel out first before
+// chasing a more precisely-timed version.
+function setLayout(mode, quiet) {
+  const overlay = document.getElementById('layout-fade-overlay');
+  if (overlay && TUNING.LAYOUT_FADE_MS > 0) {
+    overlay.style.transition = 'opacity ' + (TUNING.LAYOUT_FADE_MS / 1000) + 's ease';
+    overlay.style.opacity = '1';
+    setTimeout(() => {
+      fetch('/api/layout?mode=' + mode).then(() => { if (!quiet) toast('Layout: ' + mode.toUpperCase()); });
+      setTimeout(() => { overlay.style.opacity = '0'; }, TUNING.LAYOUT_FADE_HOLD_MS);
+    }, TUNING.LAYOUT_FADE_MS);
+  } else {
+    fetch('/api/layout?mode=' + mode).then(() => { if (!quiet) toast('Layout: ' + mode.toUpperCase()); });
+  }
+}
 function togglePreload() {
   const next = !preloadEnabled;
   fetch('/api/preload?enabled=' + next).then(() => toast('Preload: ' + (next ? 'ON' : 'OFF')));
@@ -3985,6 +4124,7 @@ window.onload = () => {
   loadAutopilotPrefs();
   loadVibeDialPref();
   loadManualSpeedPref();
+  loadDynamicMosaicPrefs();
   loadSessionTimerPref();
   applyColorTheme(0);
   loadXpState();
