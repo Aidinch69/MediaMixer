@@ -134,13 +134,13 @@
           <label>Enabled</label>
           <button class="badge" id="autopilot-toggle" onclick="toggleAutopilot()">OFF</button>
         </div>
-        <div class="slider"><label>Cycle Length: <b><span id="l-autopilot-minutes">6 min</span></b></label><input type="range" id="autopilot-minutes-input" min="2" max="15" step="1" value="6" oninput="setAutopilotMinutes(this.value)"></div>
+        <div class="slider"><label>Typical Pace: <b><span id="l-autopilot-minutes">~6 min</span></b></label><input type="range" id="autopilot-minutes-input" min="2" max="15" step="1" value="6" oninput="setAutopilotMinutes(this.value)"></div>
         <div class="slider" id="autopilot-zone-row" style="display:none">
           <label>Current Zone</label>
           <span id="l-autopilot-zone" class="zone-readout"></span>
         </div>
         <button class="badge" onclick="switchItUp()">🔀 Switch It Up</button>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Scripts pace, barrage/jackpot odds, floater count, and content novelty through a calm -&gt; building -&gt; climax -&gt; cooldown arc on a repeating timer, instead of those staying wherever you last set them. Each cycle also picks a fresh "zone" (Chase/Color/Jackpot/Vault) that leans the climax toward a different mix of the passive stuff above - one cycle's climax might be chase-flash heavy, the next a Color Rush, the next sealed tiles - instead of every climax looking the same. Turns Floating Overlay on if it's off. Does not touch Mosaic Fit - that stays exactly wherever you set it manually. "Switch It Up" forces an immediate zone change plus a fresh novelty push, for whenever the satiation logic's own timing isn't fast enough for you.</p></details>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Scripts pace, barrage/jackpot odds, floater count, and content novelty through a calm -&gt; building -&gt; climax -&gt; cooldown arc, instead of those staying wherever you last set them. "Typical Pace" is a baseline, not a fixed timer - each zone actually extends itself for as long as you're genuinely engaged with it (up to a cap) and cuts short if you're not, so a real cycle can run noticeably shorter or longer than this number depending on how the session's actually going. Each cycle also picks a fresh "zone" (Chase/Color/Jackpot/Vault) that leans the climax toward a different mix of the passive stuff above - one cycle's climax might be chase-flash heavy, the next a Color Rush, the next sealed tiles - instead of every climax looking the same. Turns Floating Overlay on if it's off. Does not touch Mosaic Fit - that stays exactly wherever you set it manually. "Switch It Up" forces an immediate zone change plus a fresh novelty push, for whenever the satiation logic's own timing isn't fast enough for you.</p></details>
       </div>
     </details>
     <details class="settings-section">

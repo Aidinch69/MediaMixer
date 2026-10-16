@@ -83,6 +83,7 @@ const TUNING_DEFAULTS = {
   LAYOUT_CHANGE_COOLDOWN_MS: 20000,
   DYNAMIC_MOSAIC_CHECK_MS: 10000,
   DYNAMIC_MOSAIC_DRIFT_PROBABILITY: 0.1,
+  BARRAGE_SPEED_FADE_MS: 3000,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -182,6 +183,7 @@ const TUNING_GROUPS = [
   { label: 'Lock Slowdown', desc: 'How much a locked screen slows down.', keys: ['LOCK_SLOWDOWN_MULT'] },
   { label: 'Double Feature', desc: 'Odds and check interval for a surprise second feature.', keys: ['DOUBLE_FEATURE_CHECK_MS', 'DOUBLE_FEATURE_PROBABILITY'] },
   { label: 'Layout Fade / Dynamic Mosaic', desc: 'Fade timing and the automatic-layout-change cooldown/cadence.', keys: ['LAYOUT_FADE_MS', 'LAYOUT_FADE_HOLD_MS', 'LAYOUT_CHANGE_COOLDOWN_MS', 'DYNAMIC_MOSAIC_CHECK_MS', 'DYNAMIC_MOSAIC_DRIFT_PROBABILITY'] },
+  { label: 'Barrage/Jackpot Hype', desc: 'How long the hype speed-up takes to fade in and back out.', keys: ['BARRAGE_SPEED_FADE_MS'] },
   { label: 'Multipliers & XP', desc: 'Heat/heart multiplier caps and decay, hidden-window odds, XP amounts.', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
 ];
 const TUNING_META = {
@@ -248,6 +250,7 @@ const TUNING_META = {
   LAYOUT_CHANGE_COOLDOWN_MS: { label: 'Layout change cooldown (automatic only)', unit: 's', min: 0, max: 60000, step: 2000 },
   DYNAMIC_MOSAIC_CHECK_MS: { label: 'Dynamic Mosaic check interval', unit: 's', min: 10000, max: 180000, step: 5000 },
   DYNAMIC_MOSAIC_DRIFT_PROBABILITY: { label: 'Dynamic Mosaic drift odds (per check)', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  BARRAGE_SPEED_FADE_MS: { label: 'Barrage/Jackpot hype speed fade (up & down)', unit: 's', min: 500, max: 8000, step: 250 },
   JACKPOT_HEAT_DECAY_PER_TICK: { label: 'Jackpot-heat decay (per 5s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   HEART_MULT_DECAY_PER_TICK: { label: 'Heart-multiplier decay (per 6s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   GOLDEN_HOUR_MULTIPLIER: { label: 'Golden Hour odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
@@ -471,6 +474,38 @@ let aspectRatios = [];
 let aspectKnown = [];
 let tileSpeedBurstUntil = [];
 let mosaicSettleTimer = null;
+// Barrage/jackpot hype speed used to apply s.speed straight from the
+// server every poll - smooth in principle (the server's own envelope is
+// a sine curve), but barrage_count hitting zero snaps hype_fraction
+// straight to 0 mid-decay, which read as a jarring cut rather than a
+// fade. This client-side chase is independent of the server's own
+// timing entirely: whenever a tile's barrage-selected status flips, it
+// glides from whatever rate it's currently at to the new target over
+// BARRAGE_SPEED_FADE_MS, so the fade is always smooth regardless of how
+// abruptly the backend's own window ends.
+let barrageFadeState = {};
+let wasBarrageActiveForTile = {};
+
+function applyBarrageSmoothedSpeed(i, vid, targetSpeed, tileActive) {
+  const now = Date.now();
+  if (tileActive !== wasBarrageActiveForTile[i]) {
+    barrageFadeState[i] = { startAt: now, fromRate: vid.playbackRate };
+    wasBarrageActiveForTile[i] = tileActive;
+  }
+  const fade = barrageFadeState[i];
+  if (fade) {
+    const elapsed = now - fade.startAt;
+    const dur = TUNING.BARRAGE_SPEED_FADE_MS;
+    if (elapsed >= dur) {
+      delete barrageFadeState[i];
+      vid.playbackRate = targetSpeed;
+    } else {
+      vid.playbackRate = fade.fromRate + (targetSpeed - fade.fromRate) * (elapsed / dur);
+    }
+  } else {
+    vid.playbackRate = targetSpeed;
+  }
+}
 
 function loadMosaicPref() {
   try { mosaicEnabled = localStorage.getItem('mm_mosaic_enabled') === '1'; } catch (e) {}
@@ -2786,7 +2821,7 @@ function loadAutopilotPrefs() {
   // Deliberately doesn't auto-resume "enabled" across reloads - starting an
   // open-ended ramping mode silently on page load would be surprising.
   document.getElementById('autopilot-minutes-input').value = autopilotCycleMinutes;
-  document.getElementById('l-autopilot-minutes').innerText = autopilotCycleMinutes + ' min';
+  document.getElementById('l-autopilot-minutes').innerText = '~' + autopilotCycleMinutes + ' min';
   document.getElementById('autopilot-toggle').innerText = 'OFF';
 }
 
@@ -3164,7 +3199,7 @@ function toggleAutopilot() {
 
 function setAutopilotMinutes(v) {
   autopilotCycleMinutes = parseFloat(v);
-  document.getElementById('l-autopilot-minutes').innerText = autopilotCycleMinutes + ' min';
+  document.getElementById('l-autopilot-minutes').innerText = '~' + autopilotCycleMinutes + ' min';
   try { localStorage.setItem('mm_autopilot_minutes', autopilotCycleMinutes); } catch (e) {}
 }
 
@@ -3446,7 +3481,8 @@ function createTileElement(i) {
       else if (i === dueAuraTileIndex) dismissDueAura(i);
       else if (i === lastChaseMissIdx && Date.now() - lastChaseMissAt < CHASE_NEAR_MISS_GRACE_MS) {
         lastChaseMissIdx = -1;
-        toast('😤 So close! Missed it by a hair', true);
+        // On the tile itself, not a corner toast - this near-miss is about
+        // that specific tile, not a global event worth a screen-wide notice.
         showClaimRewardLabel(i, '😤 So close!');
       }
     });
@@ -3606,7 +3642,9 @@ function render(d) {
       // at normal speed. Composes with the player's own manual speed
       // slider rather than overriding it.
       const lockMult = d.locked ? TUNING.LOCK_SLOWDOWN_MULT : 1;
-      vid.playbackRate = s.speed * lockMult * manualSpeedMult;
+      const targetSpeed = s.speed * lockMult * manualSpeedMult;
+      const tileActive = d.barrage > 0 && (d.barrage_tiles || []).includes(i);
+      applyBarrageSmoothedSpeed(i, vid, targetSpeed, tileActive);
     }
     const sat = Math.floor((s.tension - 1.0) * 60 + 100);
     const cont = Math.floor((s.tension - 1.0) * 40 + 100);
@@ -3898,7 +3936,7 @@ function claimBonusTile(idx) {
     el.classList.add('bonus-claimed');
     setTimeout(() => el.classList.remove('bonus-claimed'), BONUS_CLAIM_CELEBRATION_MS);
   }
-  burstTileSpeed(idx, BONUS_CLAIM_CELEBRATION_MS, 1.185, 1.5); // tapered per direct feedback
+  burstTileSpeed(idx, BONUS_CLAIM_CELEBRATION_MS, 1.175, 1.35); // tapered per direct feedback
   bumpJackpotHeat(0.5); // a smaller, flat nudge than a chase catch's - see bumpJackpotHeat
   triggerMiniPayoff(idx);
 }
