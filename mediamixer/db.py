@@ -164,6 +164,19 @@ class Database:
             "SELECT video_path, ema_reward, play_count, updated_at FROM video_weights WHERE heart_count > 0"
         ).fetchall()
 
+    def random_favorite_pair(self, exclude: set) -> Optional[list]:
+        """Two distinct favorited videos for Double Feature - paired by
+        shared Favorites membership rather than needing real folders to
+        point them at each other. Headroom past 2 (same pattern as
+        top_videos_by_reward) so there's enough to skip past anything
+        already showing elsewhere and still land on a real pair."""
+        rows = self._connect().execute(
+            "SELECT video_path FROM video_weights WHERE heart_count > 0 ORDER BY RANDOM() LIMIT ?",
+            (2 + len(exclude),),
+        ).fetchall()
+        candidates = [r["video_path"] for r in rows if r["video_path"] not in exclude]
+        return candidates[:2] if len(candidates) >= 2 else None
+
     def favorite_top_videos(self, limit: int) -> list:
         rows = self._connect().execute(
             "SELECT video_path FROM video_weights WHERE heart_count > 0 "

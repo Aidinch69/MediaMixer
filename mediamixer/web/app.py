@@ -11,6 +11,7 @@ import io
 import json
 import logging
 import os
+import random
 import time
 
 import qrcode
@@ -387,6 +388,17 @@ def create_app(ctx: AppContext) -> Flask:
                 position = None
             loop_anchor = library.bump_loop_anchor(db, path, position)
         return jsonify(ok=True, heart=heart, loop_anchor=loop_anchor)
+
+    @app.route("/api/double_feature")
+    def api_double_feature():
+        screens = g.session.state.current_paths()
+        if len(screens) < 2:
+            return jsonify(ok=True, picked=False)
+        index_a, index_b = random.sample(range(len(screens)), 2)
+        pair = g.session.rotation.trigger_double_feature(index_a, index_b)
+        if not pair:
+            return jsonify(ok=True, picked=False)
+        return jsonify(ok=True, picked=True, screens=[index_a, index_b])
 
     @app.route("/api/true_mystery")
     def api_true_mystery():

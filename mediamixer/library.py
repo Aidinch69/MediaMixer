@@ -164,6 +164,14 @@ def reward_video(db: Database, config: Config, path: Optional[str], reward: floa
     db.apply_video_reward(path, reward, config.decay_halflife_s, config.reward_ema_alpha, played=played)
 
 
+def pick_double_feature_pair(db: Database, exclude: Union[str, Iterable[str], None] = None) -> Optional[list]:
+    """Two favorited videos to show together - paired by shared Favorites
+    membership (both things you've hearted) rather than needing real
+    folders to point them at each other."""
+    exclude_paths = set() if not exclude else ({exclude} if isinstance(exclude, str) else set(exclude))
+    return db.random_favorite_pair(exclude_paths)
+
+
 def pick_unplayed_video(db: Database, folder: Optional[str] = None) -> Optional[str]:
     """True Mystery Tile: a clip that's never been shown by rotation at
     all, not just an ordinary low-reward/rarely-played pick - deliberately

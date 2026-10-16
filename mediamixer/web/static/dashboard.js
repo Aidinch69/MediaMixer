@@ -72,6 +72,8 @@ const TUNING_DEFAULTS = {
   CHOICE_MOMENT_XP: 10,
   LOCK_SLOWDOWN_MULT: 0.70,
   TRUE_MYSTERY_PROBABILITY: 0.35,
+  DOUBLE_FEATURE_CHECK_MS: 120000,
+  DOUBLE_FEATURE_PROBABILITY: 0.12,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -117,7 +119,7 @@ function restartAllTunableIntervals() {
   startTunableInterval('MYSTERY_TILE_CHECK_MS', maybeTriggerMysteryTile);
 }
 
-const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS', 'MYSTERY_TILE_CHECK_MS', 'PATIENCE_CHECK_MS', 'CHOICE_MOMENT_CHECK_MS'];
+const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS', 'MYSTERY_TILE_CHECK_MS', 'PATIENCE_CHECK_MS', 'CHOICE_MOMENT_CHECK_MS', 'DOUBLE_FEATURE_CHECK_MS'];
 
 function setTuning(key, value) {
   TUNING[key] = value;
@@ -169,6 +171,7 @@ const TUNING_GROUPS = [
   { label: 'Pace-as-Reward', keys: ['PACE_REWARD_XP', 'PACE_REWARD_COOLDOWN_MS'] },
   { label: 'Choice Moments', keys: ['CHOICE_MOMENT_CHECK_MS', 'CHOICE_MOMENT_PROBABILITY', 'CHOICE_MOMENT_WINDOW_MS', 'CHOICE_MOMENT_XP'] },
   { label: 'Lock Slowdown', keys: ['LOCK_SLOWDOWN_MULT'] },
+  { label: 'Double Feature', keys: ['DOUBLE_FEATURE_CHECK_MS', 'DOUBLE_FEATURE_PROBABILITY'] },
   { label: 'Multipliers & XP', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
 ];
 const TUNING_META = {
@@ -224,6 +227,8 @@ const TUNING_META = {
   CHOICE_MOMENT_WINDOW_MS: { label: 'Choice Moment window', unit: 's', min: 3000, max: 20000, step: 1000 },
   CHOICE_MOMENT_XP: { label: 'Choice Moment XP', unit: 'n', min: 1, max: 40, step: 1 },
   LOCK_SLOWDOWN_MULT: { label: 'Lock slowdown (25-35% slower = 0.65-0.75)', unit: 'x', min: 0.5, max: 1, step: 0.01 },
+  DOUBLE_FEATURE_CHECK_MS: { label: 'Double Feature check interval', unit: 's', min: 30000, max: 300000, step: 15000 },
+  DOUBLE_FEATURE_PROBABILITY: { label: 'Double Feature odds', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
   JACKPOT_HEAT_DECAY_PER_TICK: { label: 'Jackpot-heat decay (per 5s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   HEART_MULT_DECAY_PER_TICK: { label: 'Heart-multiplier decay (per 6s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   GOLDEN_HOUR_MULTIPLIER: { label: 'Golden Hour odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
@@ -3725,6 +3730,25 @@ function maybeTriggerMysteryTile() {
   }
   setTimeout(() => clearMysteryTile(idx, trueMysteryPicked), TUNING.MYSTERY_TILE_DURATION_MS);
 }
+
+// Double Feature: occasionally pairs two tiles with favorited content
+// instead of every tile being an independent random roll - paired by
+// shared Favorites membership (both things you've hearted), not by
+// folder, so it works without having to organize the library into
+// folders that point at each other.
+function maybeTriggerDoubleFeature() {
+  if (!anticipationFxEnabled || !tileElements.length) return;
+  if (Math.random() >= TUNING.DOUBLE_FEATURE_PROBABILITY) return;
+  fetch('/api/double_feature')
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data || !data.picked || !Array.isArray(data.screens)) return;
+      toast('🎬 Double Feature!');
+      data.screens.forEach((idx) => showClaimRewardLabel(idx, '🎬 Double Feature'));
+    })
+    .catch(() => {});
+}
+startTunableInterval('DOUBLE_FEATURE_CHECK_MS', maybeTriggerDoubleFeature);
 
 // Ambient color-breathe: purely decorative, no mechanic behind it at
 // all - just a slow multi-color pulse on a random tile every so often,

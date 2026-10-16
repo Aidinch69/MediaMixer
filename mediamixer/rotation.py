@@ -175,6 +175,28 @@ class RotationEngine:
             self._state.set_screen(index, path, nxt, time.time() + expires_in)
             return True
 
+    def trigger_double_feature(self, index_a: int, index_b: int) -> Optional[list]:
+        """Places two favorited videos on index_a/index_b together - paired
+        by shared Favorites membership, not folder, so it works without
+        the viewer having to organize anything. Returns the pair on
+        success so the caller (the /api/double_feature route) can tell
+        the client which two screens to highlight; None if there aren't
+        at least 2 favorites free to pair up right now."""
+        with self._rotate_lock:
+            cfg = self._config
+            pace_idx, folder, _played, current_paths, _next_paths = self._state.rotation_context()
+            exclude = {p for p in current_paths if p}
+            pair = library.pick_double_feature_pair(self._db, exclude)
+            if not pair:
+                return None
+            lo, hi, _label = cfg.pace_presets[pace_idx]
+            for index, path in zip((index_a, index_b), pair):
+                library.reward_video(self._db, cfg, path, 0.0, played=True)
+                bonus = self._state.get_exploration_bonus()
+                nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | set(pair), exploration_bonus=bonus) or path
+                self._state.set_screen(index, path, nxt, time.time() + random.randint(lo, hi))
+            return pair
+
     def tick(self):
         """One control-loop iteration: barrage hype, tension/time-dilation,
         plus expiry-based rotation.
