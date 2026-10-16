@@ -496,47 +496,152 @@ const DEFAULT_ASPECT = 16 / 9;
 let mosaicEnabled = false;
 let aspectRatios = [];
 let aspectKnown = [];
-let tileSpeedBurstUntil = [];
-// Whatever burstTileSpeed/fadeTileSpeedTo last intentionally set a
-// tile's playbackRate to, so it can be reapplied if a new .src load
-// (a content rotation mid-hold) resets it back to 1 - see
-// applyRandomStart.
-let heldPlaybackRate = [];
 let mosaicSettleTimer = null;
-// Barrage/jackpot hype speed used to apply s.speed straight from the
-// server every poll - smooth in principle (the server's own envelope is
-// a sine curve), but barrage_count hitting zero snaps hype_fraction
-// straight to 0 mid-decay, which read as a jarring cut rather than a
-// fade. This client-side chase is independent of the server's own
-// timing entirely: whenever a tile's barrage-selected status flips, it
-// glides from whatever rate it's currently at to the new target over an
-// explicit fade-in/fade-out duration, so the fade is always smooth
-// regardless of how abruptly the backend's own window ends. Used both
-// for the selected tiles' speed-up (symmetric fade both ways) and the
-// non-selected tiles' slowdown (its own, usually asymmetric, fade).
-let barrageFadeState = {};
-let wasBarrageActiveForTile = {};
 
-function applyBarrageSmoothedSpeed(i, vid, targetSpeed, tileActive, fadeInMs, fadeOutMs) {
-  const now = Date.now();
-  if (tileActive !== wasBarrageActiveForTile[i]) {
-    barrageFadeState[i] = { startAt: now, fromRate: vid.playbackRate, dur: tileActive ? fadeInMs : fadeOutMs };
-    wasBarrageActiveForTile[i] = tileActive;
+// ---- Tile Speed Controller ----
+// Every mechanic that wants to override a tile's natural (server-driven)
+// playback speed - sealed tile's lock/miss-hold/unlock, bonus/chase
+// speed bursts, the heart-tap kick, barrage boost/dim - used to each
+// manage their own copy of "set playbackRate, remember a single
+// tileSpeedBurstUntil timestamp, hope nothing else touches it in the
+// meantime." That worked as long as only one mechanic ever wanted a
+// tile at once, but had no real answer for what should happen if two
+// ever overlapped (a sealed-locked tile also getting barrage-selected,
+// say) beyond "whichever wrote last wins" - never actually decided on
+// purpose, just whatever order the code happened to run in.
+//
+// This replaces all of that with one per-tile map of named, prioritized
+// effects. Two shapes cover every real case:
+//   - "timeline" effects (sealed lock/miss/unlock, bonus claim, chase
+//     catch, heart-tap kick): registered once with a fixed fade-in ->
+//     hold -> fade-out timeline, computed purely from their own start
+//     time, removing themselves once that timeline completes.
+//   - "live" effects (barrage boost/dim): re-asserted every render tick
+//     with a live target and an active/inactive flag; the controller
+//     tracks the rising/falling edge itself, fading between wherever
+//     the tile's actually displaying and the new target either way.
+// Each tick, resolveAndApplyTileSpeed picks whichever registered effect
+// has the highest priority and is still live; with none active, the
+// tile just plays at its natural (server-driven) speed. The priority
+// order itself is a real, visible decision now instead of an accident:
+// a sealed-locked tile should never have its speed hijacked by a
+// barrage dim, for instance, so sealedLock outranks everything else.
+const SPEED_PRIORITY = { sealedLock: 40, barrageBoost: 25, bonusClaim: 20, chaseCatch: 20, barrageDim: 15, heartKick: 10 };
+let tileSpeedEffects = []; // per-tile: Map<id, effectState> | undefined (lazy)
+
+function getTileVideo(idx) {
+  return tileElements[idx] && tileElements[idx].querySelector('#screen-' + idx);
+}
+
+function randomInRange(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function getTileSpeedEffects(i) {
+  if (!tileSpeedEffects[i]) tileSpeedEffects[i] = new Map();
+  return tileSpeedEffects[i];
+}
+
+function evalSpeedEffect(effect, now) {
+  const elapsed = now - effect.startAt;
+  if (effect.kind === 'live') {
+    if (elapsed < effect.fadeInMs) return effect.fromRate + (effect.targetSpeed - effect.fromRate) * (elapsed / effect.fadeInMs);
+    return effect.targetSpeed; // holds indefinitely while the caller keeps asserting it active
   }
-  const fade = barrageFadeState[i];
-  if (fade) {
-    const elapsed = now - fade.startAt;
-    const dur = fade.dur;
-    if (elapsed >= dur) {
-      delete barrageFadeState[i];
-      vid.playbackRate = targetSpeed;
-    } else {
-      vid.playbackRate = fade.fromRate + (targetSpeed - fade.fromRate) * (elapsed / dur);
-    }
-  } else {
-    vid.playbackRate = targetSpeed;
+  if (effect.kind === 'release') {
+    if (elapsed >= effect.fadeOutMs) return null; // fully faded out - remove, hand control back
+    const t = effect.fadeOutMs > 0 ? elapsed / effect.fadeOutMs : 1;
+    return effect.fromRate + (effect.releaseTo - effect.fromRate) * t;
+  }
+  // 'timeline': fade in, hold, fade out, then remove itself
+  const t1 = effect.fadeInMs, t2 = t1 + effect.holdMs, t3 = t2 + effect.fadeOutMs;
+  if (elapsed >= t3) return null;
+  if (elapsed < t1) { const t = t1 > 0 ? elapsed / t1 : 1; return effect.fromRate + (effect.targetSpeed - effect.fromRate) * t; }
+  if (elapsed < t2) return effect.targetSpeed;
+  const t = effect.fadeOutMs > 0 ? (elapsed - t2) / effect.fadeOutMs : 1;
+  return effect.targetSpeed + (effect.releaseTo - effect.targetSpeed) * t;
+}
+
+// One-shot: snap or fade to targetSpeed, hold, then snap or fade back to
+// releaseTo (1 = normal), after which this effect removes itself.
+// Re-registering the same id (e.g. a sealed tile getting missed while
+// its lock effect is still running) just replaces it with a fresh
+// timeline starting from the tile's current displayed speed, so it
+// composes smoothly instead of fighting the old one.
+function setTimelineSpeedEffect(i, vid, id, priority, targetSpeed, fadeInMs, holdMs, fadeOutMs, releaseTo) {
+  getTileSpeedEffects(i).set(id, {
+    kind: 'timeline', priority, startAt: Date.now(), fromRate: vid.playbackRate,
+    targetSpeed, fadeInMs, holdMs, fadeOutMs, releaseTo: releaseTo == null ? 1 : releaseTo,
+  });
+  // These are called from one-off triggers (a tap, a catch, a heart),
+  // not from render()'s own per-tick loop - applying right away instead
+  // of waiting for the next status poll (up to ~0.3s later) is what
+  // made the old direct-assignment versions of these feel instant.
+  resolveAndApplyTileSpeed(i, vid, vid.playbackRate);
+}
+
+// Live: called every render tick. `active` false either releases (fades
+// to releaseTo over fadeOutMs, then removes itself) or is a no-op if
+// this effect was never active to begin with. `active` true either
+// starts a fresh fade-in or, if already active, just updates the live
+// target in place - so a barrage's own evolving speed target keeps
+// tracking smoothly without restarting the fade every tick.
+function setLiveSpeedEffect(i, vid, id, priority, active, targetSpeed, fadeInMs, fadeOutMs, releaseTo) {
+  releaseTo = releaseTo == null ? 1 : releaseTo;
+  const effects = getTileSpeedEffects(i);
+  const existing = effects.get(id);
+  if (active) {
+    if (existing && existing.kind === 'live') existing.targetSpeed = targetSpeed;
+    else effects.set(id, { kind: 'live', priority, startAt: Date.now(), fromRate: vid.playbackRate, targetSpeed, fadeInMs });
+  } else if (existing && existing.kind !== 'release') {
+    // Only starts the release countdown on the actual falling edge - if
+    // this is called again (as it will be, every tick) while it's still
+    // releasing, leave the existing countdown alone. Restarting it from
+    // "now" every single tick would mean it never actually finishes,
+    // since playbackRate has barely moved from one tick to the next.
+    effects.set(id, { kind: 'release', priority, startAt: Date.now(), fromRate: vid.playbackRate, fadeOutMs, releaseTo });
   }
 }
+
+// The single source of truth for "what should this tile's playbackRate
+// actually be right now" - render() calls this every tick instead of
+// writing s.speed (or a burst value) directly.
+function resolveAndApplyTileSpeed(i, vid, naturalSpeed) {
+  const effects = tileSpeedEffects[i];
+  if (!effects || !effects.size) { vid.playbackRate = naturalSpeed; return; }
+  const now = Date.now();
+  let winner = null, winnerPriority = -Infinity;
+  effects.forEach((effect, id) => {
+    const rate = evalSpeedEffect(effect, now);
+    if (rate === null) { effects.delete(id); return; }
+    if (effect.priority > winnerPriority) { winner = rate; winnerPriority = effect.priority; }
+  });
+  vid.playbackRate = winner === null ? naturalSpeed : winner;
+}
+
+// Speed effects are purely client-side state the server has no idea
+// about, but render() - the only other thing that was calling
+// resolveAndApplyTileSpeed - only runs when an SSE push actually
+// arrives, and the server only pushes real data when its OWN payload
+// changes (see api_stream's payload != last check in app.py) - a
+// keep-alive comment line doesn't trigger onmessage at all. With
+// nothing else happening server-side, that gap can run well past a
+// second, which starved every fade built on top of
+// resolveAndApplyTileSpeed of the frequent re-evaluation it needs to
+// actually animate - exactly what the old fadeTileSpeedTo's own
+// requestAnimationFrame loop existed to avoid, and what got lost when
+// this replaced it. This restores that independence: every tile that
+// currently has at least one registered effect gets re-resolved here
+// too, on its own fixed clock, regardless of whatever the SSE stream
+// is or isn't doing. Tiles with no effects registered are skipped
+// entirely (tileSpeedEffects is a sparse array - forEach skips holes).
+setInterval(() => {
+  tileSpeedEffects.forEach((effects, i) => {
+    if (!effects || !effects.size) return;
+    const vid = getTileVideo(i);
+    if (vid) resolveAndApplyTileSpeed(i, vid, vid.playbackRate);
+  });
+}, 100);
 
 function loadMosaicPref() {
   try { mosaicEnabled = localStorage.getItem('mm_mosaic_enabled') === '1'; } catch (e) {}
@@ -1387,36 +1492,54 @@ function clearTileGlow() {
   tileElements.forEach(tile => { if (tile) endBarrageDim(tile); });
 }
 
-// Mirrors fadeSealedDim's technique: the ::after's opacity is driven by
-// a custom property rather than the class itself, so the class can stay
-// in place for the whole fade (entering AND leaving) instead of a
-// toggle that would kill the element - and its CSS transition - the
-// instant it's removed. The forced reflow (offsetWidth read) between
-// setting the starting opacity and the real target is what makes the
-// fade-IN work too: without it, both writes would land in the same
-// style recalculation and the browser would never see the 0-opacity
-// starting point to animate away from.
-function startBarrageDim(tile) {
-  if (!tile) return;
-  if (!tile.classList.contains('tile-dimmed')) {
-    tile.style.setProperty('--dim-opacity', '0');
-    tile.style.setProperty('--dim-fade-ms', '0ms');
-    tile.classList.add('tile-dimmed');
-    void tile.offsetWidth;
+// ---- Fadeable overlay helper ----
+// Shared by every "dim overlay that needs independent fade-in/fade-out
+// timing" mechanic (the barrage non-selected dim here, and the sealed-
+// tile lock dim below) - previously each hand-rolled its own copy of
+// the same technique. The ::after's opacity is driven by a custom
+// property rather than the class itself, so the class can stay in place
+// for the whole fade (entering AND leaving) instead of a toggle that
+// would kill the element - and its CSS transition - the instant it's
+// removed. The forced reflow (offsetWidth read) between setting the
+// starting opacity and the real target is what makes the fade-IN work
+// too: without it, both writes would land in the same style
+// recalculation and the browser would never see the 0-opacity starting
+// point to animate away from.
+//
+// Not used by due-aura's own exit fade - that one has a continuous
+// breathing pulse running at the same time, which needs its own
+// calc()-of-two-properties approach (see startDueAuraExitFade) since a
+// single opacity property can't be independently driven by both a
+// pulse animation and a one-off fade at once.
+function startFadeableOverlay(el, className, propPrefix, targetOpacity, fadeMs) {
+  if (!el) return;
+  if (!el.classList.contains(className)) {
+    el.style.setProperty('--' + propPrefix + '-opacity', '0');
+    el.style.setProperty('--' + propPrefix + '-fade-ms', '0ms');
+    el.classList.add(className);
+    void el.offsetWidth;
   }
-  tile.style.setProperty('--dim-fade-ms', TUNING.BARRAGE_DIM_FADE_IN_MS + 'ms');
-  tile.style.setProperty('--dim-opacity', String(TUNING.BARRAGE_DIM_OPACITY));
+  el.style.setProperty('--' + propPrefix + '-fade-ms', fadeMs + 'ms');
+  el.style.setProperty('--' + propPrefix + '-opacity', String(targetOpacity));
+}
+
+function endFadeableOverlay(el, className, propPrefix, fadeMs) {
+  if (!el || !el.classList.contains(className)) return;
+  el.style.setProperty('--' + propPrefix + '-fade-ms', fadeMs + 'ms');
+  el.style.setProperty('--' + propPrefix + '-opacity', '0');
+  setTimeout(() => {
+    el.classList.remove(className);
+    el.style.removeProperty('--' + propPrefix + '-opacity');
+    el.style.removeProperty('--' + propPrefix + '-fade-ms');
+  }, fadeMs);
+}
+
+function startBarrageDim(tile) {
+  startFadeableOverlay(tile, 'tile-dimmed', 'dim', TUNING.BARRAGE_DIM_OPACITY, TUNING.BARRAGE_DIM_FADE_IN_MS);
 }
 
 function endBarrageDim(tile) {
-  if (!tile || !tile.classList.contains('tile-dimmed')) return;
-  tile.style.setProperty('--dim-fade-ms', TUNING.BARRAGE_DIM_FADE_OUT_MS + 'ms');
-  tile.style.setProperty('--dim-opacity', '0');
-  setTimeout(() => {
-    tile.classList.remove('tile-dimmed');
-    tile.style.removeProperty('--dim-opacity');
-    tile.style.removeProperty('--dim-fade-ms');
-  }, TUNING.BARRAGE_DIM_FADE_OUT_MS);
+  endFadeableOverlay(tile, 'tile-dimmed', 'dim', TUNING.BARRAGE_DIM_FADE_OUT_MS);
 }
 
 function fizzleAnticipation(runId) {
@@ -3646,7 +3769,7 @@ function ensureTiles(count) {
     const grow = count - oldCount;
     currentPaths = currentPaths.concat(new Array(grow).fill(''));
     aspectRatios = aspectRatios.concat(new Array(grow).fill(DEFAULT_ASPECT));
-    tileSpeedBurstUntil = tileSpeedBurstUntil.concat(new Array(grow).fill(0));
+    tileSpeedEffects = tileSpeedEffects.concat(new Array(grow));
     aspectKnown = aspectKnown.concat(new Array(grow).fill(false));
     tileLoopBounds = tileLoopBounds.concat(new Array(grow).fill(null));
     lastFilterStr = lastFilterStr.concat(new Array(grow).fill(''));
@@ -3670,8 +3793,7 @@ function ensureTiles(count) {
     tileClaimEls.length = count;
     currentPaths.length = count;
     aspectRatios.length = count;
-    tileSpeedBurstUntil.length = count;
-    heldPlaybackRate.length = count;
+    tileSpeedEffects.length = count;
     aspectKnown.length = count;
     tileLoopBounds.length = count;
     tileLoopCount.length = count;
@@ -3697,10 +3819,10 @@ function applyRandomStart(vid, idx) {
     // run up to 15s - long enough for the clip underneath to rotate on
     // its own mid-hold) hasn't actually expired yet. Without this, the
     // tile still looked locked (dim, badge gone) but had silently sped
-    // back up to normal the moment its content happened to change.
-    if (tileSpeedBurstUntil[idx] && Date.now() < tileSpeedBurstUntil[idx] && heldPlaybackRate[idx] != null) {
-      vid.playbackRate = heldPlaybackRate[idx];
-    }
+    // back up to normal the moment its content happened to change. Just
+    // re-resolving against whatever's actually registered picks the
+    // right value automatically, the same way every other tick does.
+    resolveAndApplyTileSpeed(idx, vid, vid.playbackRate);
     vid.play().catch(() => {});
   };
   vid.addEventListener('loadedmetadata', onMeta);
@@ -3783,27 +3905,26 @@ function render(d) {
       if (pre && pre.getAttribute('src') !== nextUrl) pre.src = nextUrl;
     }
 
-    // A bonus-claim speed burst (see burstTileSpeed) temporarily owns this
-    // tile's rate - skip the server-driven sync for its duration instead
-    // of stomping it the very next poll (every ~0.3s).
-    if (!tileSpeedBurstUntil[i] || Date.now() >= tileSpeedBurstUntil[i]) {
-      // Lock already signals "stay on this one longer" - slowing it down
-      // too leans into that same intent instead of just holding it fixed
-      // at normal speed. Composes with the player's own manual speed
-      // slider rather than overriding it.
-      const lockMult = d.locked ? TUNING.LOCK_SLOWDOWN_MULT : 1;
-      const barrageTiles = d.barrage > 0 ? (d.barrage_tiles || []) : [];
-      const isSelected = barrageTiles.includes(i);
-      const isDimmed = barrageTiles.length > 0 && !isSelected;
-      let targetSpeed = s.speed * lockMult * manualSpeedMult;
-      let fadeInMs = TUNING.BARRAGE_SPEED_FADE_MS, fadeOutMs = TUNING.BARRAGE_SPEED_FADE_MS;
-      if (isDimmed) {
-        targetSpeed = TUNING.BARRAGE_DIM_SPEED_MULT * lockMult * manualSpeedMult;
-        fadeInMs = TUNING.BARRAGE_DIM_FADE_IN_MS;
-        fadeOutMs = TUNING.BARRAGE_DIM_FADE_OUT_MS;
-      }
-      applyBarrageSmoothedSpeed(i, vid, targetSpeed, isSelected || isDimmed, fadeInMs, fadeOutMs);
+    // Lock already signals "stay on this one longer" - slowing it down
+    // too leans into that same intent instead of just holding it fixed
+    // at normal speed. Composes with the player's own manual speed
+    // slider rather than overriding it.
+    const lockMult = d.locked ? TUNING.LOCK_SLOWDOWN_MULT : 1;
+    const naturalSpeed = s.speed * lockMult * manualSpeedMult;
+    const barrageTiles = d.barrage > 0 ? (d.barrage_tiles || []) : [];
+    const isSelected = barrageTiles.includes(i);
+    const isDimmed = barrageTiles.length > 0 && !isSelected;
+    // Only tiles that are, or just were, actually part of a barrage ever
+    // get a live effect registered - a tile that's never been near one
+    // has no entry in tileSpeedEffects at all, so resolveAndApplyTileSpeed
+    // takes its cheap early-exit path instead of evaluating anything.
+    if (isSelected || tileSpeedEffects[i] && tileSpeedEffects[i].has('barrageBoost')) {
+      setLiveSpeedEffect(i, vid, 'barrageBoost', SPEED_PRIORITY.barrageBoost, isSelected, naturalSpeed, TUNING.BARRAGE_SPEED_FADE_MS, TUNING.BARRAGE_SPEED_FADE_MS);
     }
+    if (isDimmed || tileSpeedEffects[i] && tileSpeedEffects[i].has('barrageDim')) {
+      setLiveSpeedEffect(i, vid, 'barrageDim', SPEED_PRIORITY.barrageDim, isDimmed, TUNING.BARRAGE_DIM_SPEED_MULT * lockMult * manualSpeedMult, TUNING.BARRAGE_DIM_FADE_IN_MS, TUNING.BARRAGE_DIM_FADE_OUT_MS);
+    }
+    resolveAndApplyTileSpeed(i, vid, naturalSpeed);
     const sat = Math.floor((s.tension - 1.0) * 60 + 100);
     const cont = Math.floor((s.tension - 1.0) * 40 + 100);
     const filterStr = `saturate(${sat}%) contrast(${cont}%)`;
@@ -3932,7 +4053,8 @@ function rateScreen(i, dir, btn, strength) {
     // odds of other systems elsewhere.
     if (heartMultiplier > 1) awardXp(Math.round(heartMultiplier));
     if (Math.random() < 0.10 + heartMultiplier * 0.07) {
-      burstTileSpeed(i, 1500, 1.05 + heartMultiplier * 0.02, 1.15 + heartMultiplier * 0.03);
+      const kickVid = getTileVideo(i);
+      if (kickVid) setTimelineSpeedEffect(i, kickVid, 'heartKick', SPEED_PRIORITY.heartKick, randomInRange(1.05 + heartMultiplier * 0.02, 1.15 + heartMultiplier * 0.03), 0, 1500, 0);
     }
     dislikeStreak = 0;
     nudgeEngagement(0.12 * strength);
@@ -4120,24 +4242,12 @@ function claimBonusTile(idx) {
     el.classList.add('bonus-claimed');
     setTimeout(() => el.classList.remove('bonus-claimed'), BONUS_CLAIM_CELEBRATION_MS);
   }
-  burstTileSpeedFading(idx, BONUS_CLAIM_CELEBRATION_MS, 1.175, 1.35, TUNING.BONUS_CLAIM_SPEED_FADE_MS);
+  const claimVid = getTileVideo(idx);
+  if (claimVid) {
+    setTimelineSpeedEffect(idx, claimVid, 'bonusClaim', SPEED_PRIORITY.bonusClaim, randomInRange(1.175, 1.35), TUNING.BONUS_CLAIM_SPEED_FADE_MS, BONUS_CLAIM_CELEBRATION_MS, TUNING.BONUS_CLAIM_SPEED_FADE_MS);
+  }
   bumpJackpotHeat(0.5); // a smaller, flat nudge than a chase catch's - see bumpJackpotHeat
   triggerMiniPayoff(idx);
-}
-
-// Random speed-up on the claimed tile, synced with the claim's visual
-// celebration - a little extra kinetic payoff for the hit itself, not
-// just a border glow. See the tileSpeedBurstUntil guard in render() -
-// without it, the next status poll (every ~0.3s) would immediately
-// overwrite this with the server-driven speed again.
-function burstTileSpeed(idx, durationMs, minMult, maxMult) {
-  const vid = tileElements[idx] && tileElements[idx].querySelector('#screen-' + idx);
-  if (!vid) return;
-  minMult = minMult == null ? 1.25 : minMult;
-  maxMult = maxMult == null ? 2.0 : maxMult;
-  vid.playbackRate = minMult + Math.random() * (maxMult - minMult);
-  heldPlaybackRate[idx] = vid.playbackRate;
-  tileSpeedBurstUntil[idx] = Date.now() + durationMs;
 }
 
 // ---- Sealed tile ----
@@ -4162,21 +4272,10 @@ function maybeTriggerSealedTile() {
   }
 }
 
-// Fades the sealed dim's opacity to 0 over durationMs (instead of
-// snapping instantly the moment the class is removed, which is all a
-// plain class toggle could ever do for a pseudo-element's own opacity -
-// see the CSS comment on .tile-sealed-dim::after), then cleans the
-// class and custom properties up once the fade has actually finished.
+const SEALED_LOCK_DIM_OPACITY = 0.4; // matches .tile-sealed-dim::after's old CSS default
+
 function fadeSealedDim(idx, durationMs) {
-  const tile = tileElements[idx];
-  if (!tile || !tile.classList.contains('tile-sealed-dim')) return;
-  tile.style.setProperty('--sealed-dim-fade-ms', durationMs + 'ms');
-  tile.style.setProperty('--sealed-dim-opacity', '0');
-  setTimeout(() => {
-    tile.classList.remove('tile-sealed-dim');
-    tile.style.removeProperty('--sealed-dim-opacity');
-    tile.style.removeProperty('--sealed-dim-fade-ms');
-  }, durationMs);
+  endFadeableOverlay(tileElements[idx], 'tile-sealed-dim', 'sealed-dim', durationMs);
 }
 
 // Smoothly ramps playbackRate from wherever it currently sits to a
@@ -4187,33 +4286,6 @@ function fadeSealedDim(idx, durationMs) {
 // its burst speed and then actually hold there for a beat before
 // render()'s own guard lets it expire back to the server-driven speed,
 // the same way every other burst in this file already naturally expires.
-function fadeTileSpeedTo(idx, fadeMs, targetMin, targetMax, holdAfterMs) {
-  const vid = tileElements[idx] && tileElements[idx].querySelector('#screen-' + idx);
-  if (!vid) return;
-  holdAfterMs = holdAfterMs || 0;
-  const startSpeed = vid.playbackRate;
-  const targetSpeed = targetMin + Math.random() * (targetMax - targetMin);
-  const startTime = Date.now();
-  tileSpeedBurstUntil[idx] = startTime + fadeMs + holdAfterMs;
-  function step() {
-    const elapsed = Date.now() - startTime;
-    const t = Math.min(1, elapsed / fadeMs);
-    vid.playbackRate = startSpeed + (targetSpeed - startSpeed) * t;
-    heldPlaybackRate[idx] = vid.playbackRate;
-    if (t < 1) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
-}
-
-// A burst that genuinely fades both ways instead of snapping to the
-// random target and then snapping back to normal the instant the hold
-// expires - fades up over fadeMs, holds for holdMs, then fades back
-// down to normal over fadeMs again.
-function burstTileSpeedFading(idx, holdMs, minMult, maxMult, fadeMs) {
-  fadeTileSpeedTo(idx, fadeMs, minMult, maxMult, holdMs);
-  setTimeout(() => fadeTileSpeedTo(idx, fadeMs, 1, 1, 0), fadeMs + holdMs);
-}
-
 function activateSealedTile(idx) {
   sealedTileIndex = idx;
   sealedExpireAt = Date.now() + TUNING.SEALED_DURATION_MS;
@@ -4222,11 +4294,14 @@ function activateSealedTile(idx) {
   // Looks actually locked, not just bordered: a dim overlay on the tile
   // itself (same opacity-only technique as the mega-barrage dim, but its
   // own class so the two never fight over who gets to clear it) plus a
-  // genuine slowdown - burstTileSpeed doubles as a slow-down here since
-  // min/max are both the same value.
+  // genuine slowdown.
   const tile = tileElements[idx];
-  if (tile) { tile.classList.add('tile-sealed-dim'); tile.classList.remove('tile-sealed-missed'); }
-  burstTileSpeed(idx, TUNING.SEALED_DURATION_MS, TUNING.SEALED_LOCK_SPEED_MULT, TUNING.SEALED_LOCK_SPEED_MULT);
+  if (tile) {
+    startFadeableOverlay(tile, 'tile-sealed-dim', 'sealed-dim', SEALED_LOCK_DIM_OPACITY, 0); // instant on, same as before
+    tile.classList.remove('tile-sealed-missed');
+  }
+  const vid = getTileVideo(idx);
+  if (vid) setTimelineSpeedEffect(idx, vid, 'sealedLock', SPEED_PRIORITY.sealedLock, TUNING.SEALED_LOCK_SPEED_MULT, 0, TUNING.SEALED_DURATION_MS, 0);
   clearTimeout(sealedTimer);
   sealedTimer = setTimeout(() => missSealedTile(idx), TUNING.SEALED_DURATION_MS);
 }
@@ -4243,20 +4318,19 @@ function missSealedTile(idx) {
   const tile = tileElements[idx];
   if (tile) tile.classList.add('tile-sealed-missed'); // bottom-left "locked" label while the miss-hold plays out
   sealedTileIndex = -1;
-  // The original lock burst (from activateSealedTile) only ever covered
-  // SEALED_DURATION_MS - without re-extending it here, it would expire
-  // on its own partway through this hold and render()'s own guard would
-  // silently resume server-driven (normal) speed well before the dim
-  // visually clears, desyncing the two exactly as reported: the tile
-  // looked locked but had already sped back up underneath. Holding the
-  // burst window open for the full miss-hold keeps the locked speed
-  // genuinely locked until the fade below actually starts.
-  tileSpeedBurstUntil[idx] = Date.now() + TUNING.SEALED_MISS_HOLD_MS;
+  // One timeline effect now covers the whole hold-then-fade: replacing
+  // the 'sealedLock' effect still already registered (from
+  // activateSealedTile) with a fresh one holding at the same locked
+  // speed for the full miss-hold, then fading to normal, means the
+  // speed side no longer needs its own separate deferred call the way
+  // the old tileSpeedBurstUntil-extension + setTimeout(fadeTileSpeedTo)
+  // pairing did - the effect just runs its own timeline on its own.
+  const vid = getTileVideo(idx);
+  if (vid) setTimelineSpeedEffect(idx, vid, 'sealedLock', SPEED_PRIORITY.sealedLock, TUNING.SEALED_LOCK_SPEED_MULT, 0, TUNING.SEALED_MISS_HOLD_MS, TUNING.SEALED_MISS_FADE_MS);
   setTimeout(() => {
     if (sealedTileIndex === idx) return; // this tile got sealed again before the old hold finished - don't fade it out from under the new one
     if (tile) tile.classList.remove('tile-sealed-missed');
     fadeSealedDim(idx, TUNING.SEALED_MISS_FADE_MS);
-    fadeTileSpeedTo(idx, TUNING.SEALED_MISS_FADE_MS, 1, 1);
   }, TUNING.SEALED_MISS_HOLD_MS);
 }
 
@@ -4305,8 +4379,11 @@ function openSealedTile(idx) {
   // held for the same 1800ms a plain reward burst already would) over
   // SEALED_UNLOCK_FADE_MS, same timing for the dim.
   fadeSealedDim(idx, TUNING.SEALED_UNLOCK_FADE_MS);
-  if (outcome.speed) fadeTileSpeedTo(idx, TUNING.SEALED_UNLOCK_FADE_MS, outcome.speed[0], outcome.speed[1], 1800);
-  else fadeTileSpeedTo(idx, TUNING.SEALED_UNLOCK_FADE_MS, 1, 1);
+  const unlockVid = getTileVideo(idx);
+  if (unlockVid) {
+    if (outcome.speed) setTimelineSpeedEffect(idx, unlockVid, 'sealedLock', SPEED_PRIORITY.sealedLock, randomInRange(outcome.speed[0], outcome.speed[1]), TUNING.SEALED_UNLOCK_FADE_MS, 1800, 0);
+    else setTimelineSpeedEffect(idx, unlockVid, 'sealedLock', SPEED_PRIORITY.sealedLock, 1, TUNING.SEALED_UNLOCK_FADE_MS, 0, 0);
+  }
   if (outcome.heat > 0) bumpJackpotHeat(outcome.heat);
   playChimeSound(outcome.negative ? 0.4 : 0.7 + outcome.heat * 0.2);
   incrementQuestMetric('bonuses', 1);
@@ -4459,7 +4536,8 @@ function catchChaseFlash(idx) {
   // Base increase-over-normal (was 0.05-0.15) trimmed 10%; the per-streak
   // addition on top (was 0.05-0.10) trimmed a further 5%.
   const chainSpeedExtra = chainForSpeed * (0.0375 + Math.random() * 0.0375); // tapered per direct feedback
-  burstTileSpeed(idx, CHASE_CAUGHT_CELEBRATION_MS * pulses, 1.045 + chainSpeedExtra, 1.125 + chainSpeedExtra);
+  const chaseVid = getTileVideo(idx);
+  if (chaseVid) setTimelineSpeedEffect(idx, chaseVid, 'chaseCatch', SPEED_PRIORITY.chaseCatch, randomInRange(1.045 + chainSpeedExtra, 1.125 + chainSpeedExtra), 0, CHASE_CAUGHT_CELEBRATION_MS * pulses, 0);
   const catchMult = hiddenMultiplierFactor();
   // Combo Chain Mechanics: a catch here feeds the same shared combo meter
   // rating-in-succession builds (registerCombo/comboMultiplier), so bursts
