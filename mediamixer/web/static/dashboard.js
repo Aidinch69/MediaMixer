@@ -2352,11 +2352,14 @@ function maybeTriggerFakeNearMiss() {
 
 // ---- Auto-Pilot (experimental) ----
 // A scripted session arc - calm, then building, a climax, then cooldown,
-// repeating - that ramps pace, barrage/jackpot odds, mosaic, and the
-// floating-overlay count over time instead of those staying wherever you
-// last set them. Driven entirely from this tab by re-using the existing
-// per-session controls (pace(), /api/intensity, toggleMosaic/setFxCount),
-// so it has no server-side component of its own.
+// repeating - that ramps pace, barrage/jackpot odds, and the floating-
+// overlay count over time instead of those staying wherever you last
+// set them. Driven entirely from this tab by re-using the existing
+// per-session controls (pace(), /api/intensity, setFxCount), so it has
+// no server-side component of its own. Deliberately does NOT touch
+// Mosaic Fit (mosaicEnabled) - that used to ramp on/off with the arc too,
+// but per explicit feedback Auto-Pilot no longer gets to flip it; it
+// stays exactly wherever the viewer last set it manually.
 const AUTOPILOT_TICK_MS = 4000;
 // "ambient" ramps every client-only passive-spawn system added since this
 // arc was first written (bonus window, chase flash, near-miss, spiral-
@@ -2365,12 +2368,12 @@ const AUTOPILOT_TICK_MS = 4000;
 // in, so a "climax" only ever meant more barrages/floaters, never more of
 // these. Shaped like the existing barrage/jackpot curve.
 const AUTOPILOT_KEYFRAMES = [
-  { t: 0.00, pace: 3, barrage: 0.01, jackpot: 0.02, mosaic: false, fx: 1, novelty: 0.10, ambient: 0.0 },
-  { t: 0.35, pace: 2, barrage: 0.03, jackpot: 0.06, mosaic: false, fx: 2, novelty: 0.15, ambient: 0.2 },
-  { t: 0.60, pace: 1, barrage: 0.10, jackpot: 0.18, mosaic: true, fx: 4, novelty: 0.30, ambient: 0.5 },
-  { t: 0.75, pace: 0, barrage: 0.22, jackpot: 0.35, mosaic: true, fx: 6, novelty: 0.50, ambient: 0.9 },
-  { t: 0.85, pace: 1, barrage: 0.08, jackpot: 0.15, mosaic: true, fx: 3, novelty: 0.30, ambient: 0.4 },
-  { t: 1.00, pace: 3, barrage: 0.01, jackpot: 0.02, mosaic: false, fx: 1, novelty: 0.10, ambient: 0.0 },
+  { t: 0.00, pace: 3, barrage: 0.01, jackpot: 0.02, fx: 1, novelty: 0.10, ambient: 0.0 },
+  { t: 0.35, pace: 2, barrage: 0.03, jackpot: 0.06, fx: 2, novelty: 0.15, ambient: 0.2 },
+  { t: 0.60, pace: 1, barrage: 0.10, jackpot: 0.18, fx: 4, novelty: 0.30, ambient: 0.5 },
+  { t: 0.75, pace: 0, barrage: 0.22, jackpot: 0.35, fx: 6, novelty: 0.50, ambient: 0.9 },
+  { t: 0.85, pace: 1, barrage: 0.08, jackpot: 0.15, fx: 3, novelty: 0.30, ambient: 0.4 },
+  { t: 1.00, pace: 3, barrage: 0.01, jackpot: 0.02, fx: 1, novelty: 0.10, ambient: 0.0 },
 ];
 
 let autopilotAmbientBoost = 0;
@@ -2379,7 +2382,6 @@ let autopilotCycleMinutes = 6;
 let autopilotStartTime = 0;
 let autopilotTimer = null;
 let autopilotLastPace = null;
-let autopilotLastMosaic = null;
 
 // A fresh zone is picked each time the cycle wraps back to its start
 // (never the same zone twice in a row) so repeat cycles lean into a
@@ -2466,16 +2468,11 @@ function autopilotTick() {
   const noveltyBonus = lerp(a.novelty, b.novelty, lf);
   const fxTarget = Math.round(lerp(a.fx, b.fx, lf));
   const targetPace = lf < 0.5 ? a.pace : b.pace;
-  const targetMosaic = lf < 0.5 ? a.mosaic : b.mosaic;
   autopilotAmbientBoost = lerp(a.ambient, b.ambient, lf);
 
   fetch('/api/intensity?barrage=' + barrageP.toFixed(3) + '&jackpot=' + jackpotP.toFixed(3));
   fetch('/api/novelty?bonus=' + noveltyBonus.toFixed(3));
   if (targetPace !== autopilotLastPace) { autopilotLastPace = targetPace; pace(targetPace, true); }
-  if (targetMosaic !== autopilotLastMosaic) {
-    autopilotLastMosaic = targetMosaic;
-    if (mosaicEnabled !== targetMosaic) toggleMosaic();
-  }
   if (fxCount !== fxTarget) setFxCount(fxTarget);
 }
 
@@ -2587,7 +2584,6 @@ function toggleDynamicMosaicDrift() { setDynamicMosaicDriftMode(!dynamicMosaicDr
 function startAutopilot() {
   autopilotStartTime = Date.now();
   autopilotLastPace = null;
-  autopilotLastMosaic = null;
   autopilotZone = null;
   autopilotLastFrac = 0;
   if (!fxEnabled) toggleFx();
