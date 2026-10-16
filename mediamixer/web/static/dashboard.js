@@ -2145,6 +2145,7 @@ function bankWin(quiet) {
 let choiceMomentTimer = null;
 
 function maybeTriggerChoiceMoment() {
+  if (focusModeActive >= 0) return; // Focus Mode's clean room
   if (choiceMomentTimer) return; // one at a time
   if (Math.random() < TUNING.CHOICE_MOMENT_PROBABILITY) showChoiceMoment();
 }
@@ -2821,6 +2822,7 @@ function ensureTiles(count) {
   aspectKnown = new Array(count).fill(false);
   tileLoopBounds = new Array(count).fill(null);
   activeAudioTileIndex = -1; // every tile gets torn down and rebuilt muted below
+  if (focusModeActive >= 0) { anticipationFxEnabled = focusModeSavedAnticipation; focusModeActive = -1; } // old tile is gone - don't leave anticipation FX stuck off
   tileElements = [];
   tileGlowEls = [];
   tileAmbientEls = [];
@@ -2845,6 +2847,7 @@ function ensureTiles(count) {
       '<button class="up thumb" onclick="rateScreen(' + i + ',\'up\',this)">❤️</button>' +
       '<button class="down thumb" onclick="rateScreen(' + i + ',\'down\',this)">👎</button>' +
       '<button class="audio thumb" id="audio-btn-' + i + '" onclick="toggleTileAudio(' + i + ')">🔇</button>' +
+      '<button class="focus thumb" id="focus-btn-' + i + '" onclick="toggleFocusMode(' + i + ')">🔍</button>' +
       '</div></div>';
     const vid = tile.querySelector('#screen-' + i);
     vid.muted = true; // Tile Audio control below is the only thing that unmutes a tile - never more than one at once
@@ -3042,26 +3045,29 @@ function skip() { fetch('/api/skip').then(() => toast('⬇️ Skipped All', true
 function lock() { fetch('/api/lock').then(() => toast('60s Locked')); }
 function cycleTone() { fetch('/api/cycle_tone'); }
 function cat(f) { fetch('/api/folder?folder=' + encodeURIComponent(f)).then(() => toast('Category: ' + f.toUpperCase())); }
-// Dip-to-dim: bridges a layout/tile-count change (manual click or Dynamic
-// Mosaic below) with a brief fade to black instead of the grid cutting
-// straight to the new arrangement - see the CSS comment on
+// Dip-to-dim: bridges a visual rearrangement (layout/tile-count change,
+// or Focus Mode's own takeover below) with a brief fade to black instead
+// of cutting straight to the new arrangement - see the CSS comment on
 // #layout-fade-overlay for why a full dim rather than an animated reflow.
-// Not perfectly synced to the moment new tiles actually populate (that's
-// driven by whatever snapshot tick happens to land during the dim hold),
-// just a fixed, tunable dip-and-return - simple to feel out first before
-// chasing a more precisely-timed version.
-function setLayout(mode, quiet) {
+// `changeFn` runs right at the bottom of the dip, `atDip` (for a caller
+// that itself does something async, e.g. an API call) defaults to firing
+// `changeFn` inline - not perfectly synced to the moment new content
+// actually appears, just a fixed, tunable dip-and-return.
+function fadeTransition(changeFn) {
   const overlay = document.getElementById('layout-fade-overlay');
-  if (overlay && TUNING.LAYOUT_FADE_MS > 0) {
-    overlay.style.transition = 'opacity ' + (TUNING.LAYOUT_FADE_MS / 1000) + 's ease';
-    overlay.style.opacity = '1';
-    setTimeout(() => {
-      fetch('/api/layout?mode=' + mode).then(() => { if (!quiet) toast('Layout: ' + mode.toUpperCase()); });
-      setTimeout(() => { overlay.style.opacity = '0'; }, TUNING.LAYOUT_FADE_HOLD_MS);
-    }, TUNING.LAYOUT_FADE_MS);
-  } else {
+  if (!overlay || TUNING.LAYOUT_FADE_MS <= 0) { changeFn(); return; }
+  overlay.style.transition = 'opacity ' + (TUNING.LAYOUT_FADE_MS / 1000) + 's ease';
+  overlay.style.opacity = '1';
+  setTimeout(() => {
+    changeFn();
+    setTimeout(() => { overlay.style.opacity = '0'; }, TUNING.LAYOUT_FADE_HOLD_MS);
+  }, TUNING.LAYOUT_FADE_MS);
+}
+
+function setLayout(mode, quiet) {
+  fadeTransition(() => {
     fetch('/api/layout?mode=' + mode).then(() => { if (!quiet) toast('Layout: ' + mode.toUpperCase()); });
-  }
+  });
 }
 function togglePreload() {
   const next = !preloadEnabled;
@@ -3192,6 +3198,58 @@ function toggleTileAudio(i) {
   }
   const btn = document.getElementById('audio-btn-' + i);
   if (btn) btn.innerText = activeAudioTileIndex === i ? '🔊' : '🔇';
+}
+
+// Focus Mode: a deliberate, manual "clean room" for one tile - takes it
+// full-screen and strips every flashy overlay mechanic (jackpot build-up,
+// chase/bonus/sealed windows, spiral, Color Rush, mystery tile...) by
+// temporarily forcing anticipationFxEnabled off, the one flag nearly all
+// of them already gate on. The rest of the grid stays visible but dimmed
+// and un-interactive, rather than hidden outright, so the pull of the
+// grid doesn't vanish entirely - it just steps back. The focused screen's
+// own rotation is frozen server-side (/api/focus) so it can't get yanked
+// away mid-focus by its normal expiry timer; the rest of the grid keeps
+// rotating normally underneath.
+let focusModeActive = -1;
+let focusModeSavedAnticipation = true;
+
+function toggleFocusMode(i) {
+  markInteraction();
+  if (focusModeActive === i) {
+    exitFocusMode(i);
+  } else {
+    if (focusModeActive >= 0) exitFocusMode(focusModeActive);
+    enterFocusMode(i);
+  }
+}
+
+function enterFocusMode(i) {
+  fadeTransition(() => {
+    const tile = tileElements[i];
+    if (!tile) return;
+    focusModeActive = i;
+    focusModeSavedAnticipation = anticipationFxEnabled;
+    anticipationFxEnabled = false;
+    tile.classList.add('focus-active');
+    tileElements.forEach((t, idx) => { if (idx !== i) t.classList.add('dimmed-by-focus'); });
+    const btn = document.getElementById('focus-btn-' + i);
+    if (btn) btn.innerText = '✕';
+    fetch('/api/focus?screen=' + i + '&on=true');
+    toast('🔍 Focus Mode');
+  });
+}
+
+function exitFocusMode(i) {
+  fadeTransition(() => {
+    const tile = tileElements[i];
+    if (tile) tile.classList.remove('focus-active');
+    tileElements.forEach((t) => t.classList.remove('dimmed-by-focus'));
+    anticipationFxEnabled = focusModeSavedAnticipation;
+    focusModeActive = -1;
+    const btn = document.getElementById('focus-btn-' + i);
+    if (btn) btn.innerText = '🔍';
+    fetch('/api/focus?screen=' + i + '&on=false');
+  });
 }
 
 function pulseTileGlow(idx, multiplier, negative) {
@@ -3897,6 +3955,7 @@ const AMBIENT_PULSE_PROBABILITY = 0.3;
 const AMBIENT_PULSE_DURATION_MS = 12000;
 
 function maybeTriggerAmbientPulse() {
+  if (focusModeActive >= 0) return; // Focus Mode's clean room
   if (anticipationActive || !tileGlowEls.length) return;
   if (Math.random() >= AMBIENT_PULSE_PROBABILITY) return;
   const idx = Math.floor(Math.random() * tileGlowEls.length);
