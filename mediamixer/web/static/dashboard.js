@@ -4580,8 +4580,9 @@ function openSealedTile(idx) {
   // Combo Chain Mechanics - see catchChaseFlash. An empty pull doesn't
   // feed the chain; only an actual payoff should keep it alive.
   const chainMult = outcome.negative ? 1 : registerCombo();
+  const spinMult = outcome.negative ? 1 : consumeSpinDouble(); // an empty pull doesn't burn a charge
   nudgeEngagement(outcome.negative ? -0.03 : 0.08);
-  const xpAmount = (Array.isArray(outcome.xp) ? Math.round(outcome.xp[0] + Math.random() * (outcome.xp[1] - outcome.xp[0])) : outcome.xp) * mult * chainMult;
+  const xpAmount = (Array.isArray(outcome.xp) ? Math.round(outcome.xp[0] + Math.random() * (outcome.xp[1] - outcome.xp[0])) : outcome.xp) * mult * chainMult * spinMult;
   const claimEl = tileClaimEls[idx];
   if (claimEl) {
     claimEl.classList.add('sealed-opened');
@@ -4603,7 +4604,7 @@ function openSealedTile(idx) {
   incrementQuestMetric('bonuses', 1);
   if (!outcome.negative) onEngagement('unlock', idx);
   const fxLabel = outcome.negative ? null : maybeFxReward(idx, TUNING.FX_REWARD_SEALED_CHANCE);
-  const tag = (mult > 1 ? ' (hidden x' + mult + '!)' : '') + (fxLabel ? ' · ' + fxLabel : '');
+  const tag = (mult > 1 ? ' (hidden x' + mult + '!)' : '') + (spinMult > 1 ? ' (⚡x2)' : '') + (fxLabel ? ' · ' + fxLabel : '');
   const label = outcome.label || ('+' + xpAmount + 'xp' + (outcome.speed ? ' ⚡' : '') + tag);
   showClaimRewardLabel(idx, label);
   toast((outcome.negative ? '📦 Sealed tile was empty' : '🔓 Sealed tile: ' + label), outcome.negative);
@@ -4774,11 +4775,12 @@ function catchChaseFlash(idx) {
   // ramp the one multiplier together instead of each tracking its own
   // isolated streak.
   const chainMult = registerCombo();
-  awardXp((TUNING.CHASE_XP_BASE + chaseChain * TUNING.CHASE_XP_PER_CATCH) * catchMult * chainMult);
+  const spinMult = consumeSpinDouble();
+  awardXp((TUNING.CHASE_XP_BASE + chaseChain * TUNING.CHASE_XP_PER_CATCH) * catchMult * chainMult * spinMult);
   incrementQuestMetric('bonuses', 1);
   onEngagement('catch', idx);
   bumpJackpotHeat(chaseChain * 0.4); // longer chains nudge the odds toward bigger jackpots - see bumpJackpotHeat
-  const chainTag = catchMult > 1 ? ' (hidden x' + catchMult + '!)' : '';
+  const chainTag = (catchMult > 1 ? ' (hidden x' + catchMult + '!)' : '') + (spinMult > 1 ? ' (⚡x2)' : '');
   toast('🏃 Caught! Chain x' + chaseChain + chainTag);
   // The corner toast is easy to miss on a denser grid - right on the
   // tile that was actually caught is where attention already is.
@@ -5150,8 +5152,9 @@ function triggerMiniPayoff(idx) {
   nudgeEngagement(0.08);
   const mult = hiddenMultiplierFactor();
   const chainMult = registerCombo(); // Combo Chain Mechanics - see catchChaseFlash
-  const xp = TUNING.XP_PER_BONUS_CLAIM * mult * chainMult;
-  let tag = mult > 1 ? ' (hidden x' + mult + '!)' : '';
+  const spinMult = consumeSpinDouble();
+  const xp = TUNING.XP_PER_BONUS_CLAIM * mult * chainMult * spinMult;
+  let tag = (mult > 1 ? ' (hidden x' + mult + '!)' : '') + (spinMult > 1 ? ' (⚡x2)' : '');
   awardXp(xp);
   incrementQuestMetric('bonuses', 1);
   sessionStats.bonuses++;
@@ -5242,8 +5245,89 @@ const SPIN_REEL_LINGER_MS = 2600; // how long the landed result stays in the win
 // actual possible landing state so the reel reads as "here's what you
 // could get" instead of an ambiguous string of emoji.
 const SPIN_SYMBOLS = {
-  jackpot: '🎰 JACKPOT', close: '😤 SO CLOSE', bonus: '✨ BONUS', fx: '🌀 FX BURST', xp: '🎉 XP', nothing: '💨 NOTHING',
+  jackpot: '🎰 JACKPOT', close: '😤 SO CLOSE', bonus: '✨ BONUS', fx: '🌈 FX BURST', spiral: '🌀 SPIRAL',
+  mantra: '💬 MANTRA', double: '⚡ x2 CATCHES', rhythm: '🥁 RHYTHM', respin: '🔁 RE-SPIN', xp: '🎉 XP', nothing: '💨 NOTHING',
 };
+
+// The roll table. Weights sum to 100, so each one reads as a percent.
+// An outcome that can't happen right now (FX rewards switched off, a
+// spiral already up, Rhythm Mode already running...) lands on its
+// fallback instead - 'xp' unless it names one - so the odds of the
+// rest never shift around underneath it.
+const SPIN_OUTCOMES = [
+  { key: 'jackpot', weight: 7, ok: () => !anticipationActive, fallback: 'close' },
+  { key: 'close', weight: 4 },
+  { key: 'bonus', weight: 16, ok: () => tileElements.length > 0 },
+  { key: 'fx', weight: 12, ok: () => tileElements.length > 0 && fxRewardsEnabled },
+  { key: 'spiral', weight: 12, ok: () => anticipationFxEnabled && !spiralActive && !(spiralList && !spiralList.length) },
+  { key: 'mantra', weight: 8, ok: () => mantraEnabled },
+  { key: 'double', weight: 8 },
+  { key: 'rhythm', weight: 6, ok: () => !rhythmActive() && !finaleActive },
+  { key: 'respin', weight: 5 },
+  { key: 'xp', weight: 7 },
+  { key: 'nothing', weight: 15 },
+];
+
+function rollSpinOutcome() {
+  const total = SPIN_OUTCOMES.reduce((sum, o) => sum + o.weight, 0);
+  let r = Math.random() * total;
+  for (const o of SPIN_OUTCOMES) {
+    if (r < o.weight) return !o.ok || o.ok() ? o.key : (o.fallback || 'xp');
+    r -= o.weight;
+  }
+  return 'xp';
+}
+
+// Spin streak: every pull that pays anything (not Nothing, not So Close)
+// adds a pip; SPIN_STREAK_TARGET - 1 in a row makes the next pull a
+// guaranteed jackpot. If a build-up is mid-flight when that pull comes,
+// the streak just stays charged for the one after. Any jackpot, rolled
+// or guaranteed, cashes the streak in.
+const SPIN_STREAK_TARGET = 5;
+const SPIN_DOUBLE_CHARGES = 3; // catches/claims/unlocks the x2 outcome covers
+const SPIN_RHYTHM_MS = 90000; // a little over one full tempo wave
+const SPIN_MANTRA_RUSH_MS = 20000;
+let spinStreak = 0;
+let spinDoubleCharges = 0;
+let spinRhythmUntil = 0; // read by rhythmActive() in dashboard_layers.js
+let spinMantraRushUntil = 0; // read by mantraIntensity() in dashboard_layers.js
+
+function loadSpinState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('mm_spin') || '{}');
+    spinStreak = Math.max(0, Math.min(SPIN_STREAK_TARGET - 1, saved.streak | 0));
+    spinDoubleCharges = Math.max(0, Math.min(SPIN_DOUBLE_CHARGES * 3, saved.doubles | 0));
+  } catch (e) {}
+  updateSpinStatus();
+}
+
+function saveSpinState() {
+  try { localStorage.setItem('mm_spin', JSON.stringify({ streak: spinStreak, doubles: spinDoubleCharges })); } catch (e) {}
+  updateSpinStatus();
+}
+
+function updateSpinStatus() {
+  const el = document.getElementById('spin-status');
+  if (!el) return;
+  const charged = spinStreak >= SPIN_STREAK_TARGET - 1;
+  let pips = '';
+  for (let i = 0; i < SPIN_STREAK_TARGET; i++) {
+    const cls = i < spinStreak ? 'on' : (i === SPIN_STREAK_TARGET - 1 ? 'goal' : '');
+    pips += '<span class="spin-pip ' + cls + '"></span>';
+  }
+  el.innerHTML = '<span class="spin-pips' + (charged ? ' charged' : '') + '" title="Spin streak - ' + (SPIN_STREAK_TARGET - 1) + ' paying spins in a row makes the next one a guaranteed JACKPOT">' + pips + '</span>'
+    + (spinDoubleCharges > 0 ? '<span class="spin-double" title="Your next catches, bonus claims and unlocks pay double">⚡x2 ×' + spinDoubleCharges + '</span>' : '');
+  el.classList.toggle('charged', charged);
+}
+
+// Called by every catch/claim/unlock payout: uses up one x2 charge if
+// there are any, and returns the factor to multiply that payout by.
+function consumeSpinDouble() {
+  if (spinDoubleCharges <= 0) return 1;
+  spinDoubleCharges--;
+  saveSpinState();
+  return 2;
+}
 const SPIN_SYMBOL_KEYS = Object.keys(SPIN_SYMBOLS);
 let spinReelHideTimer = null;
 
@@ -5337,14 +5421,8 @@ function spin() {
   const theater = document.getElementById('theater-box');
   teaseNextTheme(theater); // quick visual "tick" regardless of outcome
 
-  const roll = Math.random();
-  let outcome;
-  if (roll < 0.08 && !anticipationActive) outcome = 'jackpot';
-  else if (roll < 0.12) outcome = 'close';
-  else if (roll < 0.44 && tileElements.length) outcome = 'bonus';
-  else if (roll < 0.56 && tileElements.length && fxRewardsEnabled) outcome = 'fx';
-  else if (roll < 0.79) outcome = 'xp';
-  else outcome = 'nothing';
+  const guaranteed = spinStreak >= SPIN_STREAK_TARGET - 1 && !anticipationActive;
+  const outcome = guaranteed ? 'jackpot' : rollSpinOutcome();
 
   const btn = document.getElementById('spin-btn');
   if (btn) {
@@ -5359,14 +5437,51 @@ function spin() {
 
   runSpinReel(outcome, () => {
     if (btn) btn.classList.remove('spin-rolling');
+    const streakBefore = spinStreak;
+    if (outcome === 'jackpot') spinStreak = 0;
+    else if (outcome === 'close' || outcome === 'nothing') spinStreak = 0;
+    else spinStreak = Math.min(SPIN_STREAK_TARGET - 1, spinStreak + 1);
+    saveSpinState();
+    const streakLost = spinStreak === 0 && streakBefore > 0 && outcome !== 'jackpot' ? ' (streak of ' + streakBefore + ' lost)' : '';
+
     if (outcome === 'jackpot') {
-      showSpinResult('🎉 JACKPOT!');
+      showSpinResult(guaranteed ? '🔥 STREAK JACKPOT!' : '🎉 JACKPOT!');
+      if (guaranteed) toast('🔥 ' + (SPIN_STREAK_TARGET - 1) + ' in a row - guaranteed JACKPOT!');
       runPayoff(); // full jackpot-tier celebration - the rare big pull
     } else if (outcome === 'close') {
       // Nothing behind it (same philosophy as the fake build-up near-
       // misses), but the reel itself just showed how close it came.
       showSpinResult('😤 SO CLOSE!');
-      toast('😤 So close to a JACKPOT! (rolled ' + (roll * 100).toFixed(1) + '%, needed under 8%)', true);
+      toast('😤 So close to a JACKPOT!' + streakLost, true);
+    } else if (outcome === 'spiral') {
+      maybeTriggerSpiralOverlay();
+      playChimeSound(0.7, 0.9);
+      showSpinResult('🌀 Spiral!');
+      toast('🌀 Spiral!');
+    } else if (outcome === 'mantra') {
+      // A center trance line, a burst around it, then mantras keep coming
+      // faster than usual for SPIN_MANTRA_RUSH_MS.
+      spinMantraRushUntil = Date.now() + SPIN_MANTRA_RUSH_MS;
+      showMantra('trance');
+      setTimeout(() => mantraBurst(5), 700);
+      scheduleNextMantra();
+      showSpinResult('💬 Mantra!');
+      toast('💬 Mantra rush for ' + SPIN_MANTRA_RUSH_MS / 1000 + 's');
+    } else if (outcome === 'double') {
+      spinDoubleCharges += SPIN_DOUBLE_CHARGES;
+      saveSpinState();
+      playChimeSound(0.8, 1.1);
+      showSpinResult('⚡ x2 Catches!');
+      toast('⚡ Your next ' + SPIN_DOUBLE_CHARGES + ' catches, claims or unlocks pay double (' + spinDoubleCharges + ' banked)');
+    } else if (outcome === 'rhythm') {
+      spinRhythmUntil = Date.now() + SPIN_RHYTHM_MS;
+      showSpinResult('🥁 Rhythm!');
+      toast('🥁 Rhythm Mode for ' + SPIN_RHYTHM_MS / 1000 + 's - ride the wave');
+    } else if (outcome === 'respin') {
+      spinReadyAt = Date.now();
+      playChimeSound(0.6, 1.2);
+      showSpinResult('🔁 Spin again!');
+      toast('🔁 Free re-spin - pull again!');
     } else if (outcome === 'bonus') {
       activateBonusWindow(pickAmbientTarget());
       showSpinResult('✨ Tap the tile!');
@@ -5375,8 +5490,8 @@ function spin() {
       fireRandomTileFx(3);
       playChimeSound(0.8);
       awardXp(5);
-      showSpinResult('🌀 FX Burst!');
-      toast('🌀 FX Burst! +5xp');
+      showSpinResult('🌈 FX Burst!');
+      toast('🌈 FX Burst! +5xp');
     } else if (outcome === 'xp') {
       const amount = Math.round(8 + Math.random() * 12);
       playChimeSound(0.6);
@@ -5385,8 +5500,9 @@ function spin() {
       toast('🎉 +' + amount + 'xp!');
     } else {
       showSpinResult('💨 Nothing');
-      toast('💨 Nothing this time...', true);
+      toast('💨 Nothing this time...' + streakLost, true);
     }
+    if (spinStreak === SPIN_STREAK_TARGET - 1 && streakBefore < spinStreak) toast('🔥 Streak maxed - next Spin is a guaranteed JACKPOT!');
     // Independent of the roll above - a spin can also shake up Auto-
     // Pilot's current zone, same mechanism as the manual "Switch It Up"
     // button (minus the Double Feature push, which stays exclusive to
@@ -5469,6 +5585,8 @@ window.onload = () => {
   loadVolumePrefs();
   initLayers();
   initEvents();
+  loadSpinState();
+  fetchSpiralList(); // so Spin knows up front whether there are any spirals to land on
   armAutoUnlock();
   fetch('/api/status').then(r => r.json()).then(render);
   connectStream();

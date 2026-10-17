@@ -292,6 +292,7 @@ function mantraIntensity() {
   if (rhythmActive()) k *= 1.2;
   k *= 1 + autopilotAmbientBoost * 0.8;
   k *= finaleMantraMult();
+  if (Date.now() < spinMantraRushUntil) k *= 2.5;
   return k;
 }
 
@@ -429,18 +430,40 @@ function previewMantra() {
 // transform (zoom pulse, synced to audio onsets/Rhythm beats when there
 // are any), or a one-shot ring (shockwave). One effect per tile at a
 // time; a second one on the same tile just waits its turn out.
+//
+// Every lasting kind is driven by fxEnvelope: a quick ease in, then its
+// last FX_FADE_OUT_MS eases back to the untouched video instead of
+// snapping off. Each one's ms includes that fade. They all live on the
+// tile (classes, CSS vars, an overlay) or read the tile's one <video>,
+// which is reused across clip changes - so an effect still running when
+// the clip rotates just carries on over the next clip until its window
+// is up.
 const TILE_FX_KINDS = {
-  prism: { label: '🌈 Prism', ms: 3200 },
-  kaleido: { label: '🔮 Kaleido', ms: 4500 },
-  zoom: { label: '💓 Zoom Pulse', ms: 4000 },
-  rgb: { label: '🎞 RGB Split', ms: 2600 },
-  vhs: { label: '📼 VHS', ms: 3500 },
+  prism: { label: '🌈 Prism', ms: 8000 },
+  kaleido: { label: '🔮 Kaleido', ms: 6500 },
+  zoom: { label: '💓 Zoom Pulse', ms: 9000 },
+  rgb: { label: '🎞 RGB Split', ms: 8000 },
+  vhs: { label: '📼 VHS', ms: 7500 },
   shock: { label: '💥 Shockwave', ms: 900 },
 };
+const FX_FADE_IN_MS = 400;
+const FX_FADE_OUT_MS = 2500;
+
+function fxSmoothstep(x) { return x * x * (3 - 2 * x); }
+
+// 0 -> 1 over the fade-in, holds at 1, then 1 -> 0 over the last
+// FX_FADE_OUT_MS (or half the run, if it's ever shorter than that).
+function fxEnvelope(elapsed, ms) {
+  if (elapsed <= 0 || elapsed >= ms) return 0;
+  const fadeOut = Math.min(FX_FADE_OUT_MS, ms / 2);
+  const fin = Math.min(1, elapsed / FX_FADE_IN_MS);
+  const left = ms - elapsed;
+  return fxSmoothstep(fin) * fxSmoothstep(left < fadeOut ? left / fadeOut : 1);
+}
 const TILE_FX_NAMES = Object.keys(TILE_FX_KINDS);
 let fxRewardsEnabled = true;
 const tileFxBusyUntil = {}; // tile idx -> timestamp
-const zoomFxTiles = new Map(); // tile idx -> end timestamp
+const zoomFxTiles = new Map(); // tile idx -> { start, until } timestamps
 let rgbSplitActiveUntil = 0; // the SVG filter is shared, so one RGB split at a time
 
 function pickFxKind() {
@@ -460,14 +483,11 @@ function fireTileFx(idx, kind) {
     tileFxBusyUntil[idx] = now + spec.ms;
   }
   if (kind === 'prism') {
-    tile.classList.remove('fx-prism');
-    void tile.offsetWidth;
-    tile.classList.add('fx-prism');
-    setTimeout(() => tile.classList.remove('fx-prism'), spec.ms);
+    startPrismFx(tile, spec.ms);
   } else if (kind === 'kaleido') {
     startKaleidoFx(tile, vid, spec.ms);
   } else if (kind === 'zoom') {
-    zoomFxTiles.set(idx, now + spec.ms);
+    zoomFxTiles.set(idx, { start: now, until: now + spec.ms });
     kickZoomTile(idx, 0.8);
   } else if (kind === 'rgb') {
     if (now < rgbSplitActiveUntil) return false;
@@ -512,6 +532,7 @@ function fireRandomTileFx(count) {
 function startKaleidoFx(tile, vid, ms) {
   const canvas = document.createElement('canvas');
   canvas.className = 'fx-kaleido-canvas';
+  canvas.style.opacity = '0';
   tile.insertBefore(canvas, vid.nextSibling);
   const g = canvas.getContext('2d');
   const start = performance.now();
@@ -519,12 +540,9 @@ function startKaleidoFx(tile, vid, ms) {
   function draw(ts) {
     if (!canvas.isConnected) return;
     const elapsed = ts - start;
-    if (elapsed > ms) {
-      canvas.classList.remove('show');
-      setTimeout(() => canvas.remove(), 600);
-      return;
-    }
+    if (elapsed >= ms) { canvas.remove(); return; }
     requestAnimationFrame(draw);
+    canvas.style.opacity = fxEnvelope(elapsed, ms).toFixed(3);
     if (ts - last < 33) return;
     last = ts;
     const w = tile.clientWidth, h = tile.clientHeight;
@@ -543,8 +561,42 @@ function startKaleidoFx(tile, vid, ms) {
     });
     g.setTransform(1, 0, 0, 1, 0, 0);
   }
-  requestAnimationFrame(() => canvas.classList.add('show'));
   requestAnimationFrame(draw);
+}
+
+// Hue keeps rotating while the saturation boost rides the envelope. The
+// spin rate is picked so the fade-out (an ease-out that starts at the
+// same angular speed and decelerates to a stop) lands on an exact
+// multiple of 360deg - the colors drift back home instead of jumping
+// there when the class comes off. Driven through CSS vars on the tile so
+// it applies to whatever clip the tile's <video> is showing.
+function startPrismFx(tile, ms) {
+  const fadeMs = Math.min(FX_FADE_OUT_MS, ms / 2);
+  const fadeStart = ms - fadeMs;
+  // An ease-out quad covers half the distance a constant speed would.
+  const turns = Math.max(1, Math.round((fadeStart + fadeMs / 2) / 3200));
+  const degPerMs = (turns * 360) / (fadeStart + fadeMs / 2);
+  const start = performance.now();
+  tile.classList.add('fx-prism');
+  function step(ts) {
+    const elapsed = ts - start;
+    if (elapsed >= ms || !tile.isConnected) {
+      tile.classList.remove('fx-prism');
+      tile.style.removeProperty('--prism-hue');
+      tile.style.removeProperty('--prism-sat');
+      return;
+    }
+    let hue;
+    if (elapsed < fadeStart) hue = elapsed * degPerMs;
+    else {
+      const u = (elapsed - fadeStart) / fadeMs;
+      hue = fadeStart * degPerMs + degPerMs * fadeMs / 2 * (1 - (1 - u) * (1 - u));
+    }
+    tile.style.setProperty('--prism-hue', (hue % 360).toFixed(1) + 'deg');
+    tile.style.setProperty('--prism-sat', (1 + 0.7 * fxEnvelope(elapsed, ms)).toFixed(3));
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
 
 function startRgbSplitFx(tile, ms) {
@@ -554,15 +606,16 @@ function startRgbSplitFx(tile, ms) {
   tile.classList.add('fx-rgb');
   const start = performance.now();
   function step(ts) {
-    const t = (ts - start) / ms;
-    if (t >= 1) {
+    const elapsed = ts - start;
+    if (elapsed >= ms) {
       tile.classList.remove('fx-rgb');
       offsets.forEach((o) => o.setAttribute('dx', '0'));
       return;
     }
-    // Swells in and out over the run, with a faster wobble riding on top.
-    const env = Math.sin(t * Math.PI);
-    const dx = (3 + 9 * env) * (0.75 + 0.25 * Math.sin(ts / 60));
+    // A slow swell and a faster wobble riding on top, all scaled by the
+    // envelope so the channels slide back together over the fade-out.
+    const swell = 0.5 + 0.5 * Math.sin(elapsed / 900);
+    const dx = (4 + 8 * swell) * (0.75 + 0.25 * Math.sin(ts / 60)) * fxEnvelope(elapsed, ms);
     offsets[0].setAttribute('dx', dx.toFixed(1));
     if (offsets[1]) offsets[1].setAttribute('dx', (-dx).toFixed(1));
     requestAnimationFrame(step);
@@ -573,20 +626,37 @@ function startRgbSplitFx(tile, ms) {
 function startVhsFx(tile, vid, ms) {
   const overlay = document.createElement('div');
   overlay.className = 'fx-vhs-overlay';
+  overlay.style.opacity = '0';
   tile.insertBefore(overlay, vid.nextSibling);
+  tile.style.setProperty('--vhs-k', '0');
   tile.classList.add('fx-vhs');
-  requestAnimationFrame(() => overlay.classList.add('show'));
-  setTimeout(() => {
-    tile.classList.remove('fx-vhs');
-    overlay.classList.remove('show');
-    setTimeout(() => overlay.remove(), 450);
-  }, ms);
+  const start = performance.now();
+  const fadeStart = ms - Math.min(FX_FADE_OUT_MS, ms / 2);
+  function step(ts) {
+    const elapsed = ts - start;
+    if (elapsed >= ms || !tile.isConnected) {
+      tile.classList.remove('fx-vhs', 'fx-vhs-fading');
+      tile.style.removeProperty('--vhs-k');
+      overlay.remove();
+      return;
+    }
+    const k = fxEnvelope(elapsed, ms).toFixed(3);
+    tile.style.setProperty('--vhs-k', k);
+    overlay.style.opacity = k;
+    // The jitter is a hard step animation - it stops rather than fading.
+    if (elapsed >= fadeStart) tile.classList.add('fx-vhs-fading');
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
 
 function kickZoomTile(idx, strength) {
   const vid = getTileVideo(idx);
-  if (!vid || !vid.animate) return;
-  const scale = 1 + 0.05 + strength * 0.07;
+  const z = zoomFxTiles.get(idx);
+  if (!vid || !vid.animate || !z) return;
+  const env = fxEnvelope(Date.now() - z.start, z.until - z.start);
+  if (env < 0.02) return;
+  const scale = 1 + (0.05 + strength * 0.07) * env;
   vid.animate([{ transform: 'scale(' + scale.toFixed(3) + ')' }, { transform: 'scale(1)' }], { duration: 380, easing: 'ease-out' });
 }
 
@@ -594,8 +664,8 @@ let lastZoomKickAt = 0;
 function kickAllZoomTiles(strength) {
   const now = Date.now();
   lastZoomKickAt = now;
-  zoomFxTiles.forEach((until, idx) => {
-    if (now > until) { zoomFxTiles.delete(idx); return; }
+  zoomFxTiles.forEach((z, idx) => {
+    if (now > z.until) { zoomFxTiles.delete(idx); return; }
     kickZoomTile(idx, strength);
   });
 }
@@ -669,7 +739,7 @@ let detectedBpm = null;
 let rhythmRunMinutesPaid = 0;
 
 function rhythmActive() {
-  return rhythmEnabled || rhythmZoneActive || finaleWantsRhythm();
+  return rhythmEnabled || rhythmZoneActive || finaleWantsRhythm() || Date.now() < spinRhythmUntil;
 }
 
 function rhythmWaveFrac() {
@@ -850,7 +920,8 @@ function updateRhythmUi() {
   if (lbl) lbl.innerText = rhythmBaseBpm + ' BPM';
   const status = document.getElementById('rhythm-status');
   if (status) {
-    const why = rhythmEnabled ? 'on' : rhythmZoneActive ? 'on (Rhythm Zone)' : finaleWantsRhythm() ? 'on (Finale)' : 'off';
+    const why = rhythmEnabled ? 'on' : rhythmZoneActive ? 'on (Rhythm Zone)' : finaleWantsRhythm() ? 'on (Finale)'
+      : Date.now() < spinRhythmUntil ? 'on (Spin, ' + Math.ceil((spinRhythmUntil - Date.now()) / 1000) + 's left)' : 'off';
     const src = rhythmBpmSource === 'audio' ? (detectedBpm ? 'detected ~' + detectedBpm + ' BPM' : 'no steady beat in the audio - using ' + rhythmBaseBpm) : rhythmBaseBpm + ' BPM base';
     status.innerText = 'Rhythm ' + why + ' · ' + src + (rhythmActive() ? ' · now ' + Math.round(currentRhythmBpm()) + ' BPM · in sync ' + formatRunSeconds(rhythmRunMs()) : '');
   }
