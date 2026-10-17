@@ -42,10 +42,6 @@
     <feBlend in="redShift" in2="cyanShift" mode="screen"/>
   </filter>
 </svg>
-<button id="rhythm-pad" onclick="rhythmTap()" title="Tap on the beat (or press Space)">
-  <span class="rhythm-pad-icon">🥁</span>
-  <span id="rhythm-pad-streak">tap / space</span>
-</button>
 <div id="finale-offer-prompt">
   <div class="choice-moment-row">
     <span>🎆 Ready for a Finale?</span>
@@ -78,6 +74,10 @@
   </div>
   <div class="choice-moment-timer"><div class="choice-moment-timer-fill"></div></div>
 </div>
+<div id="overdrive-glow"></div>
+<button id="overdrive-meter" onclick="releaseOverdrive()" title="Overdrive - fills as you heart, catch, and claim. Release it when you want a peak (or press O).">
+  <span id="overdrive-fill"></span><span id="overdrive-label">🔥 0%</span>
+</button>
 <div id="spin-widget">
   <div id="spin-reel"><div id="spin-reel-strip"></div></div>
   <button id="spin-btn" onclick="spin()" title="Pull for a chance at a bonus">🎰 Spin</button>
@@ -268,7 +268,7 @@
           <button class="badge" id="near-miss-toggle" onclick="toggleNearMiss()">OFF</button>
         </div>
         <div class="slider"><label>SFX Volume: <b><span id="l-sfx-vol">70%</span></b></label><input type="range" id="sfx-vol-input" min="0" max="100" value="70" oninput="setSfxVolume(this.value)"></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Tension builds (visual pulse, heartbeat, panned riser) when a jackpot is really incoming, with a tier reveal (small/big/mega) and a flash/chime/bass/floater-burst payoff + lingering afterglow when it lands. Milestone jackpot counts get an even bigger one. Near-misses play the same build-up with nothing behind it. Also enables occasional golden "bonus" tiles - rate one 👍 while it's glowing for a quick bonus - and rarer "sealed" tiles, dimmed and playing slower while locked, where the reward itself (xp, a speed kick, a heat bump, or nothing) is only decided the moment you open it. Jackpots and bonuses earn XP toward a level that only ever goes up (top right), each one shifts the color theme, and a daily ~20min "Golden Hour" boosts the odds of all of the above if you happen to be around for it. Near-miss/bonus odds also creep up the longer a single session runs. The thin bar at the very top is an always-on charge meter; quiet tiles get a faint "due" aura; a build-up opens with a quick flash of the next color theme; mega/milestone jackpots can chain into a re-spin; and landing one gives you a few seconds to bank it or push your luck for a bonus (or lose the streak). Occasional "mystery tiles" blur and un-blur on their own - most of the time with nothing behind them, just curiosity, but sometimes it's a genuine swap to something never shown before. A chase flash occasionally hops between tiles - tap it before it moves on to build a chain (missing it by a hair still gets acknowledged right on the tile, not just silently reset). Mega+ and milestone jackpots can also fade in a full-screen spiral for a while, at low opacity (sometimes gently breathing wider/narrower as it holds), pulled from a local Spirals/ folder. A small gold badge up top names the jackpot state itself (a build-up's tier, a live streak, or which Auto-Pilot zone is running) separately from the status bar's own rotating notifications just below it. Hearting tiles builds a heart multiplier that nudges the odds of all of the above (bigger jackpots, spirals, speed kicks, xp) a bit further - it decays if you stop, so it rewards staying engaged rather than one single heart early on. A rare "Color Rush" occasionally sweeps through - falling color streaks, a hue-cycling glow around the edge, every tile pulsing its own color on its own beat, and a confetti burst, all at once; smaller standalone pieces of the same effects (just confetti, just the tiles, etc.) can also show up on their own tied to a streak, an unlock, a bonus, or a jackpot. Every so often there's also a genuinely hidden window where rewards are secretly worth double - nothing announces it, you only find out from the "(hidden x2!)" tag on whatever you happened to win while it was running. Spin itself rolls visibly through its possible outcomes before landing, and can land "so close" to a jackpot and say so, instead of that almost-miss going unmentioned.</p></details>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Tension builds (visual pulse, heartbeat, panned riser) when a jackpot is really incoming, with a tier reveal (small/big/mega) and a flash/chime/bass/floater-burst payoff + lingering afterglow when it lands. Milestone jackpot counts get an even bigger one. Near-misses play the same build-up with nothing behind it. Also enables occasional golden "bonus" tiles - rate one 👍 while it's glowing for a quick bonus - and rarer "sealed" tiles, dimmed and playing slower while locked, where the reward itself (xp, a speed kick, a heat bump, or nothing) is only decided the moment you open it. Jackpots and bonuses earn XP toward a level that only ever goes up (top right), each one shifts the color theme, and a daily ~20min "Golden Hour" boosts the odds of all of the above if you happen to be around for it. Near-miss/bonus odds also creep up the longer a single session runs. The thin bar at the very top is an always-on charge meter; quiet tiles get a faint "due" aura; a build-up opens with a quick flash of the next color theme; mega/milestone jackpots can chain into a re-spin; and landing one gives you a few seconds to bank it or push your luck for a bonus (or lose the streak). Occasional "mystery tiles" blur and un-blur on their own - most of the time with nothing behind them, just curiosity, but sometimes it's a genuine swap to something never shown before. A chase flash occasionally hops between tiles - tap it before it moves on to build a chain (missing it by a hair still gets acknowledged right on the tile, not just silently reset). Mega+ and milestone jackpots can also fade in a full-screen spiral for a while, at low opacity (sometimes gently breathing wider/narrower as it holds), pulled from a local Spirals/ folder. A small gold badge up top names the jackpot state itself (a build-up's tier, a live streak, or which Auto-Pilot zone is running) separately from the status bar's own rotating notifications just below it. Hearting tiles builds a heart multiplier that nudges the odds of all of the above (bigger jackpots, spirals, speed kicks, xp) a bit further - it decays if you stop, so it rewards staying engaged rather than one single heart early on. A rare "Color Rush" occasionally sweeps through - falling color streaks, a hue-cycling glow around the edge, every tile pulsing its own color on its own beat, and a confetti burst, all at once; smaller standalone pieces of the same effects (just confetti, just the tiles, etc.) can also show up on their own tied to a streak, an unlock, a bonus, or a jackpot. Every so often there's also a genuinely hidden window where rewards are secretly worth double - nothing announces it, you only find out from the "(hidden x2!)" tag on whatever you happened to win while it was running. Spin itself rolls visibly through its possible outcomes before landing, and can land "so close" to a jackpot and say so, instead of that almost-miss going unmentioned. Rarely (at most every ~8 minutes, never on top of another event) a Spotlight Takeover grows one tile - often a favorite - to most of the screen for 15-20 seconds while the rest dim; hearting it then pays extra. The 🔥 Overdrive meter bottom-left fills as you heart, catch, and claim (hearts on a Rhythm Mode beat count double) and never drains on its own - release it (tap it or press O) whenever you want a peak: every tile speeds up, the odds of barrages and jackpots spike, a Surge and a spiral kick in, a favorite gets the Spotlight, and FX fire. Clip changes crossfade, zoom-wipe, or glitch-cut instead of hard cutting (mix and length in Tuning → Clip Transitions).</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -277,9 +277,11 @@
         <div class="metric" id="personal-best"></div>
         <button class="badge" onclick="showSessionRecap()">📊 This Session's Recap</button>
         <div class="metric" id="quest-list"></div>
+        <div class="metric" id="weekly-arc"></div>
+        <div class="metric" id="visit-calendar"></div>
         <button class="badge" id="prestige-btn" onclick="prestige()" style="display:none">⭐ Prestige (reset level for a rank)</button>
         <div class="trophy-case" id="trophy-case"></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Lifetime bests and two daily quests that re-roll each day and auto-claim XP on completion - all stored on this device, nothing leaves it. The trophy case below unlocks permanent badges as those lifetime stats cross thresholds (hearts given, jackpots, chase chains, prestige) - once earned, a trophy stays forever.</p></details>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Lifetime bests and two daily quests that re-roll each day and auto-claim XP on completion. The Weekly Arc is a longer chain that runs Monday to Sunday: its stages unlock one after another, each pays XP, and finishing all of them pays a bigger bonus - a different arc each week. The calendar marks every day you've opened MediaMixer in the last three weeks; coming back on consecutive days builds a visit streak with XP at 3, 7, 14, 30 days and beyond. Everything is stored on this device, nothing leaves it. The trophy case unlocks permanent badges as lifetime stats cross thresholds (hearts, jackpots, chase chains, prestige, Finales, weekly arcs, visit streaks, in-sync runs, Overdrive, Spotlight) - once earned, a trophy stays forever.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -304,7 +306,7 @@
       </div>
     </details>
     <details class="settings-section">
-      <summary><span class="section-title">🥁 Rhythm Mode</span><span class="settings-section-desc">A beat the grid moves to, tempo waves, and tap-along streaks.</span></summary>
+      <summary><span class="section-title">🥁 Rhythm Mode</span><span class="settings-section-desc">A beat the grid moves to, tempo waves, and in-sync runs.</span></summary>
       <div class="settings-section-body">
         <div class="slider">
           <label>Enabled</label>
@@ -331,7 +333,7 @@
           <label>Beat Sound</label>
           <button class="badge" id="rhythm-sound-toggle" onclick="toggleRhythmSound()">OFF</button>
         </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Each beat lights the next tile in a snake through the grid, and every downbeat (1 of 4) kicks the screen-edge glow. Tempo Waves speed the beat up over about 70 seconds, then drop back to base - and with Speed Follows Tempo on, every tile's playback speed rides the same wave (about 0.95x at base up to 1.25x at the top), so each wave builds and releases. Follow Audio tries to lock onto a steady beat in what's playing; spoken-word tracks often don't have one, so it falls back to your manual tempo and says so above. Tap along with Space or the 🥁 pad at the bottom: every 8 in a row earns XP, every 16 earns a tile FX. Auto-Pilot's new Rhythm Zone and a Finale's build/peak switch this on by themselves while they run.</p></details>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Each beat lights the next tile in a snake through the grid, and every downbeat (1 of 4) kicks the screen-edge glow. Tempo Waves speed the beat up over about 70 seconds, then drop back to base - and with Speed Follows Tempo on, every tile's playback speed rides the same wave (about 0.95x at base up to 1.25x at the top), so each wave builds and releases. Follow Audio tries to lock onto a steady beat in what's playing; spoken-word tracks often don't have one, so it falls back to your manual tempo and says so above. Every unbroken minute in sync earns XP (every other minute a tile FX too), and hearting a tile right on the beat charges Overdrive double. Auto-Pilot's new Rhythm Zone and a Finale's build/peak switch this on by themselves while they run.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -427,6 +429,14 @@
     <button onclick="resetTuningToDefaults()">⟲ Reset All to Shipped Defaults</button>
     <details class="hint-details"><summary>What does this do?</summary><p class="hint">Live sliders for the constants we've actually been iterating on this session (spiral opacity/timing, sealed/chase/bonus/color-rush/mystery-tile/due-aura odds and timing, spin, the various multipliers and decay rates, xp amounts) - not everything in the file, just the parts worth fine-tuning in real time instead of editing source and restarting. A "check interval" is how often that system rolls the dice at all, in seconds - not a guarantee. A lower interval means it checks more often; the "odds" slider next to it is the actual chance it fires on each check. Low interval + low odds can feel about the same as high interval + high odds - they both control frequency, just from different angles. Changes persist across reloads on this device. "Save Backup" snapshots your current settings so you can experiment further and get back to them later; "Reset All to Shipped Defaults" always goes back to the values this shipped with, independent of any backup.</p></details>
     <div id="tuning-groups"></div>
+    <h3>🖧 Engine<span class="experimental-pill">Live</span></h3>
+    <div class="grid">
+      <button class="badge" onclick="copyEngineConfig()">📋 Copy Changed Values</button>
+      <button class="badge" onclick="resetEngineConfig()">⟲ Engine Defaults</button>
+    </div>
+    <textarea id="engine-config-copy" class="mantra-phrases-input" rows="4" readonly style="display:none"></textarea>
+    <details class="hint-details"><summary>What does this do?</summary><p class="hint">The engine's own settings from config.py - barrage/jackpot odds, the end-of-clip tension slow-down, and how the selection learns from hearts, skips, and locks. Unlike the sliders above, these live on the PC running the engine, so they apply to every device at once and take effect immediately, no restart. They're saved next to the engine (config_overrides.json) and survive restarts; a ● marks anything changed from config.py. When something feels right, "Copy Changed Values" gives you the lines to lock into config.py for good. Auto-Pilot, a Finale, and Overdrive still push barrage/jackpot odds around on their own while they run - these are the baseline they return to.</p></details>
+    <div id="engine-tuning-groups"></div>
   </div>
 </div>
 <audio id="overlay-audio" loop></audio>
@@ -434,5 +444,6 @@
 <script>window.LAYOUT_PRESETS = {{ layout_presets_json | tojson }};</script>
 <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_layers.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_events.js') }}"></script>
 </body>
 </html>

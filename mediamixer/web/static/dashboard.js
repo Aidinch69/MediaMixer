@@ -100,6 +100,28 @@ const TUNING_DEFAULTS = {
   FRESH_DROP_MIN_GAP_MS: 180000,
   FRESH_DROP_SESSION_CAP: 4,
   AUDIO_REACT_PULSE_GAP_MS: 320,
+  TRANSITION_PROBABILITY: 0.9,
+  TRANSITION_DURATION_MS: 600,
+  TRANSITION_WEIGHT_CROSSFADE: 5,
+  TRANSITION_WEIGHT_ZOOM: 3,
+  TRANSITION_WEIGHT_GLITCH: 2,
+  SPOTLIGHT_CHECK_MS: 60000,
+  SPOTLIGHT_PROBABILITY: 0.12,
+  SPOTLIGHT_MIN_GAP_MS: 480000,
+  SPOTLIGHT_DURATION_MIN_MS: 15000,
+  SPOTLIGHT_DURATION_RANGE_MS: 5000,
+  SPOTLIGHT_SCALE: 0.85,
+  SPOTLIGHT_GROW_MS: 900,
+  SPOTLIGHT_DIM_OPACITY: 0.7,
+  OVERDRIVE_PER_HEART: 4,
+  OVERDRIVE_PER_CATCH: 6,
+  OVERDRIVE_PER_BONUS: 8,
+  OVERDRIVE_PER_UNLOCK: 8,
+  OVERDRIVE_ON_BEAT_MULT: 2,
+  OVERDRIVE_BURST_MS: 14000,
+  OVERDRIVE_SPEED_MULT: 1.3,
+  OVERDRIVE_BARRAGE_P: 0.35,
+  OVERDRIVE_JACKPOT_P: 0.6,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -144,9 +166,10 @@ function restartAllTunableIntervals() {
   startTunableInterval('COLOR_SPLASH_CHECK_MS', maybeTriggerColorSplashPiece);
   startTunableInterval('MYSTERY_TILE_CHECK_MS', maybeTriggerMysteryTile);
   startTunableInterval('FRESH_DROP_CHECK_MS', maybeTriggerFreshDrop);
+  startTunableInterval('SPOTLIGHT_CHECK_MS', maybeTriggerSpotlight);
 }
 
-const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS', 'MYSTERY_TILE_CHECK_MS', 'PATIENCE_CHECK_MS', 'CHOICE_MOMENT_CHECK_MS', 'DOUBLE_FEATURE_CHECK_MS', 'FRESH_DROP_CHECK_MS'];
+const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS', 'MYSTERY_TILE_CHECK_MS', 'PATIENCE_CHECK_MS', 'CHOICE_MOMENT_CHECK_MS', 'DOUBLE_FEATURE_CHECK_MS', 'FRESH_DROP_CHECK_MS', 'SPOTLIGHT_CHECK_MS'];
 
 function setTuning(key, value) {
   TUNING[key] = value;
@@ -205,6 +228,9 @@ const TUNING_GROUPS = [
   { label: 'Visual FX Rewards', desc: 'Odds a tile effect (prism, kaleido, VHS...) rides along with a reward.', keys: ['FX_REWARD_BONUS_CHANCE', 'FX_REWARD_SEALED_CHANCE', 'FX_REWARD_CATCH_CHANCE', 'CHASE_MILESTONE_XP_MULT'] },
   { label: 'Fresh Drops', desc: 'How new clips get rationed out - check rate, odds, spacing, per-session cap.', keys: ['FRESH_DROP_CHECK_MS', 'FRESH_DROP_PROBABILITY', 'FRESH_DROP_FIRST_DELAY_MS', 'FRESH_DROP_MIN_GAP_MS', 'FRESH_DROP_SESSION_CAP'] },
   { label: 'Audio-Reactive', desc: 'Minimum gap between audio-triggered tile pulses.', keys: ['AUDIO_REACT_PULSE_GAP_MS'] },
+  { label: 'Clip Transitions', desc: 'How often clip changes get a transition, how long, and the mix of styles.', keys: ['TRANSITION_PROBABILITY', 'TRANSITION_DURATION_MS', 'TRANSITION_WEIGHT_CROSSFADE', 'TRANSITION_WEIGHT_ZOOM', 'TRANSITION_WEIGHT_GLITCH'] },
+  { label: 'Spotlight Takeover', desc: 'The rare one-tile takeover - odds, minimum gap, length, and size.', keys: ['SPOTLIGHT_CHECK_MS', 'SPOTLIGHT_PROBABILITY', 'SPOTLIGHT_MIN_GAP_MS', 'SPOTLIGHT_DURATION_MIN_MS', 'SPOTLIGHT_DURATION_RANGE_MS', 'SPOTLIGHT_SCALE', 'SPOTLIGHT_GROW_MS', 'SPOTLIGHT_DIM_OPACITY'] },
+  { label: 'Overdrive', desc: 'How fast the meter charges and what a release does.', keys: ['OVERDRIVE_PER_HEART', 'OVERDRIVE_PER_CATCH', 'OVERDRIVE_PER_BONUS', 'OVERDRIVE_PER_UNLOCK', 'OVERDRIVE_ON_BEAT_MULT', 'OVERDRIVE_BURST_MS', 'OVERDRIVE_SPEED_MULT', 'OVERDRIVE_BARRAGE_P', 'OVERDRIVE_JACKPOT_P'] },
 ];
 const TUNING_META = {
   XP_PER_BONUS_CLAIM: { label: 'Bonus-tap XP', unit: 'n', min: 5, max: 50, step: 1 },
@@ -292,6 +318,28 @@ const TUNING_META = {
   FRESH_DROP_MIN_GAP_MS: { label: 'Fresh Drop minimum gap', unit: 's', min: 30000, max: 900000, step: 15000 },
   FRESH_DROP_SESSION_CAP: { label: 'Fresh Drops per session (cap)', unit: 'n', min: 1, max: 20, step: 1 },
   AUDIO_REACT_PULSE_GAP_MS: { label: 'Audio pulse minimum gap', unit: 's', min: 100, max: 2000, step: 20 },
+  TRANSITION_PROBABILITY: { label: 'Clip changes with a transition', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  TRANSITION_DURATION_MS: { label: 'Transition length', unit: 's', min: 150, max: 2000, step: 50 },
+  TRANSITION_WEIGHT_CROSSFADE: { label: 'Crossfade weight', unit: 'n', min: 0, max: 10, step: 1 },
+  TRANSITION_WEIGHT_ZOOM: { label: 'Zoom-wipe weight', unit: 'n', min: 0, max: 10, step: 1 },
+  TRANSITION_WEIGHT_GLITCH: { label: 'Glitch-cut weight', unit: 'n', min: 0, max: 10, step: 1 },
+  SPOTLIGHT_CHECK_MS: { label: 'Spotlight check interval', unit: 's', min: 15000, max: 300000, step: 5000 },
+  SPOTLIGHT_PROBABILITY: { label: 'Spotlight odds (per check)', unit: 'pct', min: 0, max: 1, step: 0.01 },
+  SPOTLIGHT_MIN_GAP_MS: { label: 'Spotlight minimum gap', unit: 's', min: 60000, max: 1800000, step: 30000 },
+  SPOTLIGHT_DURATION_MIN_MS: { label: 'Spotlight length (min)', unit: 's', min: 5000, max: 40000, step: 1000 },
+  SPOTLIGHT_DURATION_RANGE_MS: { label: 'Spotlight length (added range)', unit: 's', min: 0, max: 20000, step: 1000 },
+  SPOTLIGHT_SCALE: { label: 'Spotlight size (share of screen)', unit: 'pct', min: 0.4, max: 1, step: 0.05 },
+  SPOTLIGHT_GROW_MS: { label: 'Spotlight grow/shrink time', unit: 's', min: 200, max: 3000, step: 100 },
+  SPOTLIGHT_DIM_OPACITY: { label: 'Spotlight dim on other tiles', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  OVERDRIVE_PER_HEART: { label: 'Charge per heart', unit: 'n', min: 0, max: 25, step: 1 },
+  OVERDRIVE_PER_CATCH: { label: 'Charge per chase catch', unit: 'n', min: 0, max: 25, step: 1 },
+  OVERDRIVE_PER_BONUS: { label: 'Charge per bonus tap', unit: 'n', min: 0, max: 25, step: 1 },
+  OVERDRIVE_PER_UNLOCK: { label: 'Charge per sealed-tile open', unit: 'n', min: 0, max: 25, step: 1 },
+  OVERDRIVE_ON_BEAT_MULT: { label: 'On-the-beat heart charge multiplier', unit: 'x', min: 1, max: 4, step: 0.5 },
+  OVERDRIVE_BURST_MS: { label: 'Overdrive burst length', unit: 's', min: 5000, max: 40000, step: 1000 },
+  OVERDRIVE_SPEED_MULT: { label: 'Overdrive speed boost', unit: 'x', min: 1, max: 2, step: 0.05 },
+  OVERDRIVE_BARRAGE_P: { label: 'Overdrive barrage chance', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  OVERDRIVE_JACKPOT_P: { label: 'Overdrive jackpot chance', unit: 'pct', min: 0, max: 1, step: 0.05 },
 };
 
 function formatTuningValue(key, value) {
@@ -336,6 +384,85 @@ function buildTuningUi() {
     val.innerText = formatTuningValue(key, TUNING[key]);
     input.addEventListener('input', () => setTuning(key, parseFloat(input.value)));
   });
+}
+
+// ---- Engine (server) settings ----
+// The backend's own config.py tunables, live via /api/config. They're
+// shared by every device and saved server-side (config_overrides.json),
+// so they survive restarts until copied into config.py.
+let engineConfigFields = {};
+
+function formatEngineValue(f) {
+  return String(Math.round(f.value * 10000) / 10000);
+}
+
+function loadEngineConfig() {
+  return fetch('/api/config').then(r => r.json()).then(d => {
+    engineConfigFields = d.fields || {};
+    buildEngineTuningUi();
+  }).catch(() => {});
+}
+
+function buildEngineTuningUi() {
+  const container = document.getElementById('engine-tuning-groups');
+  if (!container) return;
+  container.innerHTML = '';
+  const groups = {};
+  Object.keys(engineConfigFields).forEach(name => {
+    const g = engineConfigFields[name].group;
+    (groups[g] = groups[g] || []).push(name);
+  });
+  Object.keys(groups).forEach(label => {
+    const section = document.createElement('details');
+    section.className = 'settings-section';
+    section.innerHTML = '<summary><span class="section-title">🖧 ' + label + '</span><span class="settings-section-desc">Engine setting - shared by every device.</span></summary>';
+    const body = document.createElement('div');
+    body.className = 'settings-section-body';
+    groups[label].forEach(name => {
+      const f = engineConfigFields[name];
+      const row = document.createElement('div');
+      row.className = 'slider';
+      const changed = f.value !== f.default ? ' <span class="engine-changed" title="default ' + f.default + '">●</span>' : '';
+      row.innerHTML = '<label>' + f.label + ': <b><span id="engine-val-' + name + '">' + formatEngineValue(f) + '</span></b>' + changed + '</label>' +
+        '<input type="range" min="' + f.min + '" max="' + f.max + '" step="' + f.step + '" value="' + f.value + '">';
+      const input = row.querySelector('input');
+      const val = row.querySelector('#engine-val-' + name);
+      input.addEventListener('input', () => { val.innerText = input.value; });
+      input.addEventListener('change', () => setEngineConfig(name, input.value));
+      body.appendChild(row);
+    });
+    section.appendChild(body);
+    container.appendChild(section);
+  });
+}
+
+function setEngineConfig(name, value) {
+  fetch('/api/config?name=' + encodeURIComponent(name) + '&value=' + encodeURIComponent(value))
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) { toast('🖧 ' + (d.error || 'Rejected'), true); return; }
+      engineConfigFields[name].value = d.value;
+      buildEngineTuningUi();
+    })
+    .catch(() => toast('🖧 Engine unreachable', true));
+}
+
+function resetEngineConfig() {
+  fetch('/api/config?reset=1').then(r => r.json()).then(d => {
+    engineConfigFields = d.fields || {};
+    buildEngineTuningUi();
+    toast('🖧 Engine settings back to config.py defaults');
+  }).catch(() => {});
+}
+
+function copyEngineConfig() {
+  const lines = Object.keys(engineConfigFields)
+    .filter(n => engineConfigFields[n].value !== engineConfigFields[n].default)
+    .map(n => n + ' = ' + engineConfigFields[n].value);
+  const text = lines.length ? lines.join('\n') : '(everything is at its config.py default)';
+  const out = document.getElementById('engine-config-copy');
+  if (out) { out.value = text; out.style.display = 'block'; out.select(); }
+  try { navigator.clipboard.writeText(text); toast('🖧 Changed values copied'); } catch (e) {}
 }
 
 function updateTuningUi(key) {
@@ -550,7 +677,7 @@ let mosaicSettleTimer = null;
 // order itself is a real, visible decision now instead of an accident:
 // a sealed-locked tile should never have its speed hijacked by a
 // barrage dim, for instance, so sealedLock outranks everything else.
-const SPEED_PRIORITY = { sealedLock: 40, barrageBoost: 25, bonusClaim: 20, chaseCatch: 20, barrageDim: 15, heartKick: 10 };
+const SPEED_PRIORITY = { sealedLock: 40, barrageBoost: 25, overdrive: 22, bonusClaim: 20, chaseCatch: 20, barrageDim: 15, heartKick: 10 };
 let tileSpeedEffects = []; // per-tile: Map<id, effectState> | undefined (lazy)
 
 function getTileVideo(idx) {
@@ -1567,11 +1694,15 @@ function endFadeableOverlay(el, className, propPrefix, fadeMs) {
   }, fadeMs);
 }
 
+// While a Spotlight is up it owns the dim: the spotlit tile is never
+// dimmed, and the others stay dimmed until the Spotlight itself ends.
 function startBarrageDim(tile) {
+  if (spotlightTileIndex >= 0 && tile === tileElements[spotlightTileIndex]) return;
   startFadeableOverlay(tile, 'tile-dimmed', 'dim', TUNING.BARRAGE_DIM_OPACITY, TUNING.BARRAGE_DIM_FADE_IN_MS);
 }
 
 function endBarrageDim(tile) {
+  if (spotlightTileIndex >= 0 && tile !== tileElements[spotlightTileIndex]) return;
   endFadeableOverlay(tile, 'tile-dimmed', 'dim', TUNING.BARRAGE_DIM_FADE_OUT_MS);
 }
 
@@ -2181,6 +2312,7 @@ function incrementQuestMetric(metric, amount) {
     }
   }
   if (changed) { saveQuests(); updateQuestUi(); }
+  arcMetric(metric, amount || 1);
 }
 
 function updateQuestUi() {
@@ -3296,7 +3428,7 @@ function autopilotTick() {
     cycleTone();
   }
 
-  fetch('/api/intensity?barrage=' + barrageP.toFixed(3) + '&jackpot=' + jackpotP.toFixed(3));
+  if (!overdriveActive) fetch('/api/intensity?barrage=' + barrageP.toFixed(3) + '&jackpot=' + jackpotP.toFixed(3));
   fetch('/api/novelty?bonus=' + noveltyBonus.toFixed(3));
   if (targetPace !== autopilotLastPace) { autopilotLastPace = targetPace; pace(targetPace, true); }
   if (fxCount !== fxTarget) setFxCount(fxTarget);
@@ -3654,6 +3786,7 @@ function switchPanelTab(name) {
   document.querySelectorAll('.panel-tab').forEach(el => el.classList.toggle('active', el.dataset.tab === name));
   document.querySelectorAll('.panel-tab-btn').forEach(el => el.classList.toggle('active', el.dataset.tab === name));
   try { localStorage.setItem('mm_panel_tab', name); } catch (e) {}
+  if (name === 'tuning') loadEngineConfig();
 }
 
 function restorePanelTab() {
@@ -3900,7 +4033,7 @@ function render(d) {
   const columnsChanged = d.columns !== currentColumns;
   currentLayout = d.layout;
   currentColumns = d.columns;
-  if (tilesRebuilt || columnsChanged) applyLayoutMode();
+  if (tilesRebuilt || columnsChanged) { endSpotlight(true); applyLayoutMode(); }
   if (tilesRebuilt) hookAllTileAudio();
 
   scrambleText(document.getElementById('t-audio'), d.audio_name);
@@ -3939,6 +4072,7 @@ function render(d) {
     const vid = document.getElementById('screen-' + i);
     if (!vid) return;
     if (s.path && s.path !== currentPaths[i]) {
+      if (currentPaths[i]) beginClipTransition(i, vid);
       currentPaths[i] = s.path;
       tileLoopBounds[i] = null; // the old tile's bounds don't apply to whatever's loading now
       tileLoopCount[i] = 0;
@@ -4117,6 +4251,7 @@ function rateScreen(i, dir, btn, strength) {
       fireColorSplashPiece(null, i);
       toast('❤️🔥 Highlighted tile! Bonus heart multiplier');
     }
+    onEngagement('heart', i, strength);
     statsLifetimeHearts += strength;
     sessionStats.hearts += strength;
     saveStats();
@@ -4265,7 +4400,7 @@ let lastAmbientSpawnAt = 0;
 
 function maybeTriggerBonusWindow() {
   if (!anticipationFxEnabled) return;
-  if (bonusWindowTileIndex >= 0 || !tileElements.length) return;
+  if (bonusWindowTileIndex >= 0 || !tileElements.length || spotlightTileIndex >= 0) return;
   if (Date.now() - lastAmbientSpawnAt < TUNING.AMBIENT_SPAWN_SEPARATION_MS) return;
   if (Math.random() < TUNING.BONUS_WINDOW_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('bonus')) {
     lastAmbientSpawnAt = Date.now();
@@ -4343,7 +4478,7 @@ let sealedTimer = null;
 
 function maybeTriggerSealedTile() {
   if (!anticipationFxEnabled) return;
-  if (sealedTileIndex >= 0 || !tileElements.length) return;
+  if (sealedTileIndex >= 0 || !tileElements.length || spotlightTileIndex >= 0) return;
   if (Date.now() - lastAmbientSpawnAt < TUNING.AMBIENT_SPAWN_SEPARATION_MS) return;
   if (Math.random() < TUNING.SEALED_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('sealed')) {
     lastAmbientSpawnAt = Date.now();
@@ -4466,6 +4601,7 @@ function openSealedTile(idx) {
   if (outcome.heat > 0) bumpJackpotHeat(outcome.heat);
   playChimeSound(outcome.negative ? 0.4 : 0.7 + outcome.heat * 0.2);
   incrementQuestMetric('bonuses', 1);
+  if (!outcome.negative) onEngagement('unlock', idx);
   const fxLabel = outcome.negative ? null : maybeFxReward(idx, TUNING.FX_REWARD_SEALED_CHANCE);
   const tag = (mult > 1 ? ' (hidden x' + mult + '!)' : '') + (fxLabel ? ' · ' + fxLabel : '');
   const label = outcome.label || ('+' + xpAmount + 'xp' + (outcome.speed ? ' ⚡' : '') + tag);
@@ -4501,7 +4637,7 @@ const CHASE_NEAR_MISS_GRACE_MS = 700;
 
 function maybeTriggerChase() {
   if (!anticipationFxEnabled) return;
-  if (chaseFlashTileIndex >= 0 || !tileElements.length) return;
+  if (chaseFlashTileIndex >= 0 || !tileElements.length || spotlightTileIndex >= 0) return;
   if (Date.now() - lastAmbientSpawnAt < TUNING.AMBIENT_SPAWN_SEPARATION_MS) return;
   if (Math.random() < TUNING.CHASE_PROBABILITY * oddsMultiplier() * autopilotZoneMultiplier('chase')) {
     lastAmbientSpawnAt = Date.now();
@@ -4640,6 +4776,7 @@ function catchChaseFlash(idx) {
   const chainMult = registerCombo();
   awardXp((TUNING.CHASE_XP_BASE + chaseChain * TUNING.CHASE_XP_PER_CATCH) * catchMult * chainMult);
   incrementQuestMetric('bonuses', 1);
+  onEngagement('catch', idx);
   bumpJackpotHeat(chaseChain * 0.4); // longer chains nudge the odds toward bigger jackpots - see bumpJackpotHeat
   const chainTag = catchMult > 1 ? ' (hidden x' + catchMult + '!)' : '';
   toast('🏃 Caught! Chain x' + chaseChain + chainTag);
@@ -4936,7 +5073,7 @@ let mysteryTileIndex = -1;
 
 function maybeTriggerMysteryTile() {
   if (!anticipationFxEnabled) return;
-  if (mysteryTileIndex >= 0 || !tileElements.length) return;
+  if (mysteryTileIndex >= 0 || !tileElements.length || spotlightTileIndex >= 0) return;
   if (Math.random() >= TUNING.MYSTERY_TILE_PROBABILITY) return;
   const idx = Math.floor(Math.random() * tileElements.length);
   const tile = tileElements[idx];
@@ -5018,6 +5155,7 @@ function triggerMiniPayoff(idx) {
   awardXp(xp);
   incrementQuestMetric('bonuses', 1);
   sessionStats.bonuses++;
+  onEngagement('bonus', idx);
   const fxLabel = idx != null ? maybeFxReward(idx, TUNING.FX_REWARD_BONUS_CHANCE) : null;
   if (fxLabel) tag += ' · ' + fxLabel;
   toast('✨ Bonus! +' + xp + 'xp' + tag); // was already awarded, just wasn't shown
@@ -5330,6 +5468,7 @@ window.onload = () => {
   overlayEl = document.getElementById('overlay-audio');
   loadVolumePrefs();
   initLayers();
+  initEvents();
   armAutoUnlock();
   fetch('/api/status').then(r => r.json()).then(render);
   connectStream();

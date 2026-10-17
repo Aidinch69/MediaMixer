@@ -20,6 +20,7 @@ from flask import Flask, Response, g, jsonify, render_template, request, send_fr
 
 from .. import library, proxy
 from ..context import AppContext
+from ..live_config import SESSION_MIRRORED, LiveConfig
 from ..network import get_lan_ip, get_tailscale_https_url
 from ..session import Session
 
@@ -111,6 +112,7 @@ def create_app(ctx: AppContext) -> Flask:
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
     config, db, sessions = ctx.config, ctx.db, ctx.sessions
+    live = LiveConfig(config)
 
     @app.before_request
     def _load_session():
@@ -374,6 +376,30 @@ def create_app(ctx: AppContext) -> Flask:
             return jsonify(ok=False, error="invalid value"), 400
         g.session.state.set_intensity(barrage_p, jackpot_p)
         return jsonify(ok=True)
+
+    @app.route("/api/config")
+    def api_config():
+        if request.args.get("reset"):
+            live.reset()
+            _mirror_to_sessions(None)
+            return jsonify(ok=True, fields=live.snapshot())
+        name = request.args.get("name")
+        if name is None:
+            return jsonify(ok=True, fields=live.snapshot())
+        try:
+            value = live.set(name, request.args.get("value", ""))
+        except KeyError:
+            return jsonify(ok=False, error="unknown setting"), 400
+        except (TypeError, ValueError) as exc:
+            return jsonify(ok=False, error=str(exc) or "invalid value"), 400
+        _mirror_to_sessions(name)
+        return jsonify(ok=True, name=name, value=value)
+
+    def _mirror_to_sessions(name):
+        if name is not None and name not in SESSION_MIRRORED:
+            return
+        for session in sessions.all():
+            session.state.set_intensity(config.barrage_probability, config.jackpot_probability)
 
     @app.route("/api/novelty")
     def api_novelty():

@@ -23,3 +23,5 @@ Spirals/
 
 # native-viewer binary dependency (122MB DLL, not source - see mediamixer/native/README or setup notes)
 native_deps/
+config_overrides.json
+config_overrides.json.tmp

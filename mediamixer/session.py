@@ -74,6 +74,10 @@ class SessionManager:
         log.info("new viewer session %s (%d active)", session_id[:8], len(self._sessions))
         return session
 
+    def all(self) -> List[Session]:
+        with self._lock:
+            return list(self._sessions.values())
+
     def get_or_create(self, session_id: Optional[str]) -> Session:
         return self.get(session_id) or self.create()
 

@@ -647,8 +647,7 @@ function awardChaseMilestone(idx, chain) {
 // it too. Tempo can breathe in waves - an accelerando over ~70s that
 // drops back to base - and with Speed Sync on, every tile's playback
 // speed follows the tempo (0.95x at base, up to ~1.25x at the top of a
-// wave), so each wave builds and releases. Tap along (Space, or the pad
-// that appears at the bottom) to build an in-sync streak worth XP.
+// wave), so each wave builds and releases.
 //
 // Engaged manually, or automatically for as long as Auto-Pilot's Rhythm
 // Zone runs (rhythmZoneActive) and during a Finale's build/peak.
@@ -667,8 +666,7 @@ let rhythmNextBeatAt = 0;
 let rhythmBeatCount = 0;
 let rhythmWasActive = false;
 let detectedBpm = null;
-let rhythmTapStreak = 0;
-let rhythmLastTappedBeat = -1;
+let rhythmRunMinutesPaid = 0;
 
 function rhythmActive() {
   return rhythmEnabled || rhythmZoneActive || finaleWantsRhythm();
@@ -722,12 +720,6 @@ function onRhythmBeat(n) {
   if (rhythmSound) playRhythmClick(downbeat);
   if (zoomFxTiles.size) kickAllZoomTiles(downbeat ? 0.9 : 0.5);
   if (n % 8 === 0) maybeMantraOnBeat(0.8);
-  const pad = document.getElementById('rhythm-pad');
-  if (pad) {
-    pad.classList.remove('beat', 'downbeat');
-    void pad.offsetWidth;
-    pad.classList.add(downbeat ? 'downbeat' : 'beat');
-  }
 }
 
 function playRhythmClick(downbeat) {
@@ -754,12 +746,18 @@ setInterval(() => {
       rhythmStartedAt = Date.now();
       rhythmNextBeatAt = performance.now();
       rhythmBeatCount = 0;
-    } else {
-      rhythmTapStreak = 0;
+      rhythmRunMinutesPaid = 0;
     }
     updateRhythmUi();
   }
   if (!active) return;
+  const runMs = rhythmRunMs();
+  sessionStats.rhythmBest = Math.max(sessionStats.rhythmBest, runMs);
+  const runMinutes = Math.floor(runMs / 60000);
+  if (runMinutes > rhythmRunMinutesPaid) {
+    rhythmRunMinutesPaid = runMinutes;
+    onRhythmRunMinute(runMinutes);
+  }
   const now = performance.now();
   if (now >= rhythmNextBeatAt) {
     onRhythmBeat(rhythmBeatCount++);
@@ -808,60 +806,33 @@ setInterval(() => {
   updateRhythmUi();
 }, 4000);
 
-function rhythmTap() {
-  if (!rhythmActive()) return;
-  markInteraction();
-  const now = performance.now();
-  const interval = 60000 / currentRhythmBpm();
-  const prevBeat = rhythmNextBeatAt - interval;
-  const toPrev = now - prevBeat;
-  const toNext = rhythmNextBeatAt - now;
-  const beatIdx = toPrev <= toNext ? rhythmBeatCount - 1 : rhythmBeatCount;
-  const err = Math.min(Math.abs(toPrev), Math.abs(toNext));
-  const hitWindow = Math.min(140, interval * 0.22);
-  const pad = document.getElementById('rhythm-pad');
-  const flash = (cls) => { if (pad) { pad.classList.remove('hit', 'perfect', 'miss'); void pad.offsetWidth; pad.classList.add(cls); } };
-  if (err <= hitWindow && beatIdx !== rhythmLastTappedBeat) {
-    rhythmLastTappedBeat = beatIdx;
-    rhythmTapStreak++;
-    sessionStats.rhythmBest = Math.max(sessionStats.rhythmBest, rhythmTapStreak);
-    flash(err < 45 ? 'perfect' : 'hit');
-    nudgeEngagement(0.02);
-    if (rhythmTapStreak % 8 === 0) {
-      const xp = 4 + Math.floor(rhythmTapStreak / 8) * 2;
-      const mult = registerCombo();
-      awardXp(Math.round(xp * mult));
-      playChimeSound(0.6, 1 + Math.min(rhythmTapStreak, 64) * 0.004);
-      toast('🥁 In sync x' + rhythmTapStreak + '! +' + Math.round(xp * mult) + 'xp');
-      if (rhythmTapStreak % 16 === 0) {
-        const order = rhythmWalkOrder();
-        const idx = order.length ? order[(rhythmBeatCount - 1 + order.length) % order.length] : 0;
-        const kind = pickFxKind();
-        if (fxRewardsEnabled && fireTileFx(idx, kind)) showClaimRewardLabel(idx, '🥁 ' + TILE_FX_KINDS[kind].label);
-      }
-    }
-  } else {
-    flash('miss');
-    if (rhythmTapStreak >= 4) toast('🥁 Off beat - streak was x' + rhythmTapStreak, true);
-    rhythmTapStreak = 0;
-  }
-  updateRhythmPad();
+// An "in-sync run" is how long Rhythm Mode has stayed engaged without a
+// break; each full minute pays a little XP, every other one a tile FX.
+function rhythmRunMs() {
+  return rhythmActive() && rhythmStartedAt ? Date.now() - rhythmStartedAt : 0;
 }
 
-document.addEventListener('keydown', (e) => {
-  if (e.code !== 'Space' || !rhythmActive()) return;
-  const tag = (e.target && e.target.tagName) || '';
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-  e.preventDefault(); // otherwise Space also "clicks" whatever button has focus
-  if (!e.repeat) rhythmTap();
-});
+function onRhythmRunMinute(minutes) {
+  const xp = 4 + minutes * 2;
+  const mult = registerCombo();
+  awardXp(Math.round(xp * mult));
+  playChimeSound(0.6, 1 + Math.min(minutes, 16) * 0.016);
+  toast('🥁 In sync ' + minutes + ' min! +' + Math.round(xp * mult) + 'xp');
+  if (minutes % 2 === 0) {
+    const order = rhythmWalkOrder();
+    const idx = order.length ? order[(rhythmBeatCount - 1 + order.length) % order.length] : 0;
+    const kind = pickFxKind();
+    if (fxRewardsEnabled && fireTileFx(idx, kind)) showClaimRewardLabel(idx, '🥁 ' + TILE_FX_KINDS[kind].label);
+  }
+}
 
-function updateRhythmPad() {
-  const pad = document.getElementById('rhythm-pad');
-  if (!pad) return;
-  pad.classList.toggle('show', rhythmActive());
-  const streak = document.getElementById('rhythm-pad-streak');
-  if (streak) streak.innerText = rhythmTapStreak > 0 ? 'x' + rhythmTapStreak : 'tap / space';
+// True when a moment (e.g. a heart) lands close to a Rhythm Mode beat.
+function rhythmOnBeatNow() {
+  if (!rhythmActive()) return false;
+  const interval = 60000 / currentRhythmBpm();
+  const now = performance.now();
+  const err = Math.min(Math.abs(now - (rhythmNextBeatAt - interval)), Math.abs(rhythmNextBeatAt - now));
+  return err <= Math.min(140, interval * 0.22);
 }
 
 function updateRhythmUi() {
@@ -881,9 +852,13 @@ function updateRhythmUi() {
   if (status) {
     const why = rhythmEnabled ? 'on' : rhythmZoneActive ? 'on (Rhythm Zone)' : finaleWantsRhythm() ? 'on (Finale)' : 'off';
     const src = rhythmBpmSource === 'audio' ? (detectedBpm ? 'detected ~' + detectedBpm + ' BPM' : 'no steady beat in the audio - using ' + rhythmBaseBpm) : rhythmBaseBpm + ' BPM base';
-    status.innerText = 'Rhythm ' + why + ' · ' + src + (rhythmActive() ? ' · now ' + Math.round(currentRhythmBpm()) + ' BPM' : '');
+    status.innerText = 'Rhythm ' + why + ' · ' + src + (rhythmActive() ? ' · now ' + Math.round(currentRhythmBpm()) + ' BPM · in sync ' + formatRunSeconds(rhythmRunMs()) : '');
   }
-  updateRhythmPad();
+}
+
+function formatRunSeconds(ms) {
+  const s = Math.floor(ms / 1000);
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
 setInterval(() => { if (rhythmActive()) updateRhythmUi(); }, 1000);
 
@@ -1191,7 +1166,7 @@ function finaleTick() {
     paceIdx = 3;
     fxTarget = 1;
   }
-  fetch('/api/intensity?barrage=' + barrage.toFixed(3) + '&jackpot=' + jackpot.toFixed(3));
+  if (!overdriveActive) fetch('/api/intensity?barrage=' + barrage.toFixed(3) + '&jackpot=' + jackpot.toFixed(3));
   fetch('/api/novelty?bonus=' + novelty.toFixed(3));
   if (paceIdx !== finaleLastPace) { finaleLastPace = paceIdx; pace(paceIdx, true); }
   if (fxEnabled && fxCount !== fxTarget) setFxCount(fxTarget);
@@ -1214,6 +1189,7 @@ function endFinale(early) {
     pace(finaleSavedPace, true);
   }
   updateFinaleUi();
+  if (!early) onFinaleCompleted();
   showSessionRecap(early ? '🎆 Finale (ended early)' : '🎆 Finale complete');
 }
 
@@ -1321,7 +1297,7 @@ function showSessionRecap(title) {
     ['🎰', 'Jackpots', sessionStats.jackpots],
     ['🏃', 'Catches', sessionStats.catches + (sessionStats.bestChain ? ' (best chain x' + sessionStats.bestChain + ')' : '')],
     ['✨', 'Bonus taps', sessionStats.bonuses],
-    ['🥁', 'Best in-sync run', sessionStats.rhythmBest ? 'x' + sessionStats.rhythmBest : '-'],
+    ['🥁', 'Best in-sync run', sessionStats.rhythmBest >= 1000 ? formatRunSeconds(sessionStats.rhythmBest) : '-'],
     ['🆕', 'Fresh drops', sessionStats.freshDrops],
   ];
   document.getElementById('session-recap-title').innerText = title || '📊 Session Recap';
