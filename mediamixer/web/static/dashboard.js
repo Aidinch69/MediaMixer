@@ -677,7 +677,7 @@ let mosaicSettleTimer = null;
 // order itself is a real, visible decision now instead of an accident:
 // a sealed-locked tile should never have its speed hijacked by a
 // barrage dim, for instance, so sealedLock outranks everything else.
-const SPEED_PRIORITY = { sealedLock: 40, barrageBoost: 25, overdrive: 22, bonusClaim: 20, chaseCatch: 20, barrageDim: 15, heartKick: 10 };
+const SPEED_PRIORITY = { sealedLock: 40, barrageBoost: 25, overdrive: 22, spinSurge: 21, bonusClaim: 20, chaseCatch: 20, barrageDim: 15, heartKick: 10 };
 let tileSpeedEffects = []; // per-tile: Map<id, effectState> | undefined (lazy)
 
 function getTileVideo(idx) {
@@ -4133,17 +4133,28 @@ function render(d) {
       setLiveSpeedEffect(i, vid, 'barrageDim', SPEED_PRIORITY.barrageDim, isDimmed, TUNING.BARRAGE_DIM_SPEED_MULT * lockMult * manualSpeedMult * globalSpeedMult(),TUNING.BARRAGE_DIM_FADE_IN_MS, TUNING.BARRAGE_DIM_FADE_OUT_MS);
     }
     resolveAndApplyTileSpeed(i, vid, naturalSpeed);
-    const sat = Math.floor((s.tension - 1.0) * 60 + 100);
-    const cont = Math.floor((s.tension - 1.0) * 40 + 100);
-    const filterStr = `saturate(${sat}%) contrast(${cont}%)`;
-    // The status stream pushes several times a second; tension often comes
-    // back unchanged between polls, so skip the write (and the repaint it'd
-    // force on a <video>) unless the computed filter actually moved.
-    if (filterStr !== lastFilterStr[i]) {
-      lastFilterStr[i] = filterStr;
-      vid.style.filter = filterStr;
-    }
+    tileTension[i] = s.tension;
+    applyTileTensionFilter(i, vid);
   });
+}
+
+// Tension (from the server) plus Spin Surge's color boost. Also called
+// on Spin Surge's own tick, between status pushes, so the boost eases
+// in and out smoothly.
+let tileTension = [];
+function applyTileTensionFilter(i, vid) {
+  const tension = tileTension[i] == null ? 1 : tileTension[i];
+  const surgeK = spinSurgeColorBoost();
+  const sat = Math.floor((tension - 1.0) * 60 + 100 + surgeK * 30);
+  const cont = Math.floor((tension - 1.0) * 40 + 100 + surgeK * 10);
+  const filterStr = `saturate(${sat}%) contrast(${cont}%)`;
+  // The status stream pushes several times a second; tension often comes
+  // back unchanged between polls, so skip the write (and the repaint it'd
+  // force on a <video>) unless the computed filter actually moved.
+  if (filterStr !== lastFilterStr[i]) {
+    lastFilterStr[i] = filterStr;
+    vid.style.filter = filterStr;
+  }
 }
 
 function connectStream() {
@@ -5246,7 +5257,7 @@ const SPIN_REEL_LINGER_MS = 2600; // how long the landed result stays in the win
 // could get" instead of an ambiguous string of emoji.
 const SPIN_SYMBOLS = {
   jackpot: '🎰 JACKPOT', close: '😤 SO CLOSE', bonus: '✨ BONUS', fx: '🌈 FX BURST', spiral: '🌀 SPIRAL',
-  mantra: '💬 MANTRA', double: '⚡ x2 CATCHES', rhythm: '🥁 RHYTHM', respin: '🔁 RE-SPIN', xp: '🎉 XP', nothing: '💨 NOTHING',
+  surge: '🚀 SURGE', mantra: '💬 MANTRA', double: '⚡ x2 CATCHES', rhythm: '🥁 RHYTHM', respin: '🔁 RE-SPIN', xp: '🎉 XP', nothing: '💨 NOTHING',
 };
 
 // The roll table. Weights sum to 100, so each one reads as a percent.
@@ -5257,14 +5268,15 @@ const SPIN_SYMBOLS = {
 const SPIN_OUTCOMES = [
   { key: 'jackpot', weight: 7, ok: () => !anticipationActive, fallback: 'close' },
   { key: 'close', weight: 4 },
-  { key: 'bonus', weight: 16, ok: () => tileElements.length > 0 },
+  { key: 'surge', weight: 5, ok: () => tileElements.length > 0 && !overdriveActive && !finaleActive && Date.now() >= spinSurgeEndsAt },
+  { key: 'bonus', weight: 13, ok: () => tileElements.length > 0 },
   { key: 'fx', weight: 12, ok: () => tileElements.length > 0 && fxRewardsEnabled },
   { key: 'spiral', weight: 12, ok: () => anticipationFxEnabled && !spiralActive && !(spiralList && !spiralList.length) },
   { key: 'mantra', weight: 8, ok: () => mantraEnabled },
   { key: 'double', weight: 8 },
   { key: 'rhythm', weight: 6, ok: () => !rhythmActive() && !finaleActive },
   { key: 'respin', weight: 5 },
-  { key: 'xp', weight: 7 },
+  { key: 'xp', weight: 5 },
   { key: 'nothing', weight: 15 },
 ];
 
@@ -5291,6 +5303,50 @@ let spinStreak = 0;
 let spinDoubleCharges = 0;
 let spinRhythmUntil = 0; // read by rhythmActive() in dashboard_layers.js
 let spinMantraRushUntil = 0; // read by mantraIntensity() in dashboard_layers.js
+
+// Spin Surge: a rare high-end pull, one notch under Overdrive. Every tile
+// ramps up to a shared random 1.15-1.3x for SPIN_SURGE_MS (then eases
+// back), colors run richer through the tension filter render() already
+// writes (so it never fights Prism/VHS for the filter), the passive
+// Surge odds boost runs alongside it, and a cyan edge glow marks it.
+const SPIN_SURGE_MS = 18000;
+const SPIN_SURGE_RAMP_MS = 1500;
+let spinSurgeStartedAt = 0;
+let spinSurgeEndsAt = 0;
+let spinSurgeEndTimer = null;
+
+// 0..1, eased in and (over the last 2.5s) back out - see fxEnvelope.
+function spinSurgeColorBoost() {
+  const now = Date.now();
+  if (now >= spinSurgeEndsAt) return 0;
+  return fxEnvelope(now - spinSurgeStartedAt, spinSurgeEndsAt - spinSurgeStartedAt);
+}
+
+function startSpinSurge() {
+  const now = Date.now();
+  spinSurgeStartedAt = now;
+  spinSurgeEndsAt = now + SPIN_SURGE_MS;
+  surgeExpireAt = Math.max(surgeExpireAt, spinSurgeEndsAt);
+  const mult = randomInRange(1.15, 1.3);
+  tileElements.forEach((t, i) => {
+    const vid = getTileVideo(i);
+    if (!vid) return;
+    const natural = (tileNaturalBase[i] || 1) * globalSpeedMult();
+    setTimelineSpeedEffect(i, vid, 'spinSurge', SPEED_PRIORITY.spinSurge, natural * mult, SPIN_SURGE_RAMP_MS, SPIN_SURGE_MS - SPIN_SURGE_RAMP_MS * 2, SPIN_SURGE_RAMP_MS, natural);
+  });
+  document.body.classList.add('spin-surge-on');
+  fireColorSplashPiece('border');
+  playBassDropSound(1.1);
+  // render() only runs on status pushes - re-apply the filter on a
+  // steady beat of our own so the color boost eases in and out smoothly.
+  const colorTick = setInterval(() => {
+    if (Date.now() >= spinSurgeEndsAt + 300) clearInterval(colorTick);
+    tileElements.forEach((t, i) => { const v = getTileVideo(i); if (v) applyTileTensionFilter(i, v); });
+  }, 200);
+  clearTimeout(spinSurgeEndTimer);
+  spinSurgeEndTimer = setTimeout(() => document.body.classList.remove('spin-surge-on'), SPIN_SURGE_MS - FX_FADE_OUT_MS);
+  return mult;
+}
 
 function loadSpinState() {
   try {
@@ -5453,6 +5509,10 @@ function spin() {
       // misses), but the reel itself just showed how close it came.
       showSpinResult('😤 SO CLOSE!');
       toast('😤 So close to a JACKPOT!' + streakLost, true);
+    } else if (outcome === 'surge') {
+      const mult = startSpinSurge();
+      showSpinResult('🚀 SURGE!');
+      toast('🚀 Surge! Everything ' + mult.toFixed(2) + 'x for ' + SPIN_SURGE_MS / 1000 + 's, odds up');
     } else if (outcome === 'spiral') {
       maybeTriggerSpiralOverlay();
       playChimeSound(0.7, 0.9);
