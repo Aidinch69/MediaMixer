@@ -248,7 +248,7 @@ function releaseOverdrive() {
     setTimelineSpeedEffect(i, vid, 'overdrive', SPEED_PRIORITY.overdrive, natural * TUNING.OVERDRIVE_SPEED_MULT, rampMs, holdMs, rampMs, natural);
   });
   if (anticipationFxEnabled) maybeTriggerSpiralOverlay();
-  if (tileElements.length >= 3 && spotlightTileIndex < 0) startSpotlight(pickSpotlightTarget(), TUNING.OVERDRIVE_BURST_MS - 1000);
+  if (tileElements.length >= 3 && spotlightTileIndex < 0 && Math.random() < TUNING.OVERDRIVE_SPOTLIGHT_CHANCE) startSpotlight(pickSpotlightTarget(), TUNING.OVERDRIVE_BURST_MS - 1000);
   burstConfetti(70);
   fireColorSplashPiece('border');
   fireRandomTileFx(3);
