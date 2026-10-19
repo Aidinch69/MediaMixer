@@ -103,6 +103,7 @@ function render() {
   renderRewards(start, inWin, intervals);
   // Don't squash a short session into a sliver at the right edge.
   renderTimeline(Math.max(start, Math.min(end - 120, events[0].t - 5)), end, intervals, inWin);
+  renderLikes(Math.max(start, events[0].t), liveEnd, intervals, inWin);
   renderZones(start, intervals);
   renderOverlaps(Math.max(start, events[0].t), liveEnd, intervals);
   renderCounts(inWin);
@@ -251,6 +252,84 @@ function renderTimeline(start, end, intervals, inWin) {
   $('legend').innerHTML = Object.entries(ZONE_COLORS).map(([z, c]) => `<span><i style="background:${c}"></i>${z}</span>`).join('') +
     '<span><i style="background:#7aa2ff"></i>engagement (dashed = neutral)</span><span><i style="background:#ffd23f"></i>barrage+jackpot odds</span>' +
     '<span><i style="background:#ff6b6b;border-radius:50%"></i>shake payoff</span><span><i style="background:#5fd38d;border-radius:50%"></i>catch</span>';
+}
+
+// Older fx.tile events (before durations were logged) fall back to these.
+const FX_DEFAULT_MS = { prism: 8000, bloom: 7000, kaleido: 6500, zoom: 9000, rgb: 8000, vhs: 7500 };
+const LIKE_STATE_LABELS = {
+  barrage: 'Barrage / jackpot hype', spiral: 'Spiral', surge: 'Surge', spinSurge: 'Spin Surge', colorRush: 'Color Rush',
+  overdrive: 'Overdrive', hiddenMult: 'Hidden multiplier', rhythm: 'Rhythm mode', finale: 'Finale',
+};
+const tilesForLayout = (name) => { if (name === 'dual') return 2; const m = /grid(\d+)x(\d+)/.exec(name || ''); return m ? +m[1] * +m[2] : 2; };
+
+function renderLikes(start, end, intervals, inWin) {
+  const ratings = inWin.filter((e) => e.k === 'rate' && e.d && 'fx' in e.d); // ones logged with context
+  if (!ratings.length) { $('likes').innerHTML = '<tr><td class="muted">No ratings with context yet - rate a few tiles (this needs the dashboard to be reloaded once after the update).</td></tr>'; return; }
+  const clip = (a, b) => Math.max(0, Math.min(b, end) - Math.max(a, start));
+  // Tile-seconds on screen, from layout intervals (tile count can change).
+  const layouts = (intervals.layout || []).filter((iv) => iv.end > start);
+  const tilesAt = (t) => { const iv = layouts.find((x) => x.start <= t && t <= x.end); return iv ? tilesForLayout(iv.v) : (ratings[0].d.tiles || 2); };
+  const totalTileS = layouts.length ? layouts.reduce((s, iv) => s + clip(iv.start, iv.end) * tilesForLayout(iv.v), 0) : (end - start) * tilesAt(start);
+  const likes = ratings.filter((e) => e.d.dir === 'up');
+  const dislikes = ratings.filter((e) => e.d.dir !== 'up');
+  const perMin = (n, tileS) => (tileS > 0 ? n / (tileS / 60) : 0);
+  const rows = [];
+  const row = (label, exposureS, inLikes, inDislikes, outLikes, outS, group) => {
+    const rIn = perMin(inLikes, exposureS), rOut = perMin(outLikes, outS);
+    rows.push({ label, exposureS, inLikes, inDislikes, rIn, lift: rOut > 0 ? rIn / rOut : null, group });
+  };
+
+  // Tile FX: exposure is per tile, from each effect's own run.
+  const fxEvents = inWin.filter((e) => e.k === 'fx.tile' && e.d.kind !== 'shock');
+  const fxExposure = {};
+  fxEvents.forEach((e) => { const k = e.d.kind; fxExposure[k] = (fxExposure[k] || 0) + Math.min(e.d.ms || FX_DEFAULT_MS[k] || 7000, (end - e.t) * 1000) / 1000; });
+  const fxTotal = Object.values(fxExposure).reduce((a, b) => a + b, 0);
+  const noFxLikes = likes.filter((e) => !e.d.fx).length;
+  row('No tile effect', totalTileS - fxTotal, noFxLikes, dislikes.filter((e) => !e.d.fx).length, likes.length - noFxLikes, fxTotal, 'Tile effects');
+  Object.keys(fxExposure).sort().forEach((k) => {
+    const n = likes.filter((e) => e.d.fx === k).length;
+    row(k[0].toUpperCase() + k.slice(1), fxExposure[k], n, dislikes.filter((e) => e.d.fx === k).length, likes.length - n, totalTileS - fxExposure[k], 'Tile effects');
+  });
+
+  // Whole-screen states: exposure = time on x tiles showing at the time.
+  Object.keys(LIKE_STATE_LABELS).forEach((s) => {
+    const exp = (intervals[s] || []).reduce((sum, iv) => sum + clip(iv.start, iv.end) * tilesAt(iv.start), 0);
+    if (exp <= 0) return;
+    const n = likes.filter((e) => e.d.states.includes(s)).length;
+    row(LIKE_STATE_LABELS[s], exp, n, dislikes.filter((e) => e.d.states.includes(s)).length, likes.length - n, totalTileS - exp, 'On screen');
+  });
+
+  // Zones.
+  const zoneExp = {};
+  (intervals.zone || []).forEach((iv) => { zoneExp[iv.v] = (zoneExp[iv.v] || 0) + clip(iv.start, iv.end) * tilesAt(iv.start); });
+  Object.keys(zoneExp).forEach((z) => {
+    if (zoneExp[z] <= 0) return;
+    const n = likes.filter((e) => e.d.zone === z).length;
+    row(z[0].toUpperCase() + z.slice(1) + ' zone', zoneExp[z], n, dislikes.filter((e) => e.d.zone === z).length, likes.length - n, totalTileS - zoneExp[z], 'Auto-Pilot zone');
+  });
+
+  // Speed has no exposure record, so just show where likes landed.
+  const band = (e) => (e.d.speed == null ? null : e.d.speed < 0.95 ? 'slowed' : e.d.speed > 1.05 ? 'sped up' : 'normal');
+  const speedCounts = {};
+  ratings.forEach((e) => { const b = band(e); if (!b) return; speedCounts[b] = speedCounts[b] || { up: 0, down: 0 }; speedCounts[b][e.d.dir === 'up' ? 'up' : 'down']++; });
+  const special = [
+    ['Spotlighted tile', likes.filter((e) => e.d.states.includes('spotlightTile')).length, dislikes.filter((e) => e.d.states.includes('spotlightTile')).length],
+    ['Highlighted barrage tile', likes.filter((e) => e.d.states.includes('barrageTile')).length, dislikes.filter((e) => e.d.states.includes('barrageTile')).length],
+  ];
+
+  let group = '';
+  let html = '<tr><th></th><th class="num">on screen (tile-min)</th><th class="num">likes</th><th class="num">dislikes</th><th class="num">likes / tile-min</th><th class="num">vs rest of the time</th></tr>';
+  for (const r of rows) {
+    if (r.group !== group) { group = r.group; html += `<tr><td colspan="6" class="muted" style="padding-top:10px">${group}</td></tr>`; }
+    const thin = r.inLikes < 5;
+    const liftTxt = r.lift == null ? '–' : '×' + r.lift.toFixed(2);
+    const cls = thin || r.lift == null ? '' : r.lift >= 1.25 ? 'good' : r.lift <= 0.8 ? 'bad' : '';
+    html += `<tr style="${thin ? 'opacity:.45' : ''}"><td>${esc(r.label)}</td><td class="num">${(r.exposureS / 60).toFixed(1)}</td><td class="num">${r.inLikes}</td><td class="num">${r.inDislikes}</td><td class="num">${r.rIn.toFixed(2)}</td><td class="num ${cls}">${liftTxt}</td></tr>`;
+  }
+  html += '<tr><td colspan="6" class="muted" style="padding-top:10px">Where likes landed</td></tr>';
+  for (const [label, up, down] of special) html += `<tr><td>${label}</td><td class="num muted">–</td><td class="num">${up}</td><td class="num">${down}</td><td></td><td></td></tr>`;
+  for (const b of ['slowed', 'normal', 'sped up']) if (speedCounts[b]) html += `<tr><td>Tile ${b}</td><td class="num muted">–</td><td class="num">${speedCounts[b].up}</td><td class="num">${speedCounts[b].down}</td><td></td><td></td></tr>`;
+  $('likes').innerHTML = html;
 }
 
 function renderZones(from, intervals) {

@@ -37,7 +37,7 @@ const TUNING_DEFAULTS = {
   SEALED_UNLOCK_FADE_MS: 3000,
   CHASE_CHECK_MS: 20000,
   CHASE_PROBABILITY: 0.22,
-  CHASE_FLASH_START_MS: 1800,
+  CHASE_FLASH_START_MS: 2500, // was 1800 - 0 of 5 caught in real sessions, often under 3+ other effects
   CHASE_FLASH_MIN_MS: 900,
   SPIRAL_OPACITY_MIN: 0.15,
   SPIRAL_OPACITY_RANGE: 0.15,
@@ -132,12 +132,49 @@ const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
 const TUNING_BACKUP_KEY = 'mm_tuning_backup';
 
+// Saved tuning holds only the keys you've actually changed ({v: 2,
+// overrides}), so a new shipped default reaches you unless you've tuned
+// that specific key. The original format saved a snapshot of every key,
+// which silently pinned every default as of the first slider touch - when
+// reading one of those, a value that equals the current default or any
+// earlier shipped default (below, from git history) is treated as
+// untouched and dropped; anything else is a genuine override.
+// When changing a default in TUNING_DEFAULTS, add its old value here.
+const TUNING_PREVIOUS_DEFAULTS = {
+  SEALED_LOCK_SPEED_MULT: [0.51, 0.6],
+  LAYOUT_CHANGE_COOLDOWN_MS: [12000],
+  DYNAMIC_MOSAIC_CHECK_MS: [45000],
+  DYNAMIC_MOSAIC_DRIFT_PROBABILITY: [0.4],
+  CHASE_FLASH_START_MS: [1800],
+};
+
+function tuningOverridesFrom(saved) {
+  if (!saved || typeof saved !== 'object') return {};
+  const legacy = saved.v !== 2;
+  const source = legacy ? saved : (saved.overrides || {});
+  const out = {};
+  Object.keys(TUNING_DEFAULTS).forEach((k) => {
+    const v = source[k];
+    if (typeof v !== 'number' || v === TUNING_DEFAULTS[k]) return;
+    if (legacy && (TUNING_PREVIOUS_DEFAULTS[k] || []).includes(v)) return;
+    out[k] = v;
+  });
+  return out;
+}
+
+function tuningOverridesNow() {
+  const out = {};
+  Object.keys(TUNING_DEFAULTS).forEach((k) => { if (TUNING[k] !== TUNING_DEFAULTS[k]) out[k] = TUNING[k]; });
+  return out;
+}
+
 function loadTuningOverrides() {
   try {
     const raw = localStorage.getItem(TUNING_STORAGE_KEY);
     if (!raw) return;
     const saved = JSON.parse(raw);
-    Object.keys(TUNING_DEFAULTS).forEach(k => { if (typeof saved[k] === 'number') TUNING[k] = saved[k]; });
+    Object.assign(TUNING, tuningOverridesFrom(saved));
+    if (saved.v !== 2) saveTuningOverrides(); // migrate the old full-snapshot format once
   } catch (e) {}
 }
 // Runs immediately (not deferred to window.onload) - the five *_CHECK_MS
@@ -150,7 +187,7 @@ function loadTuningOverrides() {
 loadTuningOverrides();
 
 function saveTuningOverrides() {
-  try { localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify(TUNING)); } catch (e) {}
+  try { localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify({ v: 2, overrides: tuningOverridesNow() })); } catch (e) {}
 }
 
 // Each of these five keys has a persistent setInterval tied to its
@@ -192,7 +229,7 @@ function resetTuningToDefaults() {
 }
 
 function backupTuningNow() {
-  try { localStorage.setItem(TUNING_BACKUP_KEY, JSON.stringify(TUNING)); } catch (e) {}
+  try { localStorage.setItem(TUNING_BACKUP_KEY, JSON.stringify({ v: 2, overrides: tuningOverridesNow() })); } catch (e) {}
   toast('🔧 Current tuning saved as your backup');
 }
 
@@ -203,7 +240,7 @@ function restoreTuningBackup() {
     if (raw) saved = JSON.parse(raw);
   } catch (e) {}
   if (!saved) { toast('🔧 No backup saved yet', true); return; }
-  Object.keys(TUNING_DEFAULTS).forEach(k => { if (typeof saved[k] === 'number') TUNING[k] = saved[k]; });
+  Object.assign(TUNING, TUNING_DEFAULTS, tuningOverridesFrom(saved));
   saveTuningOverrides();
   restartAllTunableIntervals();
   buildTuningUi();

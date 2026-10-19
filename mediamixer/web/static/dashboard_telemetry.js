@@ -76,6 +76,28 @@ function sampleTelemetryWatchers() {
   }
 }
 
+// ---- rating context ----
+// What was on screen when a tile got rated, so /debug can compare like
+// rates with and without each effect. Tile FX are tracked here (from the
+// fireTileFx wrapper) because the effect code only records a busy-until.
+const telemetryTileFx = {}; // tile idx -> { kind, until }
+const RATING_CONTEXT_STATES = ['barrage', 'spiral', 'surge', 'spinSurge', 'colorRush', 'overdrive', 'hiddenMult', 'rhythm', 'finale'];
+
+function ratingContext(i) {
+  const now = Date.now();
+  const fx = telemetryTileFx[i] && telemetryTileFx[i].until > now ? telemetryTileFx[i].kind : null;
+  const states = RATING_CONTEXT_STATES.filter((n) => telemetryWatchState[n] && telemetryWatchState[n].value !== null);
+  if (spotlightTileIndex === i) states.push('spotlightTile');
+  if (lastKnownBarrage > 0 && lastKnownBarrageTiles.includes(i)) states.push('barrageTile');
+  const vid = getTileVideo(i);
+  return {
+    fx, states,
+    speed: vid ? +vid.playbackRate.toFixed(2) : null,
+    zone: autopilotZone || null,
+    tiles: tileElements.length,
+  };
+}
+
 // ---- action wrappers ----
 // spec(args, before) runs after the original call; `before` is whatever
 // snap() captured just before it. Returning undefined logs nothing.
@@ -118,7 +140,12 @@ function initTelemetry() {
   }));
   telemetryWrap('maybeTriggerFakeNearMiss', () => lastNearMissAt,
     (args, before) => (lastNearMissAt !== before ? { k: 'nearmiss.fake' } : undefined));
-  telemetryWrap('fireTileFx', null, ([idx, kind], before, fired) => (fired ? { k: 'fx.tile', d: { tile: idx, kind } } : undefined));
+  telemetryWrap('fireTileFx', null, ([idx, kind], before, fired) => {
+    if (!fired) return undefined;
+    const ms = (TILE_FX_KINDS[kind] || {}).ms || 0;
+    if (kind !== 'shock') telemetryTileFx[idx] = { kind, until: Date.now() + ms };
+    return { k: 'fx.tile', d: { tile: idx, kind, ms } };
+  });
   telemetryWrap('fireColorSplashPiece', () => colorRushActive,
     ([piece], rushing) => (rushing ? undefined : { k: 'splash.piece', d: { piece: lastColorSplashPiece || piece } }));
   telemetryWrap('showMantra', null, ([style]) => ({ k: 'mantra', d: { style } }));
@@ -130,7 +157,11 @@ function initTelemetry() {
   telemetryWrap('pushLuck', null, () => ({ k: 'push.push' }));
 
   // Viewer actions.
-  telemetryWrap('rateScreen', null, ([i, dir, btn, strength]) => ({ k: 'rate', d: { tile: i, dir, strength: strength || 1 } }));
+  telemetryWrap('rateScreen',
+    // Snapshot before the call: rating itself can kick off effects. null =
+    // the release-click after Hold-to-Heart, which rateScreen ignores.
+    (i, dir, btn) => (dir === 'up' && btn && btn.dataset.holdFired === '1' ? null : ratingContext(i)),
+    ([i, dir, btn, strength], ctx) => (ctx ? { k: 'rate', d: Object.assign({ tile: i, dir, strength: strength || 1 }, ctx) } : undefined));
   telemetryWrap('pace', null, ([v, quiet]) => ({ k: 'pace', d: { v, auto: !!quiet } }));
   telemetryWrap('skip', null, () => ({ k: 'skip' }));
   telemetryWrap('switchItUp', null, () => ({ k: 'zone.switchItUp' }));
