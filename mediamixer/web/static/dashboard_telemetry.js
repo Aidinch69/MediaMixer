@@ -120,7 +120,7 @@ function initTelemetry() {
     (args, before) => (lastNearMissAt !== before ? { k: 'nearmiss.fake' } : undefined));
   telemetryWrap('fireTileFx', null, ([idx, kind], before, fired) => (fired ? { k: 'fx.tile', d: { tile: idx, kind } } : undefined));
   telemetryWrap('fireColorSplashPiece', () => colorRushActive,
-    ([piece], rushing) => (rushing ? undefined : { k: 'splash.piece', d: { piece: piece || 'random' } }));
+    ([piece], rushing) => (rushing ? undefined : { k: 'splash.piece', d: { piece: lastColorSplashPiece || piece } }));
   telemetryWrap('showMantra', null, ([style]) => ({ k: 'mantra', d: { style } }));
 
   // Spin / bank-or-push.

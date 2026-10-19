@@ -356,6 +356,15 @@ let sessionRetentionBeatPhase = null; // null | 'down' | 'up'
 let sessionRetentionBeatStartedAt = 0;
 const RETENTION_DOWN_MS = 25000;
 const RETENTION_UP_MS = 35000;
+// Real-session data (2026-10-19) showed the beat re-arming the instant it
+// finished and firing on noise: engagement pinned near its 2.2 cap still
+// dips 0.05 tick to tick, which counted as "trending down" - so ~7 of 11
+// Auto-Pilot minutes were spent "Easing back" (0.7x intensity, slower
+// pace) while the viewer was as engaged as the signal can show. Now it
+// needs engagement to have genuinely sagged, and rests between beats.
+const RETENTION_MAX_ENGAGEMENT = 1.5;
+const RETENTION_COOLDOWN_MS = 5 * 60000;
+let sessionRetentionBeatEndedAt = 0;
 
 function loadSessionLengthHistory() {
   try {
@@ -383,10 +392,10 @@ function stepOffProximity() {
 // Call once per autopilot tick. Advances the beat state machine; the
 // actual "ramp back up" push (fresh novelty, not left to chance) fires
 // the moment it enters the 'up' phase.
-function updateRetentionBeat(proximity, trendingDown) {
+function updateRetentionBeat(proximity, trendingDown, engagement) {
   const now = Date.now();
   if (!sessionRetentionBeatPhase) {
-    if (proximity > 0.75 && trendingDown) {
+    if (proximity > 0.75 && trendingDown && engagement < RETENTION_MAX_ENGAGEMENT && now - sessionRetentionBeatEndedAt > RETENTION_COOLDOWN_MS) {
       sessionRetentionBeatPhase = 'down';
       sessionRetentionBeatStartedAt = now;
     }
@@ -400,6 +409,7 @@ function updateRetentionBeat(proximity, trendingDown) {
     markNoveltyHappened();
   } else if (sessionRetentionBeatPhase === 'up' && age > RETENTION_UP_MS) {
     sessionRetentionBeatPhase = null; // one full beat per approach; proximity keeps climbing if they're still here after
+    sessionRetentionBeatEndedAt = now;
   }
 }
 
@@ -472,7 +482,7 @@ function autopilotTick() {
   engagementPrevForTrend = engagement;
 
   const proximity = stepOffProximity();
-  updateRetentionBeat(proximity, trendingDown);
+  updateRetentionBeat(proximity, trendingDown, engagement);
 
   // Zone duration is engagement-aware instead of a fixed wrap-the-cycle
   // timer - see the satiation/bandit comments above. A zone extends

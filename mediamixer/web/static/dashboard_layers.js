@@ -10,7 +10,7 @@
 //   Session stats           - this-visit counters for the recap card
 //   Audio-reactive          - one analyser fed by overlay + tile audio
 //   Mantra text             - phrases that drift/flash/pulse over the screen
-//   Visual FX rewards       - prism/kaleido/zoom/RGB/VHS/shockwave tile moments
+//   Visual FX rewards       - prism/bloom/zoom/RGB/VHS/shockwave tile moments
 //   Catch-streak milestones - "one more" + the payoff when you land it
 //   Rhythm Mode             - beat walker, tempo waves, tap-along
 //   Fresh Drop              - rationed debuts for newly added clips
@@ -426,7 +426,7 @@ function previewMantra() {
 // a new kind of thing to win that also pulls the eye straight to the
 // video it lands on. Each kind is either a CSS class on the tile (prism,
 // RGB split, VHS - filter/transform on that one <video> for a few
-// seconds), a canvas laid over it (kaleido), Web Animations kicks on its
+// seconds), a canvas laid over it (bloom), Web Animations kicks on its
 // transform (zoom pulse, synced to audio onsets/Rhythm beats when there
 // are any), or a one-shot ring (shockwave). One effect per tile at a
 // time; a second one on the same tile just waits its turn out.
@@ -440,7 +440,7 @@ function previewMantra() {
 // is up.
 const TILE_FX_KINDS = {
   prism: { label: '🌈 Prism', ms: 8000 },
-  kaleido: { label: '🔮 Kaleido', ms: 6500 },
+  bloom: { label: '✨ Dreamy Bloom', ms: 7000 },
   zoom: { label: '💓 Zoom Pulse', ms: 9000 },
   rgb: { label: '🎞 RGB Split', ms: 8000 },
   vhs: { label: '📼 VHS', ms: 7500 },
@@ -484,8 +484,8 @@ function fireTileFx(idx, kind) {
   }
   if (kind === 'prism') {
     startPrismFx(tile, spec.ms);
-  } else if (kind === 'kaleido') {
-    startKaleidoFx(tile, vid, spec.ms);
+  } else if (kind === 'bloom') {
+    startBloomFx(tile, vid, spec.ms);
   } else if (kind === 'zoom') {
     zoomFxTiles.set(idx, { start: now, until: now + spec.ms });
     kickZoomTile(idx, 0.8);
@@ -526,12 +526,17 @@ function fireRandomTileFx(count) {
   }
 }
 
-// Four mirrored copies of a slowly drifting window into the video, drawn
-// to a canvas laid over just this tile at ~30fps. Inserted right after
-// the <video> so the glow/claim/label layers stay on top of it.
-function startKaleidoFx(tile, vid, ms) {
+// A soft, glowing copy of the clip screened over itself - the video stays
+// fully recognisable (unlike the mirrored kaleidoscope this replaced) but
+// blooms brighter and dreamier, breathing slowly while it's up. The frame
+// is drawn at quarter resolution and blurred by CSS, so it stays cheap.
+// Inserted right after the <video> so the glow/claim/label layers stay on
+// top of it.
+const BLOOM_PEAK_OPACITY = 0.7;
+const BLOOM_BREATHS = 2; // slow swells over the run
+function startBloomFx(tile, vid, ms) {
   const canvas = document.createElement('canvas');
-  canvas.className = 'fx-kaleido-canvas';
+  canvas.className = 'fx-bloom-canvas';
   canvas.style.opacity = '0';
   tile.insertBefore(canvas, vid.nextSibling);
   const g = canvas.getContext('2d');
@@ -542,24 +547,21 @@ function startKaleidoFx(tile, vid, ms) {
     const elapsed = ts - start;
     if (elapsed >= ms) { canvas.remove(); return; }
     requestAnimationFrame(draw);
-    canvas.style.opacity = fxEnvelope(elapsed, ms).toFixed(3);
+    const breath = 0.75 + 0.25 * Math.sin((elapsed / ms) * Math.PI * 2 * BLOOM_BREATHS - Math.PI / 2);
+    canvas.style.opacity = (fxEnvelope(elapsed, ms) * BLOOM_PEAK_OPACITY * breath).toFixed(3);
+    canvas.style.transform = 'scale(' + (1.02 + 0.03 * breath).toFixed(4) + ')';
     if (ts - last < 33) return;
     last = ts;
-    const w = tile.clientWidth, h = tile.clientHeight;
+    const w = Math.max(1, Math.round(tile.clientWidth / 4)), h = Math.max(1, Math.round(tile.clientHeight / 4));
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
     const vw = vid.videoWidth, vh = vid.videoHeight;
-    if (!vw || !vh || !w || !h) return;
-    const sw = vw * 0.5, sh = vh * 0.5;
-    const t = elapsed / ms;
-    const sx = (vw - sw) * (0.5 + 0.4 * Math.sin(t * Math.PI * 2));
-    const sy = (vh - sh) * (0.5 + 0.4 * Math.cos(t * Math.PI * 2));
-    const hw = w / 2, hh = h / 2;
-    [[1, 1, 0, 0], [-1, 1, w, 0], [1, -1, 0, h], [-1, -1, w, h]].forEach(([scx, scy, tx, ty]) => {
-      g.setTransform(scx, 0, 0, scy, tx, ty);
-      g.drawImage(vid, sx, sy, sw, sh, 0, 0, hw, hh);
-    });
-    g.setTransform(1, 0, 0, 1, 0, 0);
+    if (!vw || !vh) return;
+    // Match the tile video's object-fit: contain so the glow lines up.
+    g.clearRect(0, 0, w, h);
+    const scale = Math.min(w / vw, h / vh);
+    const dw = vw * scale, dh = vh * scale;
+    g.drawImage(vid, (w - dw) / 2, (h - dh) / 2, dw, dh);
   }
   requestAnimationFrame(draw);
 }
@@ -704,7 +706,7 @@ function awardChaseMilestone(idx, chain) {
   playChimeSound(1.3, 1.08);
   burstConfetti(18 + Math.min(chain, 30));
   fireTileFx(idx, 'shock');
-  fireTileFx(idx, chain >= 10 ? 'kaleido' : 'prism');
+  fireTileFx(idx, chain >= 10 ? 'bloom' : 'prism');
   showClaimRewardLabel(idx, '🏅 x' + chain + ' STREAK +' + xp + 'xp');
   toast('🏅 Catch streak x' + chain + '! +' + xp + 'xp');
   nudgeEngagement(0.15);

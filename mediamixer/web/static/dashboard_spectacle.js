@@ -258,9 +258,11 @@ startTunableInterval('COLOR_SPLASH_CHECK_MS', maybeTriggerColorSplashPiece);
 // tileIdx (optional) confines a 'tiles' piece to just that one tile -
 // used when a splash is tied to a specific tile's own moment (a catch,
 // an unlock) rather than firing ambient and grid-wide.
+let lastColorSplashPiece = null;
 function fireColorSplashPiece(pieceOverride, tileIdx) {
   if (colorRushActive || !tileElements.length) return;
   const piece = pieceOverride || COLOR_SPLASH_PIECES[Math.floor(Math.random() * COLOR_SPLASH_PIECES.length)];
+  lastColorSplashPiece = piece; // read by the event log
   const duration = 3000 + Math.random() * 2000;
   if (piece === 'confetti') burstConfetti(14 + Math.floor(Math.random() * 14));
   else if (piece === 'tiles') fireDiscoTilePulse(duration, tileIdx != null ? [tileIdx] : null);
