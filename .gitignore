@@ -5,23 +5,23 @@ __pycache__/
 system_memory.db
 system_memory.db-shm
 system_memory.db-wal
-native_state.json
-native_quests.json
-native_prefs.json
 
 # runtime logs
 engine_stdout.log
 engine_stderr.log
 cache_warmer.log
 
-# personal media library (large binaries, not source)
-media_assets/
-Audios/
-overlay_fx/
-media_proxies/
-Spirals/
-
-# native-viewer binary dependency (122MB DLL, not source - see mediamixer/native/README or setup notes)
-native_deps/
+# live engine config overrides (written by /api/config)
 config_overrides.json
 config_overrides.json.tmp
+
+# personal media library (large binaries, not source)
+media_assets/
+media_proxies/
+Spirals/
+Floaters/
+overlay_fx/
+Audios/
+
+# personal notes
+Changelog Requests.txt
