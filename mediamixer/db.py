@@ -242,6 +242,13 @@ class Database:
         ).fetchall()
         return [r["video_path"] for r in rows]
 
+    def mark_played(self, path: str):
+        """Count a play without touching the reward EMA - showing a clip is
+        not a judgement of it, and feeding it a 0.0 reward wiped out likes."""
+        conn = self._connect()
+        conn.execute("UPDATE video_weights SET play_count = play_count + 1 WHERE video_path=?", (path,))
+        conn.commit()
+
     def mark_debuted(self, path: str):
         conn = self._connect()
         conn.execute("UPDATE video_weights SET debuted_at=? WHERE video_path=?", (time.time(), path))

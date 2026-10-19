@@ -1,6 +1,8 @@
 import random
 from collections import Counter
 
+import pytest
+
 from mediamixer import library
 from conftest import make_clips
 
@@ -99,3 +101,15 @@ def test_hearts_build_favorites(config, db):
     library.heart_video(db, paths[0])
     assert library.FAVORITES_FOLDER in library.list_folders_with_favorites(db, config)
     assert library.pick_video(db, config, library.FAVORITES_FOLDER) == paths[0]
+
+
+def test_plays_do_not_erode_a_like(config, db):
+    [path] = make_clips(config, ["liked.mp4"])
+    library.sync_library(db, config)
+    library.reward_video(db, config, path, config.rate_up_reward)
+    before = db.video_rewards(library.GENERAL_FOLDER)[0]["ema_reward"]
+    for _ in range(20):
+        library.mark_played(db, path)
+    row = db.video_rewards(library.GENERAL_FOLDER)[0]
+    assert row["play_count"] == 20
+    assert row["ema_reward"] == pytest.approx(before)

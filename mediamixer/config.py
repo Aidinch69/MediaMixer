@@ -137,7 +137,10 @@ class Config:
     # time - that's "the same ones keep coming up," working as designed
     # but tuned too conservatively for a library this size).
     softmax_temp: float = 0.60
-    decay_halflife_s: float = 1800.0
+    # Likes fade over days, not minutes: at 30 minutes (plus every play
+    # feeding a 0.0 reward) every clip's ema_reward sat at ~0, so ratings
+    # had almost no pull on what played.
+    decay_halflife_s: float = 259200.0  # 3 days
     exploration_bonus_c: float = 0.50  # UCB-style bonus so rarely-played clips stay in rotation - nudged up for a bit more default discovery
 
     skip_penalty: float = -0.25

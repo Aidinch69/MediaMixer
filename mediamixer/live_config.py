@@ -35,7 +35,7 @@ LIVE_FIELDS: Dict[str, LiveField] = {
     "tension_window_s": LiveField(0, 20, 0.5, "Tension Curve", "Tension window before a swap (s)"),
     "tension_max_drag": LiveField(0, 0.9, 0.01, "Tension Curve", "Max slow-down at the end of a clip"),
     "softmax_temp": LiveField(0.05, 3.0, 0.05, "Selection (Bandit)", "Softmax temperature (higher = more random)"),
-    "decay_halflife_s": LiveField(60, 86400, 60, "Selection (Bandit)", "Reward decay half-life (s)"),
+    "decay_halflife_s": LiveField(3600, 2592000, 3600, "Selection (Bandit)", "Reward decay half-life (s)"),
     "reward_ema_alpha": LiveField(0.01, 1.0, 0.01, "Selection (Bandit)", "Reward learning rate"),
     "rate_up_reward": LiveField(0, 3, 0.05, "Selection (Bandit)", "Heart reward"),
     "rate_down_reward": LiveField(-3, 0, 0.05, "Selection (Bandit)", "Thumbs-down reward"),

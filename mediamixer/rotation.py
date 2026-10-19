@@ -148,7 +148,7 @@ class RotationEngine:
             picked = library.pick_video(self._db, cfg, folder, exclude=exclude, exploration_bonus=bonus)
         if not picked:
             return None
-        library.reward_video(self._db, cfg, picked, 0.0, played=True)
+        library.mark_played(self._db, picked)
         bonus = self._state.get_exploration_bonus()
         nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | {picked}, exploration_bonus=bonus) or picked
         self._state.set_screen(index, picked, nxt, time.time() + expires_in)
@@ -159,8 +159,8 @@ class RotationEngine:
         pick entirely - used by True Mystery Tile to show one specific,
         deliberately-chosen clip (a never-before-played one) instead of
         whatever reward-weighted selection would have picked. Still goes
-        through the same lock and leaves the same trail (reward_video's
-        play_count bump, a real preloaded `next`) as an ordinary rotation,
+        through the same lock and leaves the same trail (a play_count
+        bump, a real preloaded `next`) as an ordinary rotation,
         so nothing downstream has to treat this as a special case."""
         with self._rotate_lock:
             cfg = self._config
@@ -169,7 +169,7 @@ class RotationEngine:
                 return False  # already showing somewhere else - don't duplicate it
             lo, hi, _label = cfg.pace_presets[pace_idx]
             expires_in = random.randint(lo, hi)
-            library.reward_video(self._db, cfg, path, 0.0, played=True)
+            library.mark_played(self._db, path)
             bonus = self._state.get_exploration_bonus()
             nxt = library.pick_video(self._db, cfg, folder, exclude={path}, exploration_bonus=bonus) or path
             self._state.set_screen(index, path, nxt, time.time() + expires_in)
@@ -191,7 +191,7 @@ class RotationEngine:
                 return None
             lo, hi, _label = cfg.pace_presets[pace_idx]
             for index, path in zip((index_a, index_b), pair):
-                library.reward_video(self._db, cfg, path, 0.0, played=True)
+                library.mark_played(self._db, path)
                 bonus = self._state.get_exploration_bonus()
                 nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | set(pair), exploration_bonus=bonus) or path
                 self._state.set_screen(index, path, nxt, time.time() + random.randint(lo, hi))

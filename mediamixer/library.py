@@ -206,6 +206,11 @@ def pick_fresh_video(db: Database) -> Optional[str]:
     return paths[0] if paths else None
 
 
+def mark_played(db: Database, path: Optional[str]):
+    if path:
+        db.mark_played(path)
+
+
 def mark_debuted(db: Database, path: str):
     db.mark_debuted(path)
 
