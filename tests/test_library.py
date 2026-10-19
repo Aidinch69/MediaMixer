@@ -64,6 +64,34 @@ def test_jackpot_ranking_skips_excluded(config, db):
     assert library.pick_video_jackpot(db, library.GENERAL_FOLDER, exclude=[paths[1]]) != paths[1]
 
 
+def test_jackpot_draws_hearted_clips_weighted_by_hearts(config, db):
+    paths = make_clips(config, [f"{i:03}.mp4" for i in range(30)])
+    library.sync_library(db, config)
+    library.heart_video(db, paths[-1], amount=9)
+    library.heart_video(db, paths[-2], amount=1)
+    random.seed(5)
+    counts = Counter(library.pick_video_jackpot(db, library.GENERAL_FOLDER) for _ in range(2000))
+    assert set(counts) == {paths[-1], paths[-2]}
+    assert counts[paths[-1]] > 5 * counts[paths[-2]]
+
+
+def test_jackpot_without_hearts_does_not_favor_alphabetical_order(config, db):
+    paths = make_clips(config, [f"{i:03}.mp4" for i in range(30)])
+    library.sync_library(db, config)
+    firsts = {library.pick_video_jackpot(db, library.GENERAL_FOLDER) for _ in range(50)}
+    assert len(firsts) > 5
+
+
+def test_jackpot_batch_never_repeats_a_clip(config, db):
+    make_clips(config, [f"{i}.mp4" for i in range(6)])
+    library.sync_library(db, config)
+    in_use = set()
+    for offset in range(6):
+        picked = library.pick_video_jackpot(db, library.GENERAL_FOLDER, offset=offset, exclude=in_use)
+        assert picked not in in_use
+        in_use.add(picked)
+
+
 def test_hearts_build_favorites(config, db):
     paths = make_clips(config, ["a.mp4", "b.mp4"])
     library.sync_library(db, config)

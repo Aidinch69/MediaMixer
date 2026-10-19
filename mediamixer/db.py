@@ -128,16 +128,25 @@ class Database:
             (folder,),
         ).fetchall()
 
+    def hearted_videos(self, folder: Optional[str] = None) -> list:
+        """(video_path, heart_count) for every hearted, already-debuted clip,
+        optionally limited to one folder - the jackpot draw pool."""
+        sql = "SELECT video_path, heart_count FROM video_weights WHERE heart_count > 0 AND NOT " + _FRESH_CONDITION
+        args: tuple = ()
+        if folder is not None:
+            sql += " AND folder_name=?"
+            args = (folder,)
+        return self._connect().execute(sql, args).fetchall()
+
     def top_videos_by_reward(self, folder: str, limit: int) -> list:
-        """Top `limit` videos by reward, highest first. `video_path` is a tie
-        breaker so the ranking is fully deterministic even among the many
-        videos that sit at the same (often 0.0, never-rated) ema_reward -
-        without it, separate queries racing against concurrent reward
-        updates could rank the same tied video differently from one offset
-        to the next, handing two screens the same "top ranked" pick."""
+        """Top `limit` videos, hearts first (they're permanent, unlike the
+        decaying ema_reward), then reward. Ties break randomly: nearly every
+        clip ties on reward, and a `video_path` tie-break handed every
+        jackpot to the same alphabetically-first clips. Duplicate picks
+        across screens are prevented by the caller's exclude set instead."""
         rows = self._connect().execute(
             "SELECT video_path FROM video_weights WHERE folder_name=? AND NOT " + _FRESH_CONDITION +
-            " ORDER BY ema_reward DESC, video_path ASC LIMIT ?",
+            " ORDER BY heart_count DESC, ema_reward DESC, RANDOM() LIMIT ?",
             (folder, limit),
         ).fetchall()
         return [r["video_path"] for r in rows]
@@ -201,7 +210,7 @@ class Database:
     def favorite_top_videos(self, limit: int) -> list:
         rows = self._connect().execute(
             "SELECT video_path FROM video_weights WHERE heart_count > 0 "
-            "ORDER BY ema_reward DESC, video_path ASC LIMIT ?",
+            "ORDER BY heart_count DESC, ema_reward DESC, RANDOM() LIMIT ?",
             (limit,),
         ).fetchall()
         return [r["video_path"] for r in rows]

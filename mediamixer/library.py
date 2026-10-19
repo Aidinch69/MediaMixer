@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import random
 import time
 from typing import Iterable, List, Optional, Union
 
@@ -144,14 +145,23 @@ def pick_video(
 def pick_video_jackpot(
     db: Database, folder: str, offset: int = 0, exclude: Union[str, Iterable[str], None] = None
 ) -> Optional[str]:
-    """Rank-based pick for jackpot mode: the `offset`-th best-reviewed video in
-    `folder`, skipping anything in `exclude` (so two screens can't both land on
-    the same "top ranked" video in the same jackpot batch)."""
+    """Jackpot pick: a draw from the hearted clips in `folder`, weighted by
+    heart count, skipping anything in `exclude` (so two screens can't land on
+    the same clip in one jackpot batch). More hearts = more likely, but no
+    fixed top-N wins every time. Falls back to rank order (`offset`-th best)
+    only when nothing usable is hearted yet."""
     if exclude is None:
         exclude_norm = set()
     else:
         exclude_paths = {exclude} if isinstance(exclude, str) else set(exclude)
         exclude_norm = {os.path.normpath(p).lower() for p in exclude_paths if p}
+
+    pool = [
+        r for r in db.hearted_videos(None if folder == FAVORITES_FOLDER else folder)
+        if os.path.normpath(r["video_path"]).lower() not in exclude_norm
+    ]
+    if pool:
+        return random.choices([r["video_path"] for r in pool], weights=[r["heart_count"] for r in pool], k=1)[0]
 
     # Fetch extra headroom past `offset` so there's enough to skip past any
     # excluded videos and still land on a real pick.
