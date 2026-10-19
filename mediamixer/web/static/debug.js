@@ -255,7 +255,7 @@ function renderTimeline(start, end, intervals, inWin) {
 }
 
 // Older fx.tile events (before durations were logged) fall back to these.
-const FX_DEFAULT_MS = { prism: 8000, bloom: 7000, kaleido: 6500, zoom: 9000, rgb: 8000, vhs: 7500 };
+const FX_DEFAULT_MS = { prism: 8000, bloom: 7000, duotone: 7500, leak: 8500, kaleido: 6500, zoom: 9000, rgb: 8000, vhs: 7500 };
 const LIKE_STATE_LABELS = {
   barrage: 'Barrage / jackpot hype', spiral: 'Spiral', surge: 'Surge', spinSurge: 'Spin Surge', colorRush: 'Color Rush',
   overdrive: 'Overdrive', hiddenMult: 'Hidden multiplier', rhythm: 'Rhythm mode', finale: 'Finale',

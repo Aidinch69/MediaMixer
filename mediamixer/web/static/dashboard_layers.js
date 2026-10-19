@@ -10,7 +10,7 @@
 //   Session stats           - this-visit counters for the recap card
 //   Audio-reactive          - one analyser fed by overlay + tile audio
 //   Mantra text             - phrases that drift/flash/pulse over the screen
-//   Visual FX rewards       - prism/bloom/zoom/RGB/VHS/shockwave tile moments
+//   Visual FX rewards       - prism/bloom/duotone/light leak/zoom/RGB/VHS/shockwave tile moments
 //   Catch-streak milestones - "one more" + the payoff when you land it
 //   Rhythm Mode             - beat walker, tempo waves, tap-along
 //   Fresh Drop              - rationed debuts for newly added clips
@@ -441,6 +441,8 @@ function previewMantra() {
 const TILE_FX_KINDS = {
   prism: { label: '🌈 Prism', ms: 8000 },
   bloom: { label: '✨ Dreamy Bloom', ms: 7000 },
+  duotone: { label: '🎨 Duotone', ms: 7500 },
+  leak: { label: '🌅 Light Leak', ms: 8500 },
   zoom: { label: '💓 Zoom Pulse', ms: 9000 },
   rgb: { label: '🎞 RGB Split', ms: 8000 },
   vhs: { label: '📼 VHS', ms: 7500 },
@@ -486,6 +488,10 @@ function fireTileFx(idx, kind) {
     startPrismFx(tile, spec.ms);
   } else if (kind === 'bloom') {
     startBloomFx(tile, vid, spec.ms);
+  } else if (kind === 'duotone') {
+    startDuotoneFx(tile, vid, spec.ms);
+  } else if (kind === 'leak') {
+    startLightLeakFx(tile, spec.ms);
   } else if (kind === 'zoom') {
     zoomFxTiles.set(idx, { start: now, until: now + spec.ms });
     kickZoomTile(idx, 0.8);
@@ -526,44 +532,119 @@ function fireRandomTileFx(count) {
   }
 }
 
-// A soft, glowing copy of the clip screened over itself - the video stays
-// fully recognisable (unlike the mirrored kaleidoscope this replaced) but
-// blooms brighter and dreamier, breathing slowly while it's up. The frame
-// is drawn at quarter resolution and blurred by CSS, so it stays cheap.
+// Shared by the canvas-overlay FX (bloom, duotone): a canvas laid over
+// just this tile, redrawn from the <video> at ~30fps at 1/`downscale`
+// resolution, with its look driven by style(canvas, elapsed) every frame.
+// Matches the tile video's object-fit: contain so the overlay lines up.
 // Inserted right after the <video> so the glow/claim/label layers stay on
 // top of it.
-const BLOOM_PEAK_OPACITY = 0.7;
-const BLOOM_BREATHS = 2; // slow swells over the run
-function startBloomFx(tile, vid, ms) {
+function startCanvasOverlayFx(tile, vid, ms, className, downscale, style, onEnd) {
   const canvas = document.createElement('canvas');
-  canvas.className = 'fx-bloom-canvas';
+  canvas.className = className;
   canvas.style.opacity = '0';
   tile.insertBefore(canvas, vid.nextSibling);
   const g = canvas.getContext('2d');
   const start = performance.now();
   let last = 0;
   function draw(ts) {
-    if (!canvas.isConnected) return;
     const elapsed = ts - start;
-    if (elapsed >= ms) { canvas.remove(); return; }
+    if (!canvas.isConnected || elapsed >= ms) {
+      canvas.remove();
+      if (onEnd) onEnd();
+      return;
+    }
     requestAnimationFrame(draw);
-    const breath = 0.75 + 0.25 * Math.sin((elapsed / ms) * Math.PI * 2 * BLOOM_BREATHS - Math.PI / 2);
-    canvas.style.opacity = (fxEnvelope(elapsed, ms) * BLOOM_PEAK_OPACITY * breath).toFixed(3);
-    canvas.style.transform = 'scale(' + (1.02 + 0.03 * breath).toFixed(4) + ')';
+    style(canvas, elapsed);
     if (ts - last < 33) return;
     last = ts;
-    const w = Math.max(1, Math.round(tile.clientWidth / 4)), h = Math.max(1, Math.round(tile.clientHeight / 4));
+    const w = Math.max(1, Math.round(tile.clientWidth / downscale)), h = Math.max(1, Math.round(tile.clientHeight / downscale));
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
     const vw = vid.videoWidth, vh = vid.videoHeight;
     if (!vw || !vh) return;
-    // Match the tile video's object-fit: contain so the glow lines up.
     g.clearRect(0, 0, w, h);
     const scale = Math.min(w / vw, h / vh);
     const dw = vw * scale, dh = vh * scale;
     g.drawImage(vid, (w - dw) / 2, (h - dh) / 2, dw, dh);
   }
   requestAnimationFrame(draw);
+}
+
+// A soft, glowing copy of the clip screened over itself - the video stays
+// fully recognisable (unlike the mirrored kaleidoscope this replaced) but
+// blooms brighter and dreamier, breathing slowly while it's up. Drawn at
+// quarter resolution and blurred by CSS, so it stays cheap.
+const BLOOM_PEAK_OPACITY = 0.7;
+const BLOOM_BREATHS = 2; // slow swells over the run
+function startBloomFx(tile, vid, ms) {
+  startCanvasOverlayFx(tile, vid, ms, 'fx-bloom-canvas', 4, (canvas, elapsed) => {
+    const breath = 0.75 + 0.25 * Math.sin((elapsed / ms) * Math.PI * 2 * BLOOM_BREATHS - Math.PI / 2);
+    canvas.style.opacity = (fxEnvelope(elapsed, ms) * BLOOM_PEAK_OPACITY * breath).toFixed(3);
+    canvas.style.transform = 'scale(' + (1.02 + 0.03 * breath).toFixed(4) + ')';
+  });
+}
+
+// The clip re-printed in two tones from a color theme (deep shadow ->
+// bright highlight), like a screen-print poster, faded in over the real
+// video and back out. Each run gets its own SVG gradient-map filter so two
+// tiles can wear different palettes at once; it's removed when the run ends.
+const DUOTONE_PEAK_OPACITY = 0.85;
+let duotoneSeq = 0;
+function duotoneFilter(theme) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const host = document.getElementById('mm-rgb-split').ownerSVGElement;
+  const dark = theme.glow.split(',').map((c) => (+c / 255) * 0.18);
+  const light = theme.flash.split(',').map((c) => Math.min(1, (+c / 255) * 1.05));
+  const filter = document.createElementNS(ns, 'filter');
+  filter.setAttribute('id', 'mm-duotone-' + (++duotoneSeq));
+  filter.setAttribute('color-interpolation-filters', 'sRGB');
+  const lum = document.createElementNS(ns, 'feColorMatrix');
+  lum.setAttribute('type', 'matrix');
+  lum.setAttribute('values', '.2126 .7152 .0722 0 0  .2126 .7152 .0722 0 0  .2126 .7152 .0722 0 0  0 0 0 1 0');
+  const map = document.createElementNS(ns, 'feComponentTransfer');
+  ['R', 'G', 'B'].forEach((ch, i) => {
+    const fn = document.createElementNS(ns, 'feFunc' + ch);
+    fn.setAttribute('type', 'table');
+    fn.setAttribute('tableValues', dark[i].toFixed(3) + ' ' + light[i].toFixed(3));
+    map.appendChild(fn);
+  });
+  filter.append(lum, map);
+  host.appendChild(filter);
+  return filter;
+}
+
+function startDuotoneFx(tile, vid, ms) {
+  const theme = COLOR_THEMES[Math.floor(Math.random() * COLOR_THEMES.length)];
+  const filter = duotoneFilter(theme);
+  startCanvasOverlayFx(tile, vid, ms, 'fx-duotone-canvas', 2, (canvas, elapsed) => {
+    if (!canvas.style.filter) canvas.style.filter = 'url(#' + filter.id + ') contrast(1.15)';
+    canvas.style.opacity = (fxEnvelope(elapsed, ms) * DUOTONE_PEAK_OPACITY).toFixed(3);
+  }, () => filter.remove());
+}
+
+// Warm film-style light spilling in from one side and drifting across -
+// two blurred amber/pink patches screened over the tile. Pure CSS
+// gradients (no per-frame drawing); JS only drives the fade and drift.
+const LIGHT_LEAK_PEAK_OPACITY = 0.75;
+function startLightLeakFx(tile, ms) {
+  const leak = document.createElement('div');
+  leak.className = 'fx-leak-overlay';
+  leak.style.opacity = '0';
+  // Random entry angle and a slight hue shift, so repeat leaks don't look stamped.
+  leak.style.setProperty('--leak-angle', Math.round(Math.random() * 360) + 'deg');
+  leak.style.setProperty('--leak-hue', Math.round(Math.random() * 40 - 20) + 'deg');
+  const vid = tile.querySelector('video:not(.preload)');
+  tile.insertBefore(leak, vid ? vid.nextSibling : tile.firstChild);
+  const start = performance.now();
+  function step(ts) {
+    const elapsed = ts - start;
+    if (elapsed >= ms || !leak.isConnected) { leak.remove(); return; }
+    const flicker = 0.9 + 0.1 * Math.sin(elapsed / 170) * Math.sin(elapsed / 430);
+    leak.style.opacity = (fxEnvelope(elapsed, ms) * LIGHT_LEAK_PEAK_OPACITY * flicker).toFixed(3);
+    leak.style.setProperty('--leak-p', (elapsed / ms).toFixed(4));
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
 
 // Hue keeps rotating while the saturation boost rides the envelope. The
