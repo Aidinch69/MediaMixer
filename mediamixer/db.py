@@ -41,12 +41,25 @@ CREATE TABLE IF NOT EXISTS video_weights (
     debuted_at  REAL
 );
 CREATE INDEX IF NOT EXISTS idx_video_weights_folder ON video_weights(folder_name);
+CREATE TABLE IF NOT EXISTS events (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts       REAL NOT NULL,
+    session  TEXT NOT NULL,
+    kind     TEXT NOT NULL,
+    data     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_events_session_ts ON events(session, ts);
 CREATE TABLE IF NOT EXISTS audio_tracks (
     file_name   TEXT PRIMARY KEY,
     ema_reward  REAL NOT NULL DEFAULT 0.0,
     updated_at  REAL NOT NULL DEFAULT 0.0
 );
 """
+
+
+# The dashboard's event log (see dashboard_telemetry.js) is diagnostic, not
+# history worth keeping forever - trimmed on every start.
+EVENT_RETENTION_S = 14 * 86400
 
 
 class Database:
@@ -78,6 +91,7 @@ class Database:
         ):
             if column not in existing:
                 conn.execute(ddl)
+        conn.execute("DELETE FROM events WHERE ts < ?", (time.time() - EVENT_RETENTION_S,))
         conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
@@ -241,6 +255,29 @@ class Database:
             "SELECT video_path FROM video_weights WHERE " + _FRESH_CONDITION + " ORDER BY added_at ASC"
         ).fetchall()
         return [r["video_path"] for r in rows]
+
+    # -- event log --
+    def add_events(self, session: str, events: list):
+        """events: (ts, kind, data_json) tuples."""
+        conn = self._connect()
+        conn.executemany(
+            "INSERT INTO events (ts, session, kind, data) VALUES (?, ?, ?, ?)",
+            [(ts, session, kind, data) for ts, kind, data in events],
+        )
+        conn.commit()
+
+    def events_after(self, session: str, after_id: int = 0, since_ts: float = 0.0, limit: int = 5000) -> list:
+        return self._connect().execute(
+            "SELECT id, ts, kind, data FROM events WHERE session=? AND id>? AND ts>=? ORDER BY id LIMIT ?",
+            (session, after_id, since_ts, limit),
+        ).fetchall()
+
+    def event_sessions(self, since_ts: float) -> list:
+        return self._connect().execute(
+            "SELECT session, COUNT(*) AS n, MIN(ts) AS first_ts, MAX(ts) AS last_ts FROM events "
+            "WHERE ts>=? GROUP BY session ORDER BY last_ts DESC",
+            (since_ts,),
+        ).fetchall()
 
     def mark_played(self, path: str):
         """Count a play without touching the reward EMA - showing a clip is

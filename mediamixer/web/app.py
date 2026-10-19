@@ -28,6 +28,8 @@ log = logging.getLogger(__name__)
 
 _HERE = os.path.dirname(__file__)
 STREAM_INTERVAL_S = 0.3
+EVENT_BATCH_MAX = 500
+EVENT_DATA_MAX = 2000
 _NO_SESSION_PREFIXES = ("/media/", "/audio/", "/overlay_fx/", "/spirals/", "/assets/", "/sw.js")
 
 
@@ -117,6 +119,10 @@ def create_app(ctx: AppContext) -> Flask:
     @app.before_request
     def _load_session():
         if request.path.startswith(_NO_SESSION_PREFIXES):
+            return
+        # The debug view (often opened on a second device) only reads the
+        # event log - it shouldn't spin up a viewer session of its own.
+        if request.method == "GET" and (request.path == "/debug" or request.path.startswith("/api/events")):
             return
         session_id = request.cookies.get(config.session_cookie_name)
         session = sessions.get(session_id)
@@ -525,5 +531,59 @@ def create_app(ctx: AppContext) -> Flask:
     def api_cycle_tone():
         g.session.state.cycle_tone()
         return jsonify(ok=True)
+
+    # -- event log (dashboard_telemetry.js writes, /debug reads) --
+    @app.route("/api/events", methods=["POST"])
+    def api_events_post():
+        payload = request.get_json(silent=True, force=True) or {}
+        rows = []
+        now = time.time()
+        for ev in (payload.get("events") or [])[:EVENT_BATCH_MAX]:
+            kind = str(ev.get("k", ""))[:48]
+            if not kind:
+                continue
+            try:
+                ts = float(ev.get("t", 0)) / 1000.0
+            except (TypeError, ValueError):
+                ts = 0
+            if not (now - 86400 < ts < now + 3600):
+                ts = now  # client clock way off (or missing) - fall back to arrival time
+            data = ev.get("d")
+            data_json = json.dumps(data, separators=(",", ":")) if data is not None else None
+            if data_json and len(data_json) > EVENT_DATA_MAX:
+                data_json = '{"truncated":true}'
+            rows.append((ts, kind, data_json))
+        if rows:
+            db.add_events(g.session.id, rows)
+        return jsonify(ok=True, stored=len(rows))
+
+    @app.route("/api/events/sessions")
+    def api_event_sessions():
+        hours = request.args.get("hours", 24, type=float)
+        rows = db.event_sessions(time.time() - hours * 3600)
+        return jsonify(sessions=[dict(r) for r in rows])
+
+    @app.route("/api/events")
+    def api_events_get():
+        session_id = request.args.get("session", "")
+        if not session_id:
+            recent = db.event_sessions(time.time() - 86400)
+            if not recent:
+                return jsonify(session=None, events=[])
+            session_id = recent[0]["session"]
+        rows = db.events_after(
+            session_id,
+            after_id=request.args.get("after", 0, type=int),
+            since_ts=request.args.get("since", 0, type=float),
+            limit=min(20000, request.args.get("limit", 5000, type=int)),
+        )
+        return jsonify(
+            session=session_id,
+            events=[{"id": r["id"], "t": r["ts"], "k": r["kind"], "d": json.loads(r["data"]) if r["data"] else None} for r in rows],
+        )
+
+    @app.route("/debug")
+    def debug_view():
+        return render_template("debug.html")
 
     return app

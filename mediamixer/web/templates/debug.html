@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MediaMixer Debug</title>
+<style>
+  :root {
+    --bg: #0d0f14; --panel: #161a22; --line: #262c38; --text: #dde3ee; --muted: #8a94a7;
+    --accent: #7aa2ff; --good: #5fd38d; --bad: #ff6b6b; --warn: #ffc857;
+    --z-chase: #ff8a3d; --z-color: #d36bff; --z-jackpot: #ffd23f; --z-vault: #4fb3ff; --z-rhythm: #5fd38d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 16px; background: rgba(13,15,20,.95); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; }
+  select, button { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: inherit; }
+  button.on { border-color: var(--good); color: var(--good); }
+  main { padding: 16px; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); max-width: 1500px; margin: 0 auto; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; overflow-x: auto; }
+  td.note { white-space: normal; font-size: 12px; }
+  section.wide { grid-column: 1 / -1; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; }
+  .kv span:nth-child(odd) { color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { padding: 2px 9px; border-radius: 999px; background: #222836; font-size: 12px; }
+  .chip.live { background: #1f3a2a; color: var(--good); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .scroll { overflow: auto; max-height: 420px; }
+  .muted { color: var(--muted); }
+  .bad { color: var(--bad); } .good { color: var(--good); } .warn { color: var(--warn); }
+  #timeline { width: 100%; display: block; }
+  #timeline text { fill: var(--muted); font-size: 11px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  #feed td:first-child { color: var(--muted); }
+  #empty { padding: 40px; text-align: center; color: var(--muted); grid-column: 1 / -1; }
+  @media (max-width: 600px) { main { padding: 10px; } header { padding: 8px 10px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>MediaMixer Debug</h1>
+  <label class="muted">Session <select id="session"></select></label>
+  <label class="muted">Window
+    <select id="window">
+      <option value="900">15 min</option>
+      <option value="3600" selected>1 hour</option>
+      <option value="10800">3 hours</option>
+      <option value="43200">12 hours</option>
+    </select>
+  </label>
+  <button id="live" class="on">● Live</button>
+  <span id="status" class="muted"></span>
+</header>
+<main id="main">
+  <section>
+    <h2>Right now</h2>
+    <div class="kv" id="now"></div>
+    <h2 style="margin-top:14px">Active</h2>
+    <div class="chips" id="active"></div>
+  </section>
+  <section>
+    <h2>Engagement loops</h2>
+    <table id="loops"></table>
+    <p class="muted" style="margin:8px 0 0;font-size:12px">Hit rate = successes ÷ times it appeared. A loop that's rarely hit may be too hard or easy to miss; one that's always hit may be too easy.</p>
+  </section>
+  <section>
+    <h2>Rewards &amp; pacing</h2>
+    <div class="kv" id="rewards"></div>
+  </section>
+  <section class="wide">
+    <h2>Timeline</h2>
+    <svg id="timeline" height="300"></svg>
+    <div class="legend" id="legend"></div>
+  </section>
+  <section>
+    <h2>Zone history</h2>
+    <div class="scroll"><table id="zones"></table></div>
+  </section>
+  <section>
+    <h2>Overlaps</h2>
+    <div class="kv" id="overlapSummary"></div>
+    <table id="overlaps" style="margin-top:10px"></table>
+  </section>
+  <section>
+    <h2>Event counts</h2>
+    <div class="scroll"><table id="counts"></table></div>
+  </section>
+  <section class="wide">
+    <h2>Recent events <input id="filter" placeholder="filter (e.g. chase, zone, payoff)" style="margin-left:8px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:3px 8px;font:inherit;font-size:12px"></h2>
+    <div class="scroll"><table id="feed"></table></div>
+  </section>
+</main>
+<script src="{{ url_for('static', filename='debug.js') }}"></script>
+</body>
+</html>

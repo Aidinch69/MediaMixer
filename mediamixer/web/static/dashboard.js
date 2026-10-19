@@ -3326,6 +3326,14 @@ function autopilotTick() {
     const naturallyDue = zoneAgeMs > naturalMs && engagement < stayThreshold;
     if (pastHardCeiling || disengaged || naturallyDue) {
       const endingZone = autopilotZone;
+      if (typeof logEvent === 'function') {
+        logEvent('zone.decision', {
+          from: endingZone,
+          reason: pastHardCeiling ? 'ceiling' : disengaged ? 'disengaged' : 'natural',
+          ageS: Math.round(zoneAgeMs / 1000), naturalS: Math.round(naturalMs / 1000),
+          engagement: +engagement.toFixed(2), stayThreshold: +stayThreshold.toFixed(2),
+        });
+      }
       recordZonePayoff(endingZone, engagement, disengaged && !pastHardCeiling, autopilotPrevZone);
       // Guaranteed de-escalation: a genuine disengagement cut picks a
       // calming zone directly rather than leaving it to the bandit's
@@ -3434,6 +3442,18 @@ function autopilotTick() {
   fetch('/api/novelty?bonus=' + noveltyBonus.toFixed(3));
   if (targetPace !== autopilotLastPace) { autopilotLastPace = targetPace; pace(targetPace, true); }
   if (fxCount !== fxTarget) setFxCount(fxTarget);
+
+  if (typeof logEvent === 'function') {
+    logEvent('autopilot.tick', {
+      zone: autopilotZone, phrase: autopilotCurrentStatusPhrase,
+      zoneAgeS: Math.round((now - autopilotZoneStartedAt) / 1000), cycleS: Math.round(cycleS), cycle: autopilotCycleCount,
+      frac: +mainFrac.toFixed(3), lf: +lf.toFixed(2),
+      engagement: +engagement.toFixed(2), trust: +sessionTrust.toFixed(2), proximity: +proximity.toFixed(2),
+      beat: sessionRetentionBeatPhase, fakeout: autopilotFakeoutActive, season: isBigSeason,
+      barrageP: +barrageP.toFixed(3), jackpotP: +jackpotP.toFixed(3), novelty: +noveltyBonus.toFixed(2),
+      ambient: +autopilotAmbientBoost.toFixed(2), fx: fxTarget, pace: targetPace, debt: ticksSinceNovelty,
+    });
+  }
 }
 
 function updateAutopilotZoneUi() {

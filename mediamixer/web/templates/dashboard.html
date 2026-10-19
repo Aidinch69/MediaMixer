@@ -250,9 +250,10 @@
       </div>
     </details>
     <details class="settings-section">
-      <summary><span class="section-title">🛰️ Observability</span><span class="settings-section-desc">Live readout of Auto-Pilot's internal state.</span></summary>
+      <summary><span class="section-title">🛰️ Observability</span><span class="settings-section-desc">Live readout of Auto-Pilot's internal state, plus the full event log view.</span></summary>
       <div class="settings-section-body">
         <pre id="autopilot-debug" class="metric" style="white-space:pre-line;font-family:inherit">Auto-Pilot is off.</pre>
+        <a href="/debug" target="_blank" rel="noopener" class="metric" style="display:inline-block;margin-top:8px">📊 Open the full debug view (timeline, hit rates, overlaps) ↗</a>
       </div>
     </details>
   </div>
@@ -447,5 +448,6 @@
 <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_layers.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_events.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_telemetry.js') }}"></script>
 </body>
 </html>
