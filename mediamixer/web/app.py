@@ -134,7 +134,7 @@ def create_app(ctx: AppContext) -> Flask:
     @app.after_request
     def _media_cors(response):
         # Tiles load media from 127.0.0.x loopback shards (see mediaOrigin in
-        # dashboard.js), which are cross-origin to the page - without this,
+        # dashboard_tiles.js), which are cross-origin to the page - without this,
         # routing a tile's audio through Web Audio for the audio-reactive
         # analyser would output silence.
         if request.path.startswith("/media/"):

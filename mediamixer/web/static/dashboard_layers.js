@@ -1,6 +1,6 @@
-// ---- Layers built on top of dashboard.js ----
-// Loaded right after dashboard.js as a plain (non-module) script, so it
-// shares that file's globals both ways - dashboard.js calls into the
+// ---- Layers built on top of the core dashboard_*.js files ----
+// Loaded right after them as a plain (non-module) script, so it shares
+// their globals both ways - the core files call into the
 // hooks here (globalSpeedMult, maybeFxReward, finaleActive...) and this
 // file reads its state (tileElements, audioCtx, TUNING...) directly.
 // Split out only to keep each file a size you can still navigate; the
@@ -1391,7 +1391,7 @@ function hideSessionRecap() {
 }
 
 // ---- Init ----
-// Called from dashboard.js's window.onload, after its own prefs/state
+// Called from window.onload (dashboard_boot.js), after its own prefs/state
 // have loaded (XP in particular, for the recap's starting point).
 function initLayers() {
   sessionXpStart = xpTotal;

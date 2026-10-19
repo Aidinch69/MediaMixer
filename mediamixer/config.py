@@ -106,7 +106,7 @@ class Config:
     # "favorite" pick (library.pick_video_jackpot) instead of a normal
     # explore pick, how hard playback speeds up, and how long the build-up
     # runs. The client mirrors this tier name for the matching visual/audio
-    # celebration (see dashboard.js's JACKPOT_TIERS) so what you see always
+    # celebration (see JACKPOT_TIERS in dashboard_anticipation.js) so what you see always
     # matches what actually happened, instead of an independent random
     # guess at the same time.
     jackpot_tiers: Tuple[JackpotTier, ...] = (

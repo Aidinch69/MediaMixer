@@ -252,7 +252,7 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 #status-bar.show{display:flex}
 /* Persistent jackpot/mode context (an active build-up, or a live streak),
    separate from #status-bar's rotating one-off notifications just below
-   it - see updateModeBadge() in dashboard.js. Gold-toned to read as
+   it - see updateModeBadge() in dashboard_hud.js. Gold-toned to read as
    distinct from the purple status bar at a glance. */
 #mode-badge{display:none;position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:19;background:rgba(10,5,20,.82);border:1px solid rgba(255,212,59,.6);border-radius:18px;padding:5px 16px;font-size:.72rem;font-weight:bold;color:#ffd43b;white-space:nowrap;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.4)}
 #mode-badge.show{display:flex}

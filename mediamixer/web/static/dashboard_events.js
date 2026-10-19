@@ -1,7 +1,7 @@
-// Loaded after dashboard.js and dashboard_layers.js and shares their
+// Loaded after the core dashboard_*.js files and dashboard_layers.js and shares their
 // globals: clip transitions, Spotlight Takeover, the Overdrive meter,
 // weekly arcs, the visit-streak calendar, and their trophies.
-// initEvents() is called from dashboard.js's window.onload.
+// initEvents() is called from window.onload (dashboard_boot.js).
 
 // ---- Clip transitions ----
 // When a tile's clip changes, the outgoing frame is frozen onto a canvas

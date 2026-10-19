@@ -445,7 +445,23 @@
 <audio id="overlay-audio" loop></audio>
 <div id="toast"></div>
 <script>window.LAYOUT_PRESETS = {{ layout_presets_json | tojson }};</script>
-<script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+<!-- Classic scripts sharing one global scope. Order matters only for code
+     that runs at load time; dashboard_boot.js holds window.onload. -->
+<script src="{{ url_for('static', filename='dashboard_tuning.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_tiles.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_floaters.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_audio.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_anticipation.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_hud.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_progression.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_jackpot.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_autopilot.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_controls.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_render.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_loops.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_spectacle.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_spin.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_boot.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_layers.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_events.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_telemetry.js') }}"></script>
