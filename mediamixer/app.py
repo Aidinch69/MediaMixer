@@ -75,6 +75,11 @@ class MediaMixerApp:
 
 def _configure_logging(level: str):
     logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # Browsers drop video requests constantly (seeking, tile swaps, preload
+    # aborts); waitress logs each one, which buried real errors in the log.
+    logging.getLogger("waitress").addFilter(
+        lambda record: not record.getMessage().startswith("Client disconnected")
+    )
 
 
 def main():
