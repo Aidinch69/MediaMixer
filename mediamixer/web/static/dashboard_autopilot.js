@@ -13,6 +13,8 @@
 // but per explicit feedback Auto-Pilot no longer gets to flip it; it
 // stays exactly wherever the viewer last set it manually.
 const AUTOPILOT_TICK_MS = 4000;
+const AUTOPILOT_MAX_BARRAGE_P = 0.4;
+const AUTOPILOT_MAX_JACKPOT_P = 0.5;
 // Polyrhythm: fx and ambient ride their own cycle length instead of the
 // exact same one pace/barrage/jackpot/novelty share, so the combined
 // texture keeps evolving cycle to cycle instead of everything peaking
@@ -188,6 +190,12 @@ function autopilotMicroBoost() {
 let engagementScore = 1.0;
 let engagementUpdatedAt = Date.now();
 let engagementPrevForTrend = 1.0;
+// Trend = now vs. a ~30s smoothed reading, needing a real move. Comparing
+// tick-to-tick with a 0.02 threshold was pure noise near the 2.2 cap: a
+// 36-minute session flipped "Recalibrating feel" / "Leaning in" ~10 times
+// per zone while engagement sat at 2.1-2.2 throughout.
+const ENGAGEMENT_TREND_ALPHA = 0.13; // per 4s tick -> ~30s memory
+const ENGAGEMENT_TREND_THRESHOLD = 0.12;
 const ENGAGEMENT_HALFLIFE_MS = 45000;
 const ENGAGEMENT_MIN = 0.2;
 const ENGAGEMENT_MAX = 2.2;
@@ -477,9 +485,9 @@ function autopilotTick() {
 
   const engagement = readEngagement();
   updateSessionTrust(engagement);
-  const trendingUp = engagement > engagementPrevForTrend + 0.02;
-  const trendingDown = engagement < engagementPrevForTrend - 0.02;
-  engagementPrevForTrend = engagement;
+  const trendingUp = engagement > engagementPrevForTrend + ENGAGEMENT_TREND_THRESHOLD;
+  const trendingDown = engagement < engagementPrevForTrend - ENGAGEMENT_TREND_THRESHOLD;
+  engagementPrevForTrend += (engagement - engagementPrevForTrend) * ENGAGEMENT_TREND_ALPHA;
 
   const proximity = stepOffProximity();
   updateRetentionBeat(proximity, trendingDown, engagement);
@@ -596,8 +604,10 @@ function autopilotTick() {
   const jackpotEasedLf = AUTOPILOT_AXIS_EASING.jackpot(lf);
   const comboMicroBoost = autopilotMicroBoost();
   const intensityMult = autopilotZoneMultiplier('barrage') * comboMicroBoost * fakeoutMult * seasonMult * trustMult * retentionMult;
-  const barrageP = lerp(a.barrage, b.barrage, barrageEasedLf) * intensityMult;
-  const jackpotP = lerp(a.jackpot, b.jackpot, jackpotEasedLf) * intensityMult;
+  // Capped: the stacked multipliers above reached 0.68 (barrage, per 3s
+  // check) and 1.09 (jackpot, per rotation) at real peaks.
+  const barrageP = Math.min(AUTOPILOT_MAX_BARRAGE_P, lerp(a.barrage, b.barrage, barrageEasedLf) * intensityMult);
+  const jackpotP = Math.min(AUTOPILOT_MAX_JACKPOT_P, lerp(a.jackpot, b.jackpot, jackpotEasedLf) * intensityMult);
 
   const noveltyLean = autopilotNoveltyBias(proximity, sessionRetentionBeatPhase, trendingUp);
   const noveltyBonus = Math.max(0, lerp(a.novelty, b.novelty, AUTOPILOT_AXIS_EASING.novelty(lf)) + noveltyLean);
@@ -690,7 +700,7 @@ function updateAutopilotDebugUi() {
   if (!el) return;
   if (!autopilotEnabled) { el.innerText = 'Auto-Pilot is off.'; return; }
   const engagement = readEngagement();
-  const trendArrow = engagement > engagementPrevForTrend ? ' ↑' : engagement < engagementPrevForTrend ? ' ↓' : '';
+  const trendArrow = engagement > engagementPrevForTrend + ENGAGEMENT_TREND_THRESHOLD ? ' ↑' : engagement < engagementPrevForTrend - ENGAGEMENT_TREND_THRESHOLD ? ' ↓' : '';
   const zoneAgeS = autopilotZone ? Math.round((Date.now() - autopilotZoneStartedAt) / 1000) : 0;
   const lines = [
     'Zone: ' + (autopilotZone ? AUTOPILOT_ZONES[autopilotZone].label : '-') + ' (' + zoneAgeS + 's in)',

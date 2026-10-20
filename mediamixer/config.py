@@ -99,6 +99,11 @@ class Config:
     # see RotationEngine._start_barrage/_tick_barrage.
     barrage_probability: float = 0.05
     barrage_check_every_ticks: int = 6  # how often (in 0.5s ticks) to roll for a new barrage - every ~3s
+    # Rest after a barrage ends before the next can be rolled. Without it,
+    # Auto-Pilot's peak odds (up to ~0.7 per 3s check) chained barrages back
+    # to back: a real 36-minute session spent 38% of its time in barrage
+    # hype, median 25s between starts.
+    barrage_cooldown_s: float = 60.0
 
     # Each barrage rolls one of these tiers, weighted - the tier isn't just
     # a bigger flash on the same effect, it changes what actually happens:

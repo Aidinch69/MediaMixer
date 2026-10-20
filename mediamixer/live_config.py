@@ -30,6 +30,7 @@ class LiveField(NamedTuple):
 LIVE_FIELDS: Dict[str, LiveField] = {
     "barrage_probability": LiveField(0.0, 0.5, 0.005, "Barrage / Jackpot", "Barrage chance per check"),
     "barrage_check_every_ticks": LiveField(1, 40, 1, "Barrage / Jackpot", "Barrage check interval (0.5s ticks)"),
+    "barrage_cooldown_s": LiveField(0, 300, 5, "Barrage / Jackpot", "Rest between barrages (s)"),
     "jackpot_probability": LiveField(0.0, 1.0, 0.01, "Barrage / Jackpot", "Jackpot chance per rotation"),
     "jackpot_hold_seconds": LiveField(5, 300, 5, "Barrage / Jackpot", "Jackpot / lock hold (s)"),
     "tension_window_s": LiveField(0, 20, 0.5, "Tension Curve", "Tension window before a swap (s)"),

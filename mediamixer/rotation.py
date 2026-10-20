@@ -30,6 +30,7 @@ class RotationEngine:
         self._stop_event = threading.Event()
         self._rotate_lock = threading.Lock()
         self._ticks_since_barrage_check = 0
+        self._barrage_last_active_at = 0.0
 
     def stop(self):
         self._stop_event.set()
@@ -246,8 +247,12 @@ class RotationEngine:
         cfg = self._config
         if self._state.tick_barrage_hype():
             self._state.set_is_jackpot(True)
+            self._barrage_last_active_at = now
             return
         if self._state.barrage_active():
+            self._barrage_last_active_at = now
+            return
+        if now - self._barrage_last_active_at < cfg.barrage_cooldown_s:
             return
         self._ticks_since_barrage_check += 1
         if self._ticks_since_barrage_check < cfg.barrage_check_every_ticks:

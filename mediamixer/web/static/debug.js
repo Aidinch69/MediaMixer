@@ -100,7 +100,7 @@ function render() {
   const intervals = buildIntervals(events, liveEnd);
   renderNow(intervals, liveEnd);
   renderLoops(start);
-  renderRewards(start, inWin, intervals);
+  renderRewards(start, inWin, intervals, liveEnd);
   // Don't squash a short session into a sliver at the right edge.
   renderTimeline(Math.max(start, Math.min(end - 120, events[0].t - 5)), end, intervals, inWin);
   renderLikes(Math.max(start, events[0].t), liveEnd, intervals, inWin);
@@ -155,16 +155,29 @@ function renderLoops(from) {
     }).join('');
 }
 
-function renderRewards(from, inWin, intervals) {
-  const hours = Math.max(1 / 60, (nowS() - Math.max(from, inWin.length ? inWin[0].t : from)) / 3600);
+function renderRewards(from, inWin, intervals, end) {
+  const hours = Math.max(1 / 60, (end - Math.max(from, inWin.length ? inWin[0].t : from)) / 3600);
   const xp = inWin.filter((e) => e.k === 'xp').reduce((s, e) => s + (e.d.amount || 0), 0);
   const payoffs = inWin.filter((e) => e.k === 'payoff');
   const byTier = {};
   payoffs.forEach((e) => (byTier[e.d.tier] = (byTier[e.d.tier] || 0) + 1));
   const shakes = payoffs.filter((e) => e.d.shake);
-  const barrages = (intervals.barrage || []).filter((iv) => iv.end >= from);
+  // One per barrage.start - a tier change mid-barrage splits its interval.
+  const barrages = inWin.filter((e) => e.k === 'barrage.start');
+  // Each barrage counted once, by the tier it ended on (the tier label can
+  // arrive or change after it starts).
   const barrageTiers = {};
-  barrages.forEach((iv) => (barrageTiers[iv.v] = (barrageTiers[iv.v] || 0) + 1));
+  let curTier = null;
+  inWin.forEach((e) => {
+    if (e.k === 'barrage.start') curTier = e.d.v;
+    else if (e.k === 'barrage.change') curTier = e.d.to;
+    else if (e.k === 'barrage.end' && curTier != null) {
+      const tier = curTier === 'on' ? 'untiered' : curTier;
+      barrageTiers[tier] = (barrageTiers[tier] || 0) + 1;
+      curTier = null;
+    }
+  });
+  const barrageTime = (intervals.barrage || []).reduce((s, iv) => s + Math.max(0, iv.end - Math.max(iv.start, from)), 0);
   // Gaps between "something good happened to me" moments - the variable-ratio
   // schedule as actually experienced. CV near 0 = predictable, ~1 = random.
   const rewardTimes = inWin.filter((e) => ['bonus.claim', 'chase.catch', 'sealed.open', 'payoff', 'payoff.mini'].includes(e.k)).map((e) => e.t);
@@ -177,7 +190,7 @@ function renderRewards(from, inWin, intervals) {
     ['XP earned', `${xp} <span class="muted">(${Math.round(xp / hours)}/h)</span>`],
     ['Jackpot payoffs', `${payoffs.length} <span class="muted">(${fmtMap(byTier)})</span>`],
     ['Screen shakes', `${shakes.length}${shakes.length ? ' <span class="muted">· from ' + fmtMap(shakes.reduce((m, e) => ((m[e.d.tier] = (m[e.d.tier] || 0) + 1), m), {})) + ' payoffs · last ' + fmtTime(shakes[shakes.length - 1].t) + '</span>' : ''}`],
-    ['Barrages', `${barrages.length} <span class="muted">(${fmtMap(barrageTiers)})</span>`],
+    ['Barrages', `${barrages.length} <span class="muted">(${fmtMap(barrageTiers)}) · on screen ${Math.round((barrageTime / Math.max(1, hours * 3600)) * 100)}% of the time</span>`],
     ['Build-ups', `${count('buildup.real', from)} real · ${count('buildup.fake', from)} fake · ${count('nearmiss.fake', from)} near-miss`],
     ['Spirals', `${spirals.length}${spirals.length ? ' <span class="muted">· avg ' + fmtDur(spirals.reduce((s, iv) => s + iv.end - iv.start, 0) / spirals.length) + '</span>' : ''}`],
     ['Reward rhythm', gaps.length ? `one every ${fmtDur(mean)}${cv != null ? ' <span class="muted">· variability ' + cv.toFixed(2) + (cv < 0.5 ? ' (predictable)' : cv > 1.2 ? ' (very streaky)' : ' (nicely variable)') + '</span>' : ''}` : '<span class="muted">not enough yet</span>'],
