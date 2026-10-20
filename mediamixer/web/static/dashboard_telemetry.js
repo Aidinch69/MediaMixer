@@ -99,6 +99,7 @@ function ratingContext(i) {
     zone: autopilotZone || null,
     rhythmPattern: rhythmActive() ? rhythmPattern : null,
     tiles: tileElements.length,
+    energy: +rhythmDrive.toFixed(2),
   };
 }
 
@@ -184,7 +185,7 @@ function initTelemetry() {
     // can be read against the settings actually in use.
     tuning: tuningOverridesNow(),
     toggles: {
-      autopilot: autopilotEnabled, manualSpiral: manualSpiralEnabled ? Math.round(manualSpiralOpacity * 100) + '%' : false, floaters: fxEnabled, floaterCount: fxCount, rhythm: rhythmEnabled,
+      autopilot: autopilotEnabled, sharedPulse: sharedPulseEnabled, taste: Math.round(tasteStrength * 100) + '%', manualSpiral: manualSpiralEnabled ? Math.round(manualSpiralOpacity * 100) + '%' : false, floaters: fxEnabled, floaterCount: fxCount, rhythm: rhythmEnabled,
       mosaicDrift: dynamicMosaicDriftMode, mosaicZone: dynamicMosaicZoneMode, mosaicRange: [dynamicMosaicMinTiles, dynamicMosaicMaxTiles],
     },
   }), 0));

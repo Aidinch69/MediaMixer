@@ -470,7 +470,7 @@ let rgbSplitActiveUntil = 0; // the SVG filter is shared, so one RGB split at a 
 
 function pickFxKind() {
   const pool = TILE_FX_NAMES.filter((k) => k !== 'shock' && !(k === 'rgb' && Date.now() < rgbSplitActiveUntil));
-  return pool[Math.floor(Math.random() * pool.length)];
+  return weightedPick(pool, (k) => tasteWeight('fx', k));
 }
 
 function fireTileFx(idx, kind) {
@@ -483,6 +483,7 @@ function fireTileFx(idx, kind) {
   if (kind !== 'shock') {
     if (now < (tileFxBusyUntil[idx] || 0)) return false;
     tileFxBusyUntil[idx] = now + spec.ms;
+    tasteNoteFx(idx, kind, spec.ms);
   }
   if (kind === 'prism') {
     startPrismFx(tile, spec.ms);
@@ -836,8 +837,9 @@ let rhythmDriveTargetValue = 1;
 let rhythmDriveUpdatedAt = Date.now();
 let rhythmDriveTargetAt = 0;
 
+// The session's energy - always computed (Shared Pulse rides it too);
+// Rhythm Mode's tempo only follows it with Tempo Follows Energy on.
 function rhythmDriveTarget() {
-  if (!rhythmReactive) return 1;
   let d = 1 + Math.max(-0.08, Math.min(0.08, (readEngagement() - 1.6) * 0.16));
   if (lastKnownBarrage > 0 || anticipationActive) d += 0.12;
   else if (Date.now() - lastAnyPayoffAt < 5000) d += 0.08;
@@ -847,6 +849,10 @@ function rhythmDriveTarget() {
   if (autopilotZone === 'vault') d -= 0.06;
   else if (autopilotZone === 'jackpot') d += 0.04;
   return Math.max(RHYTHM_DRIVE_MIN, Math.min(RHYTHM_DRIVE_MAX, d));
+}
+
+function rhythmTempoDrive() {
+  return rhythmReactive ? rhythmDrive : 1;
 }
 
 function updateRhythmDrive() {
@@ -877,7 +883,7 @@ let rhythmLastScatter = -1;
 function pickRhythmPattern() {
   const hype = rhythmDrive > 1.1;
   const options = RHYTHM_PATTERN_NAMES.filter((p) => p !== rhythmPattern);
-  const weights = options.map((p) => ((RHYTHM_PATTERNS[p].energy === 'hype') === hype ? 2 : 1));
+  const weights = options.map((p) => ((RHYTHM_PATTERNS[p].energy === 'hype') === hype ? 2 : 1) * tasteWeight('pattern', p));
   let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
   for (let i = 0; i < options.length; i++) { roll -= weights[i]; if (roll <= 0) return options[i]; }
   return options[options.length - 1];
@@ -951,13 +957,13 @@ function rhythmEffectiveBaseBpm() {
 }
 
 function currentRhythmBpm() {
-  return Math.min(RHYTHM_MAX_BPM, rhythmEffectiveBaseBpm() * (1 + RHYTHM_WAVE_DEPTH * rhythmWaveFrac()) * finaleTempoMult() * rhythmDrive);
+  return Math.min(RHYTHM_MAX_BPM, rhythmEffectiveBaseBpm() * (1 + RHYTHM_WAVE_DEPTH * rhythmWaveFrac()) * finaleTempoMult() * rhythmTempoDrive());
 }
 
 function rhythmSpeedMult() {
   if (!rhythmActive() || !rhythmSpeedSync) return 1;
   // Tile speed rides half of the energy drive, on top of the wave.
-  return (0.95 + 0.3 * rhythmWaveFrac()) * (1 + (rhythmDrive - 1) * 0.5);
+  return (0.95 + 0.3 * rhythmWaveFrac()) * (1 + (rhythmTempoDrive() - 1) * 0.5);
 }
 
 // Snake order through the grid (left-to-right, then right-to-left on the
@@ -983,6 +989,7 @@ function onRhythmBeat(n) {
     else if (Math.random() < RHYTHM_PATTERN_SWITCH_CHANCE) rhythmPattern = pickRhythmPattern();
   }
   if (!anticipationActive) rhythmPatternHits(n).forEach(([idx, s]) => reactPulseTile(idx, s));
+  onPulseBeat(n);
   if (downbeat) audioGlowKick = Math.max(audioGlowKick, 0.55); // updateAudioGlow decays it back down
   if (rhythmSound) playRhythmClick(downbeat);
   if (zoomFxTiles.size) kickAllZoomTiles(downbeat ? 0.9 : 0.5);
@@ -1127,7 +1134,7 @@ function updateRhythmUi() {
     const why = rhythmEnabled ? 'on' : rhythmZoneActive ? 'on (Rhythm Zone)' : finaleWantsRhythm() ? 'on (Finale)'
       : Date.now() < spinRhythmUntil ? 'on (Spin, ' + Math.ceil((spinRhythmUntil - Date.now()) / 1000) + 's left)' : 'off';
     const src = rhythmBpmSource === 'audio' ? (detectedBpm ? 'detected ~' + detectedBpm + ' BPM' : 'no steady beat in the audio - using ' + rhythmBaseBpm) : rhythmBaseBpm + ' BPM base';
-    const energy = rhythmReactive && Math.abs(rhythmDrive - 1) >= 0.02 ? ' (energy ×' + rhythmDrive.toFixed(2) + ')' : '';
+    const energy = rhythmReactive && Math.abs(rhythmDrive - 1) >= 0.02 ? ' (energy ×' + rhythmTempoDrive().toFixed(2) + ')' : '';
     status.innerText = 'Rhythm ' + why + ' · ' + src + (rhythmActive() ? ' · now ' + Math.round(currentRhythmBpm()) + ' BPM' + energy + ' · ' + RHYTHM_PATTERNS[rhythmPattern].label + ' · in sync ' + formatRunSeconds(rhythmRunMs()) : '');
   }
 }

@@ -90,11 +90,13 @@ function buildSynthGraph() {
 }
 
 function updateSynthParams(synth) {
+  if (synth) lastSynthParams = synth; // Shared Pulse re-applies it as the energy moves
   if (!synthNodes || !synth || !audioCtx) return;
   const now = audioCtx.currentTime;
+  const beatHz = pulseBinauralHz(synth); // the server's beat, scaled by the Shared Pulse when it's on
   synthNodes.leftOsc.frequency.setTargetAtTime(synth.carrier_hz, now, 0.1);
-  synthNodes.rightOsc.frequency.setTargetAtTime(synth.carrier_hz + synth.beat_hz, now, 0.1);
-  synthNodes.lfo.frequency.setTargetAtTime(Math.max(0.01, synth.beat_hz), now, 0.1);
+  synthNodes.rightOsc.frequency.setTargetAtTime(synth.carrier_hz + beatHz, now, 0.4);
+  synthNodes.lfo.frequency.setTargetAtTime(Math.max(0.01, beatHz), now, 0.4);
   synthNodes.lfoGain.gain.setTargetAtTime(0.5 * synth.iso, now, 0.1);
   synthNodes.offset.offset.setTargetAtTime(1 - 0.5 * synth.iso, now, 0.1);
 }

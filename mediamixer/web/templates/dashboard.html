@@ -315,6 +315,26 @@
       </div>
     </details>
     <details class="settings-section">
+      <summary><span class="section-title">🌊 Shared Pulse</span><span class="settings-section-desc">Spirals, binaural and glow flow with the session's energy.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider">
+          <label>Enabled</label>
+          <button class="badge" id="pulse-toggle" onclick="toggleSharedPulse()">ON</button>
+        </div>
+        <div class="metric" id="pulse-status"></div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">One energy signal - built from your engagement, build-ups and fresh jackpots, surges, Overdrive and the Auto-Pilot zone, glided over a few seconds - that several layers follow together: spirals (yours and the event ones) play faster or slower with it and brighten a touch on each downbeat, the binaural beat rises and settles with it, and floaters and the screen edge get a soft kick on the beat. Rhythm Mode's tempo can follow the same energy (Tempo Follows Energy). Turn this off to let each layer keep its own pace.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🧠 Taste Learning</span><span class="settings-section-desc">Gently leans tile FX and beat patterns toward what you like.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider"><label>Strength: <b><span id="l-taste-strength">25%</span></b></label><input type="range" id="taste-strength-input" min="0" max="100" step="5" value="25" oninput="setTasteStrength(this.value)"></div>
+        <div class="metric" id="taste-status" style="white-space:pre-line"></div>
+        <button class="badge" onclick="resetTaste()">Reset what it learned</button>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Watches how often you heart tiles while each tile FX or beat pattern is showing, compared with your usual rate, and nudges the random picks toward the ones you like - never away from variety: at 25% something you like 3x more gets picked about 1.3x as often, and something you like less still shows up. It leans twice as hard while your engagement is dipping, and older sessions count a bit less each time, so it follows your taste as it changes. 0% turns it off.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
       <summary><span class="section-title">🌀 Manual Spiral</span><span class="settings-section-desc">Keep a spiral of your choice up, at your own opacity.</span></summary>
       <div class="settings-section-body">
         <div class="slider">
@@ -500,6 +520,7 @@
 <script src="{{ url_for('static', filename='dashboard_spin.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_boot.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_layers.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_pulse.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_events.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_telemetry.js') }}"></script>
 </body>

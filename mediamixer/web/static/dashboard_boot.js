@@ -35,6 +35,8 @@ window.onload = () => {
   loadMosaicPref();
   loadFxPrefs();
   loadManualSpiralPrefs();
+  loadPulsePrefs();
+  loadTastePrefs();
   loadAnticipationPrefs();
   loadAutopilotPrefs();
   loadVibeDialPref();

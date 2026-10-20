@@ -406,6 +406,7 @@ function rateScreen(i, dir, btn, strength) {
   }
   strength = strength || 1;
   markInteraction();
+  if (dir === 'up') tasteNoteLike(i);
   if (dir === 'up') {
     claimBonusTile(i);
     bumpHeartMultiplier();
