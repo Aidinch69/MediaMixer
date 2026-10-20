@@ -446,7 +446,6 @@ function tickGoldenHour() {
 // daily slot) that randomly doubles the same odds for a minute or two -
 // stacks unscheduled variable-ratio surprise on top of the scheduled one.
 const SURGE_CHECK_MS = 20000;
-const SURGE_PROBABILITY = 0.08;
 const SURGE_DURATION_RANGE_MS = [60000, 90000];
 let surgeExpireAt = 0;
 
@@ -456,7 +455,7 @@ let surgeExpireAt = 0;
 // roughly every 4 minutes on top of Overdrive's own.
 function maybeTriggerSurge() {
   if (Date.now() < surgeExpireAt + TUNING.SURGE_COOLDOWN_MS) return;
-  if (Math.random() < SURGE_PROBABILITY) {
+  if (Math.random() < TUNING.SURGE_PROBABILITY) {
     const [lo, hi] = SURGE_DURATION_RANGE_MS;
     surgeExpireAt = Date.now() + lo + Math.random() * (hi - lo);
     toast('⚡ Surge! Odds doubled for a bit');

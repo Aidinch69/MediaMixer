@@ -13,8 +13,6 @@
 // but per explicit feedback Auto-Pilot no longer gets to flip it; it
 // stays exactly wherever the viewer last set it manually.
 const AUTOPILOT_TICK_MS = 4000;
-const AUTOPILOT_MAX_BARRAGE_P = 0.4;
-const AUTOPILOT_MAX_JACKPOT_P = 0.5;
 // Polyrhythm: fx and ambient ride their own cycle length instead of the
 // exact same one pace/barrage/jackpot/novelty share, so the combined
 // texture keeps evolving cycle to cycle instead of everything peaking
@@ -56,7 +54,6 @@ let autopilotStatusPhraseSetAt = 0;
 // display is allowed to change again; retention-beat phrases are real,
 // deliberate state transitions (driven by their own timing, not tick
 // noise) and always take over immediately regardless of the hold.
-const STATUS_PHRASE_MIN_HOLD_MS = 12000;
 // "ambient" ramps every client-only passive-spawn system added since this
 // arc was first written (bonus window, chase flash, near-miss, spiral-
 // from-hearts) via autopilotAmbientBoost below - previously those all sat
@@ -194,9 +191,6 @@ let engagementPrevForTrend = 1.0;
 // tick-to-tick with a 0.02 threshold was pure noise near the 2.2 cap: a
 // 36-minute session flipped "Recalibrating feel" / "Leaning in" ~10 times
 // per zone while engagement sat at 2.1-2.2 throughout.
-const ENGAGEMENT_TREND_ALPHA = 0.13; // per 4s tick -> ~30s memory
-const ENGAGEMENT_TREND_THRESHOLD = 0.12;
-const ENGAGEMENT_HALFLIFE_MS = 45000;
 const ENGAGEMENT_MIN = 0.2;
 const ENGAGEMENT_MAX = 2.2;
 
@@ -205,7 +199,7 @@ function decayEngagementToNow() {
   const elapsed = now - engagementUpdatedAt;
   engagementUpdatedAt = now;
   if (elapsed <= 0) return;
-  const decay = Math.pow(0.5, elapsed / ENGAGEMENT_HALFLIFE_MS);
+  const decay = Math.pow(0.5, elapsed / TUNING.ENGAGEMENT_HALFLIFE_MS);
   engagementScore = 1.0 + (engagementScore - 1.0) * decay;
 }
 
@@ -215,11 +209,10 @@ function decayEngagementToNow() {
 // 2.2 cap ~85% of the time, leaving Auto-Pilot no way to tell "into it"
 // from "really into it". Replaying real sessions: avg 2.11 -> 1.79,
 // range 1.58-1.93, never pinned. Negative nudges land at full strength.
-const ENGAGEMENT_SOFTCAP_CURVE = 1.5;
 
 function nudgeEngagement(amount) {
   decayEngagementToNow();
-  if (amount > 0) amount *= Math.pow(Math.max(0, (ENGAGEMENT_MAX - engagementScore) / (ENGAGEMENT_MAX - 1)), ENGAGEMENT_SOFTCAP_CURVE);
+  if (amount > 0) amount *= Math.pow(Math.max(0, (ENGAGEMENT_MAX - engagementScore) / (ENGAGEMENT_MAX - 1)), TUNING.ENGAGEMENT_SOFTCAP_CURVE);
   engagementScore = Math.max(ENGAGEMENT_MIN, Math.min(ENGAGEMENT_MAX, engagementScore + amount));
 }
 
@@ -341,13 +334,12 @@ function pickAutopilotZone(excludeName, fromZone) {
 // genuinely novel actually happened and forces a surprise once it's
 // been too long, regardless of what the engagement score says.
 let ticksSinceNovelty = 0;
-const BOREDOM_DEBT_LIMIT = 20; // ~80s at the 4s tick rate
 
 function markNoveltyHappened() { ticksSinceNovelty = 0; }
 
 function maybeReleaseBoredomDebt() {
   ticksSinceNovelty++;
-  if (ticksSinceNovelty < BOREDOM_DEBT_LIMIT) return;
+  if (ticksSinceNovelty < TUNING.BOREDOM_DEBT_LIMIT) return;
   ticksSinceNovelty = 0;
   if (Math.random() < 0.5) fetch('/api/double_feature').then((r) => r.json()).then((d) => { if (d && d.picked) markNoveltyHappened(); });
   else if (tileElements.length) fetch('/api/true_mystery?screen=' + Math.floor(Math.random() * tileElements.length)).then((r) => r.json()).then((d) => { if (d && d.picked) markNoveltyHappened(); });
@@ -379,8 +371,6 @@ const RETENTION_UP_MS = 35000;
 // Auto-Pilot minutes were spent "Easing back" (0.7x intensity, slower
 // pace) while the viewer was as engaged as the signal can show. Now it
 // needs engagement to have genuinely sagged, and rests between beats.
-const RETENTION_MAX_ENGAGEMENT = 1.5;
-const RETENTION_COOLDOWN_MS = 5 * 60000;
 let sessionRetentionBeatEndedAt = 0;
 
 function loadSessionLengthHistory() {
@@ -412,7 +402,7 @@ function stepOffProximity() {
 function updateRetentionBeat(proximity, trendingDown, engagement) {
   const now = Date.now();
   if (!sessionRetentionBeatPhase) {
-    if (proximity > 0.75 && trendingDown && engagement < RETENTION_MAX_ENGAGEMENT && now - sessionRetentionBeatEndedAt > RETENTION_COOLDOWN_MS) {
+    if (proximity > 0.75 && trendingDown && engagement < TUNING.RETENTION_MAX_ENGAGEMENT && now - sessionRetentionBeatEndedAt > TUNING.RETENTION_COOLDOWN_MS) {
       sessionRetentionBeatPhase = 'down';
       sessionRetentionBeatStartedAt = now;
     }
@@ -494,9 +484,9 @@ function autopilotTick() {
 
   const engagement = readEngagement();
   updateSessionTrust(engagement);
-  const trendingUp = engagement > engagementPrevForTrend + ENGAGEMENT_TREND_THRESHOLD;
-  const trendingDown = engagement < engagementPrevForTrend - ENGAGEMENT_TREND_THRESHOLD;
-  engagementPrevForTrend += (engagement - engagementPrevForTrend) * ENGAGEMENT_TREND_ALPHA;
+  const trendingUp = engagement > engagementPrevForTrend + TUNING.ENGAGEMENT_TREND_THRESHOLD;
+  const trendingDown = engagement < engagementPrevForTrend - TUNING.ENGAGEMENT_TREND_THRESHOLD;
+  engagementPrevForTrend += (engagement - engagementPrevForTrend) * TUNING.ENGAGEMENT_TREND_ALPHA;
 
   const proximity = stepOffProximity();
   updateRetentionBeat(proximity, trendingDown, engagement);
@@ -562,7 +552,7 @@ function autopilotTick() {
     autopilotStatusPhraseSetAt = now;
   } else {
     const desiredTrendPhrase = trendingDown ? '🔄 Recalibrating feel' : trendingUp ? '📈 Leaning in' : '';
-    if (desiredTrendPhrase !== autopilotCurrentStatusPhrase && now - autopilotStatusPhraseSetAt > STATUS_PHRASE_MIN_HOLD_MS) {
+    if (desiredTrendPhrase !== autopilotCurrentStatusPhrase && now - autopilotStatusPhraseSetAt > TUNING.STATUS_PHRASE_MIN_HOLD_MS) {
       autopilotCurrentStatusPhrase = desiredTrendPhrase;
       autopilotStatusPhraseSetAt = now;
     }
@@ -615,8 +605,8 @@ function autopilotTick() {
   const intensityMult = autopilotZoneMultiplier('barrage') * comboMicroBoost * fakeoutMult * seasonMult * trustMult * retentionMult;
   // Capped: the stacked multipliers above reached 0.68 (barrage, per 3s
   // check) and 1.09 (jackpot, per rotation) at real peaks.
-  const barrageP = Math.min(AUTOPILOT_MAX_BARRAGE_P, lerp(a.barrage, b.barrage, barrageEasedLf) * intensityMult);
-  const jackpotP = Math.min(AUTOPILOT_MAX_JACKPOT_P, lerp(a.jackpot, b.jackpot, jackpotEasedLf) * intensityMult);
+  const barrageP = Math.min(TUNING.AUTOPILOT_MAX_BARRAGE_P, lerp(a.barrage, b.barrage, barrageEasedLf) * intensityMult);
+  const jackpotP = Math.min(TUNING.AUTOPILOT_MAX_JACKPOT_P, lerp(a.jackpot, b.jackpot, jackpotEasedLf) * intensityMult);
 
   const noveltyLean = autopilotNoveltyBias(proximity, sessionRetentionBeatPhase, trendingUp);
   const noveltyBonus = Math.max(0, lerp(a.novelty, b.novelty, AUTOPILOT_AXIS_EASING.novelty(lf)) + noveltyLean);
@@ -709,7 +699,7 @@ function updateAutopilotDebugUi() {
   if (!el) return;
   if (!autopilotEnabled) { el.innerText = 'Auto-Pilot is off.'; return; }
   const engagement = readEngagement();
-  const trendArrow = engagement > engagementPrevForTrend + ENGAGEMENT_TREND_THRESHOLD ? ' ↑' : engagement < engagementPrevForTrend - ENGAGEMENT_TREND_THRESHOLD ? ' ↓' : '';
+  const trendArrow = engagement > engagementPrevForTrend + TUNING.ENGAGEMENT_TREND_THRESHOLD ? ' ↑' : engagement < engagementPrevForTrend - TUNING.ENGAGEMENT_TREND_THRESHOLD ? ' ↓' : '';
   const zoneAgeS = autopilotZone ? Math.round((Date.now() - autopilotZoneStartedAt) / 1000) : 0;
   const lines = [
     'Zone: ' + (autopilotZone ? AUTOPILOT_ZONES[autopilotZone].label : '-') + ' (' + zoneAgeS + 's in)',
@@ -717,7 +707,7 @@ function updateAutopilotDebugUi() {
     'Session trust: ' + sessionTrust.toFixed(2),
     'Step-off proximity: ' + stepOffProximity().toFixed(2) + (sessionRetentionBeatPhase ? '  (retention beat: ' + sessionRetentionBeatPhase + ')' : ''),
     'Cycle #' + autopilotCycleCount + (autopilotFakeoutActive ? '  (fakeout active)' : ''),
-    'Boredom debt: ' + ticksSinceNovelty + ' / ' + BOREDOM_DEBT_LIMIT,
+    'Boredom debt: ' + ticksSinceNovelty + ' / ' + TUNING.BOREDOM_DEBT_LIMIT,
     'Temperament (top zone): ' + autopilotTemperament(),
     'Zone payoff: ' + AUTOPILOT_ZONE_NAMES.map((z) => z + '=' + zonePayoff[z].toFixed(2)).join('  '),
   ];

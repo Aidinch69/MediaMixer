@@ -136,6 +136,42 @@ const TUNING_DEFAULTS = {
   OVERDRIVE_BARRAGE_P: 0.35,
   OVERDRIVE_JACKPOT_P: 0.6,
   OVERDRIVE_SPOTLIGHT_CHANCE: 0.2, // was always - a takeover hid the FX landing on every other tile
+  // Promoted from hardcoded constants for Master Controls (same values).
+  SURGE_PROBABILITY: 0.08,
+  RHYTHM_WAVE_PERIOD_MS: 80000,
+  RHYTHM_WAVE_DEPTH: 0.45,
+  RHYTHM_DRIVE_MIN: 0.85,
+  RHYTHM_DRIVE_MAX: 1.3,
+  RHYTHM_DRIVE_RISE_MS: 8000,
+  RHYTHM_DRIVE_FALL_MS: 20000,
+  RHYTHM_PAYOFF_GLOW_ADD: 0.07,
+  RHYTHM_PAYOFF_GLOW_CAP: 0.14,
+  RHYTHM_PAYOFF_GLOW_HALFLIFE_MS: 12000,
+  RHYTHM_MAX_BPM: 180,
+  RHYTHM_PATTERN_SWITCH_BEATS: 16,
+  RHYTHM_PATTERN_SWITCH_CHANCE: 0.6,
+  PULSE_SPIRAL_RATE_MIN: 0.75,
+  PULSE_SPIRAL_RATE_MAX: 1.45,
+  BLOOM_PEAK_OPACITY: 0.7,
+  DUOTONE_PEAK_OPACITY: 0.85,
+  LIGHT_LEAK_PEAK_OPACITY: 0.75,
+  TASTE_PRIOR_LIKES: 4,
+  TASTE_LOAD_DECAY: 0.85,
+  TASTE_LOW_ENGAGEMENT: 1.4,
+  AUTOPILOT_MAX_BARRAGE_P: 0.4,
+  AUTOPILOT_MAX_JACKPOT_P: 0.5,
+  BOREDOM_DEBT_LIMIT: 20,
+  STATUS_PHRASE_MIN_HOLD_MS: 12000,
+  ENGAGEMENT_HALFLIFE_MS: 45000,
+  ENGAGEMENT_SOFTCAP_CURVE: 1.5,
+  ENGAGEMENT_TREND_THRESHOLD: 0.12,
+  ENGAGEMENT_TREND_ALPHA: 0.13,
+  RETENTION_MAX_ENGAGEMENT: 1.5,
+  RETENTION_COOLDOWN_MS: 300000,
+  LOOP_HEART_THRESHOLD: 5,
+  LOOP_TOP_FRACTION: 0.05,
+  LOOP_CHANCE: 0.35,
+  LOOP_MAX_REPEATS: 2,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -276,14 +312,19 @@ const TUNING_GROUPS = [
   { label: 'Double Feature', desc: 'Odds and check interval for a surprise second feature.', keys: ['DOUBLE_FEATURE_CHECK_MS', 'DOUBLE_FEATURE_PROBABILITY'] },
   { label: 'Layout Fade / Dynamic Mosaic', desc: 'Fade timing and the automatic-layout-change cooldown/cadence.', keys: ['LAYOUT_FADE_MS', 'LAYOUT_FADE_HOLD_MS', 'LAYOUT_CHANGE_COOLDOWN_MS', 'DYNAMIC_MOSAIC_CHECK_MS', 'DYNAMIC_MOSAIC_DRIFT_PROBABILITY'] },
   { label: 'Barrage/Jackpot Hype', desc: 'Speed-up fade timing, plus the non-selected tiles\' dim/slowdown.', keys: ['BARRAGE_SPEED_FADE_MS', 'BARRAGE_DIM_OPACITY', 'BARRAGE_DIM_FADE_IN_MS', 'BARRAGE_DIM_FADE_OUT_MS', 'BARRAGE_DIM_SPEED_MULT'] },
-  { label: 'Multipliers & XP', desc: 'Heat/heart multiplier caps and decay, hidden-window odds, XP amounts.', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'SURGE_COOLDOWN_MS', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
-  { label: 'Visual FX Rewards', desc: 'Odds a tile effect (prism, bloom, VHS...) rides along with a reward.', keys: ['FX_REWARD_BONUS_CHANCE', 'FX_REWARD_SEALED_CHANCE', 'FX_REWARD_CATCH_CHANCE', 'CHASE_MILESTONE_XP_MULT'] },
+  { label: 'Multipliers & XP', desc: 'Heat/heart multiplier caps and decay, hidden-window odds, XP amounts.', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
+  { label: 'Visual FX Rewards', desc: 'Odds a tile effect (prism, bloom, VHS...) rides along with a reward.', keys: ['FX_REWARD_BONUS_CHANCE', 'FX_REWARD_SEALED_CHANCE', 'FX_REWARD_CATCH_CHANCE', 'CHASE_MILESTONE_XP_MULT', 'BLOOM_PEAK_OPACITY', 'DUOTONE_PEAK_OPACITY', 'LIGHT_LEAK_PEAK_OPACITY'] },
   { label: 'Fresh Drops', desc: 'How new clips get rationed out - check rate, odds, spacing, per-session cap.', keys: ['FRESH_DROP_CHECK_MS', 'FRESH_DROP_PROBABILITY', 'FRESH_DROP_FIRST_DELAY_MS', 'FRESH_DROP_MIN_GAP_MS', 'FRESH_DROP_SESSION_CAP'] },
   { label: 'Audio-Reactive', desc: 'Minimum gap between audio-triggered tile pulses.', keys: ['AUDIO_REACT_PULSE_GAP_MS'] },
   { label: 'Clip Transitions', desc: 'How often clip changes get a transition, how long, and the mix of styles.', keys: ['TRANSITION_PROBABILITY', 'TRANSITION_DURATION_MS', 'TRANSITION_WEIGHT_CROSSFADE', 'TRANSITION_WEIGHT_ZOOM', 'TRANSITION_WEIGHT_GLITCH'] },
   { label: 'Spotlight Takeover', desc: 'The rare one-tile takeover - odds, minimum gap, length, and size.', keys: ['SPOTLIGHT_CHECK_MS', 'SPOTLIGHT_PROBABILITY', 'SPOTLIGHT_MIN_GAP_MS', 'SPOTLIGHT_DURATION_MIN_MS', 'SPOTLIGHT_DURATION_RANGE_MS', 'SPOTLIGHT_SCALE', 'SPOTLIGHT_GROW_MS', 'SPOTLIGHT_DIM_OPACITY'] },
   { label: 'Floater Barrage', desc: 'The rare dim-the-grid, fill-the-screen-with-floaters moment - odds, rest, count, length and dim.', keys: ['FLOATER_BARRAGE_PROBABILITY', 'FLOATER_BARRAGE_CHECK_MS', 'FLOATER_BARRAGE_COOLDOWN_MS', 'FLOATER_BARRAGE_COUNT', 'FLOATER_BARRAGE_MIN_MS', 'FLOATER_BARRAGE_RANGE_MS', 'FLOATER_BARRAGE_DIM', 'FLOATER_BARRAGE_SIZE_MULT'] },
   { label: 'Overdrive', desc: 'How fast the meter charges and what a release does.', keys: ['OVERDRIVE_PER_HEART', 'OVERDRIVE_PER_CATCH', 'OVERDRIVE_PER_BONUS', 'OVERDRIVE_PER_UNLOCK', 'OVERDRIVE_ON_BEAT_MULT', 'OVERDRIVE_BURST_MS', 'OVERDRIVE_SPEED_MULT', 'OVERDRIVE_BARRAGE_P', 'OVERDRIVE_JACKPOT_P', 'OVERDRIVE_SPOTLIGHT_CHANCE'] },
+  { label: 'Auto-Pilot', desc: 'Odds caps, boredom release, status text, engagement signal and the retention beat.', keys: ['AUTOPILOT_MAX_BARRAGE_P', 'AUTOPILOT_MAX_JACKPOT_P', 'BOREDOM_DEBT_LIMIT', 'STATUS_PHRASE_MIN_HOLD_MS', 'ENGAGEMENT_HALFLIFE_MS', 'ENGAGEMENT_SOFTCAP_CURVE', 'ENGAGEMENT_TREND_THRESHOLD', 'ENGAGEMENT_TREND_ALPHA', 'RETENTION_MAX_ENGAGEMENT', 'RETENTION_COOLDOWN_MS'] },
+  { label: 'Rhythm & Pulse', desc: 'Tempo waves, the energy signal (range, rise/settle, jackpot swells), Mix pattern changes, and how far spirals follow the pulse.', keys: ['RHYTHM_WAVE_PERIOD_MS', 'RHYTHM_WAVE_DEPTH', 'RHYTHM_DRIVE_MIN', 'RHYTHM_DRIVE_MAX', 'RHYTHM_DRIVE_RISE_MS', 'RHYTHM_DRIVE_FALL_MS', 'RHYTHM_PAYOFF_GLOW_ADD', 'RHYTHM_PAYOFF_GLOW_CAP', 'RHYTHM_PAYOFF_GLOW_HALFLIFE_MS', 'RHYTHM_MAX_BPM', 'RHYTHM_PATTERN_SWITCH_BEATS', 'RHYTHM_PATTERN_SWITCH_CHANCE', 'PULSE_SPIRAL_RATE_MIN', 'PULSE_SPIRAL_RATE_MAX'] },
+  { label: 'Taste Learning', desc: 'How much evidence it wants, how fast it forgets, and when it leans harder. Strength itself is in Flow -> Taste Learning.', keys: ['TASTE_PRIOR_LIKES', 'TASTE_LOAD_DECAY', 'TASTE_LOW_ENGAGEMENT'] },
+  { label: 'Surges', desc: 'Random surges - odds and the rest between them (the odds boost itself is under Multipliers & XP).', keys: ['SURGE_PROBABILITY', 'SURGE_COOLDOWN_MS'] },
+  { label: 'Custom Loop Point', desc: 'Which favourites replay their best section, how often, and how many times.', keys: ['LOOP_HEART_THRESHOLD', 'LOOP_TOP_FRACTION', 'LOOP_CHANCE', 'LOOP_MAX_REPEATS'] },
 ];
 const TUNING_META = {
   XP_PER_BONUS_CLAIM: { label: 'Bonus-tap XP', unit: 'n', min: 5, max: 50, step: 1 },
@@ -403,51 +444,53 @@ const TUNING_META = {
   OVERDRIVE_BARRAGE_P: { label: 'Overdrive barrage chance', unit: 'pct', min: 0, max: 1, step: 0.05 },
   OVERDRIVE_JACKPOT_P: { label: 'Overdrive jackpot chance', unit: 'pct', min: 0, max: 1, step: 0.05 },
   OVERDRIVE_SPOTLIGHT_CHANCE: { label: 'Overdrive Spotlight chance', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  SURGE_PROBABILITY: { label: 'Random surge chance per check (every 20s)', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
+  RHYTHM_WAVE_PERIOD_MS: { label: 'Tempo wave length', unit: 's', min: 20000, max: 240000, step: 5000 },
+  RHYTHM_WAVE_DEPTH: { label: 'Tempo wave height', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  RHYTHM_DRIVE_MIN: { label: 'Energy floor', unit: 'x', min: 0.5, max: 1, step: 0.05 },
+  RHYTHM_DRIVE_MAX: { label: 'Energy ceiling', unit: 'x', min: 1, max: 2, step: 0.05 },
+  RHYTHM_DRIVE_RISE_MS: { label: 'Energy rise time', unit: 's', min: 1000, max: 30000, step: 500 },
+  RHYTHM_DRIVE_FALL_MS: { label: 'Energy settle time', unit: 's', min: 1000, max: 60000, step: 1000 },
+  RHYTHM_PAYOFF_GLOW_ADD: { label: 'Jackpot energy swell (per payoff)', unit: '', min: 0, max: 0.3, step: 0.01 },
+  RHYTHM_PAYOFF_GLOW_CAP: { label: 'Jackpot energy swell (max)', unit: '', min: 0, max: 0.5, step: 0.01 },
+  RHYTHM_PAYOFF_GLOW_HALFLIFE_MS: { label: 'Jackpot energy swell fade (half-life)', unit: 's', min: 2000, max: 60000, step: 1000 },
+  RHYTHM_MAX_BPM: { label: 'Max rhythm tempo (BPM)', unit: '', min: 90, max: 240, step: 5 },
+  RHYTHM_PATTERN_SWITCH_BEATS: { label: 'Mix: beats between pattern changes', unit: '', min: 4, max: 64, step: 4 },
+  RHYTHM_PATTERN_SWITCH_CHANCE: { label: 'Mix: chance to change pattern', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  PULSE_SPIRAL_RATE_MIN: { label: 'Pulse: slowest spiral speed', unit: 'x', min: 0.25, max: 1, step: 0.05 },
+  PULSE_SPIRAL_RATE_MAX: { label: 'Pulse: fastest spiral speed', unit: 'x', min: 1, max: 3, step: 0.05 },
+  BLOOM_PEAK_OPACITY: { label: 'Dreamy Bloom strength', unit: 'pct', min: 0.1, max: 1, step: 0.05 },
+  DUOTONE_PEAK_OPACITY: { label: 'Duotone strength', unit: 'pct', min: 0.1, max: 1, step: 0.05 },
+  LIGHT_LEAK_PEAK_OPACITY: { label: 'Light Leak strength', unit: 'pct', min: 0.1, max: 1, step: 0.05 },
+  TASTE_PRIOR_LIKES: { label: 'Evidence needed before leaning (pseudo-likes)', unit: '', min: 0, max: 20, step: 1 },
+  TASTE_LOAD_DECAY: { label: 'Memory kept per page load', unit: 'pct', min: 0.5, max: 1, step: 0.01 },
+  TASTE_LOW_ENGAGEMENT: { label: 'Lean harder below this engagement', unit: '', min: 0.5, max: 2.2, step: 0.05 },
+  AUTOPILOT_MAX_BARRAGE_P: { label: 'Max barrage odds per check', unit: 'pct', min: 0, max: 1, step: 0.01 },
+  AUTOPILOT_MAX_JACKPOT_P: { label: 'Max jackpot odds per rotation', unit: 'pct', min: 0, max: 1, step: 0.01 },
+  BOREDOM_DEBT_LIMIT: { label: 'Boredom limit (4s ticks with nothing new)', unit: '', min: 5, max: 60, step: 1 },
+  STATUS_PHRASE_MIN_HOLD_MS: { label: 'Status text minimum hold', unit: 's', min: 0, max: 60000, step: 1000 },
+  ENGAGEMENT_HALFLIFE_MS: { label: 'Engagement memory (half-life)', unit: 's', min: 5000, max: 180000, step: 5000 },
+  ENGAGEMENT_SOFTCAP_CURVE: { label: 'Engagement soft cap (0 = none, higher = harder to max)', unit: '', min: 0, max: 4, step: 0.1 },
+  ENGAGEMENT_TREND_THRESHOLD: { label: 'Trend sensitivity (min change)', unit: '', min: 0, max: 0.5, step: 0.01 },
+  ENGAGEMENT_TREND_ALPHA: { label: 'Trend smoothing (lower = smoother)', unit: '', min: 0.02, max: 1, step: 0.01 },
+  RETENTION_MAX_ENGAGEMENT: { label: 'Retention beat only below this engagement', unit: '', min: 0.5, max: 2.2, step: 0.05 },
+  RETENTION_COOLDOWN_MS: { label: 'Retention beat rest', unit: 's', min: 0, max: 1800000, step: 30000 },
+  LOOP_HEART_THRESHOLD: { label: 'Minimum hearts to loop', unit: '', min: 1, max: 50, step: 1 },
+  LOOP_TOP_FRACTION: { label: 'Only the top % most-hearted clips loop', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
+  LOOP_CHANCE: { label: 'Chance an eligible clip loops', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  LOOP_MAX_REPEATS: { label: 'Max passes through the loop', unit: '', min: 1, max: 6, step: 1 },
 };
 
 function formatTuningValue(key, value) {
   const meta = TUNING_META[key];
-  if (meta.unit === 'pct') return Math.round(value * 100) + '%';
+  if (meta.unit === 'pct') return (meta.step < 0.01 ? (value * 100).toFixed(1) : Math.round(value * 100)) + '%';
   if (meta.unit === 's') return (value / 1000).toFixed(1) + 's';
-  if (meta.unit === 'x') return 'x' + (Math.round(value * 10) / 10);
+  if (meta.unit === 'x') return 'x' + (Math.round(value * 100) / 100);
   return String(Math.round(value * 1000) / 1000); // avoids stray floating-point tails like 0.07999999999999999
 }
 
-// Builds the whole tab from TUNING_GROUPS/TUNING_META rather than hand-
-// written HTML per slider - 27 near-identical rows would otherwise be a
-// lot of markup to keep in sync with this file's own constants.
-function buildTuningUi() {
-  const container = document.getElementById('tuning-groups');
-  if (!container) return;
-  container.innerHTML = '';
-  TUNING_GROUPS.forEach(group => {
-    const section = document.createElement('details');
-    section.className = 'settings-section';
-    const summary = document.createElement('summary');
-    summary.innerHTML = '<span class="section-title">' + group.label + '</span><span class="settings-section-desc">' + group.desc + '</span>';
-    section.appendChild(summary);
-    const body = document.createElement('div');
-    body.className = 'settings-section-body';
-    group.keys.forEach(key => {
-      const meta = TUNING_META[key];
-      const row = document.createElement('div');
-      row.className = 'slider';
-      row.innerHTML = '<label>' + meta.label + ': <b><span id="tune-val-' + key + '"></span></b></label>' +
-        '<input type="range" id="tune-input-' + key + '" min="' + meta.min + '" max="' + meta.max + '" step="' + meta.step + '">';
-      body.appendChild(row);
-    });
-    section.appendChild(body);
-    container.appendChild(section);
-  });
-  Object.keys(TUNING_META).forEach(key => {
-    const input = document.getElementById('tune-input-' + key);
-    const val = document.getElementById('tune-val-' + key);
-    if (!input || !val) return;
-    input.value = TUNING[key];
-    val.innerText = formatTuningValue(key, TUNING[key]);
-    input.addEventListener('input', () => setTuning(key, parseFloat(input.value)));
-  });
-}
+// The sliders themselves are drawn by Master Controls (dashboard_master.js).
+function buildTuningUi() { buildMasterUi(); }
 
 // ---- Engine (server) settings ----
 // The backend's own config.py tunables, live via /api/config. They're
@@ -466,38 +509,7 @@ function loadEngineConfig() {
   }).catch(() => {});
 }
 
-function buildEngineTuningUi() {
-  const container = document.getElementById('engine-tuning-groups');
-  if (!container) return;
-  container.innerHTML = '';
-  const groups = {};
-  Object.keys(engineConfigFields).forEach(name => {
-    const g = engineConfigFields[name].group;
-    (groups[g] = groups[g] || []).push(name);
-  });
-  Object.keys(groups).forEach(label => {
-    const section = document.createElement('details');
-    section.className = 'settings-section';
-    section.innerHTML = '<summary><span class="section-title">🖧 ' + label + '</span><span class="settings-section-desc">Engine setting - shared by every device.</span></summary>';
-    const body = document.createElement('div');
-    body.className = 'settings-section-body';
-    groups[label].forEach(name => {
-      const f = engineConfigFields[name];
-      const row = document.createElement('div');
-      row.className = 'slider';
-      const changed = f.value !== f.default ? ' <span class="engine-changed" title="default ' + f.default + '">●</span>' : '';
-      row.innerHTML = '<label>' + f.label + ': <b><span id="engine-val-' + name + '">' + formatEngineValue(f) + '</span></b>' + changed + '</label>' +
-        '<input type="range" min="' + f.min + '" max="' + f.max + '" step="' + f.step + '" value="' + f.value + '">';
-      const input = row.querySelector('input');
-      const val = row.querySelector('#engine-val-' + name);
-      input.addEventListener('input', () => { val.innerText = input.value; });
-      input.addEventListener('change', () => setEngineConfig(name, input.value));
-      body.appendChild(row);
-    });
-    section.appendChild(body);
-    container.appendChild(section);
-  });
-}
+function buildEngineTuningUi() { buildMasterUi(); }
 
 function setEngineConfig(name, value) {
   fetch('/api/config?name=' + encodeURIComponent(name) + '&value=' + encodeURIComponent(value))

@@ -436,6 +436,18 @@ button.badge.switch.on::after{transform:translateX(22px);background:#fff}
    picking the right page instead of scrolling past everything else to
    find it. Current tab persists in localStorage, same as every other
    panel preference here. */
+.master-search{width:100%;box-sizing:border-box;background:#0e081f;border:1px solid #3d2a5c;border-radius:8px;color:#fff;padding:10px 12px;font-size:.85rem}
+.master-search:focus{outline:none;border-color:#8fffb3}
+.master-filters{grid-template-columns:1fr 1fr}
+.master-count{font-size:.72rem;color:#9a9aa8}
+.master-groups{display:flex;flex-direction:column;gap:10px}
+.master-area{margin-top:6px;font-size:.72rem;font-weight:bold;letter-spacing:.12em;text-transform:uppercase;color:#8fffb3;border-bottom:1px solid #1f3a2a;padding-bottom:3px}
+.master-row label{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px}
+.master-row.changed{border-color:#3f6b4f}
+.master-dot{color:#8fffb3;font-size:.7rem}
+.master-default{font-size:.66rem;color:#6d6a78;font-weight:normal}
+.master-shared{font-size:.62rem;color:#b399ff;border:1px solid #3d2a5c;border-radius:4px;padding:0 4px}
+.master-reset{margin:0 0 0 auto;width:auto;padding:0 6px;background:none;border:1px solid #3f6b4f;border-radius:5px;color:#8fffb3;cursor:pointer;font-size:.8rem}
 .scene-bar{display:flex;flex-direction:column;gap:6px}
 .scene-bar-title{font-size:.7rem;font-weight:bold;letter-spacing:.06em;color:#b98cff;text-transform:uppercase}
 .scene-chips{display:flex;flex-wrap:wrap;gap:6px}

@@ -459,22 +459,26 @@
   </div>
 
   <div class="panel-tab" data-tab="controls">
-    <h3>🔧 Tuning<span class="experimental-pill">Backdoor</span></h3>
+    <h3>🔧 Master Controls</h3>
+    <input id="master-search" class="master-search" type="search" placeholder="Search - e.g. opacity, speed, spiral, xp" oninput="buildMasterUi()">
+    <div class="grid master-filters">
+      <button class="badge" id="master-filter-all" onclick="setMasterFilter('all')">All settings</button>
+      <button class="badge" id="master-filter-changed" onclick="setMasterFilter('changed')">Changed only</button>
+    </div>
+    <div class="metric master-count" id="master-count"></div>
+    <div id="master-groups" class="master-groups"></div>
+    <h3>🔒 Lock it in</h3>
+    <button class="badge" onclick="lockItIn()">📋 Copy everything I've changed</button>
+    <textarea id="master-lockin" class="mantra-phrases-input" rows="6" readonly style="display:none"></textarea>
     <div class="grid">
       <button class="badge" onclick="backupTuningNow()">💾 Save Backup</button>
       <button class="badge" onclick="restoreTuningBackup()">↩️ Restore Backup</button>
     </div>
-    <button onclick="resetTuningToDefaults()">⟲ Reset All to Shipped Defaults</button>
-    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Live sliders for the constants we've actually been iterating on this session (spiral opacity/timing, sealed/chase/bonus/color-rush/mystery-tile/due-aura odds and timing, spin, the various multipliers and decay rates, xp amounts) - not everything in the file, just the parts worth fine-tuning in real time instead of editing source and restarting. A "check interval" is how often that system rolls the dice at all, in seconds - not a guarantee. A lower interval means it checks more often; the "odds" slider next to it is the actual chance it fires on each check. Low interval + low odds can feel about the same as high interval + high odds - they both control frequency, just from different angles. Changes persist across reloads on this device. "Save Backup" snapshots your current settings so you can experiment further and get back to them later; "Reset All to Shipped Defaults" always goes back to the values this shipped with, independent of any backup.</p></details>
-    <div id="tuning-groups"></div>
-    <h3>🖧 Engine<span class="experimental-pill">Live</span></h3>
     <div class="grid">
-      <button class="badge" onclick="copyEngineConfig()">📋 Copy Changed Values</button>
-      <button class="badge" onclick="resetEngineConfig()">⟲ Engine Defaults</button>
+      <button class="badge" onclick="resetTuningToDefaults()">⟲ Reset dashboard settings</button>
+      <button class="badge" onclick="resetEngineConfig()">⟲ Reset engine settings</button>
     </div>
-    <textarea id="engine-config-copy" class="mantra-phrases-input" rows="4" readonly style="display:none"></textarea>
-    <details class="hint-details"><summary>What does this do?</summary><p class="hint">The engine's own settings from config.py - barrage/jackpot odds, the end-of-clip tension slow-down, and how the selection learns from hearts, skips, and locks. Unlike the sliders above, these live on the PC running the engine, so they apply to every device at once and take effect immediately, no restart. They're saved next to the engine (config_overrides.json) and survive restarts; a ● marks anything changed from config.py. When something feels right, "Copy Changed Values" gives you the lines to lock into config.py for good. Auto-Pilot, a Finale, and Overdrive still push barrage/jackpot odds around on their own while they run - these are the baseline they return to.</p></details>
-    <div id="engine-tuning-groups"></div>
+    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Every adjustable number in one place - the dashboard's own settings (this device) and the engine's (🖧 shared by every device, kept across restarts) - grouped by the same areas as the menu tabs. Search by name or area, or show only what you've changed: a ● marks anything off its default, with ↺ to put it back. "Check interval" is how often a system rolls the dice and the odds next to it are the chance per roll, so both control how often something happens. "Copy everything I've changed" lists your changes with their defaults - paste it to Claude to make the ones that feel right the new defaults. Save Backup snapshots your dashboard settings so you can experiment and come back.</p></details>
   </div>
 
   <details class="panel-footer">
@@ -536,6 +540,7 @@
 <script src="{{ url_for('static', filename='dashboard_layers.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_pulse.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_scenes.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_master.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_events.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_telemetry.js') }}"></script>
 </body>

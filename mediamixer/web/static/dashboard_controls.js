@@ -234,7 +234,7 @@ function updateMenuState() {
     b.classList.add('switch');
     b.classList.toggle('on', b.innerText.trim().toUpperCase() === 'ON');
   });
-  document.querySelectorAll('.section-live').forEach((el) => {
+  document.querySelectorAll('.section-live[data-live]').forEach((el) => {
     const get = SECTION_LIVE[el.dataset.live];
     let text = '';
     try { text = get ? get() : ''; } catch (e) {}

@@ -37,14 +37,14 @@ function createTileElement(i) {
     // Custom Loop Point's actual seek-back - a no-op whenever this tile
     // has no loop bounds set (the normal case, for any clip that's never
     // earned enough hearts to qualify), so this doesn't change behavior
-    // for ordinary playback. Capped to LOOP_MAX_REPEATS passes - once hit,
+    // for ordinary playback. Capped to TUNING.LOOP_MAX_REPEATS passes - once hit,
     // bounds are cleared so this tile plays out to its real end and
     // rotates normally, instead of repeating forever.
     vid.addEventListener('timeupdate', () => {
       const bounds = tileLoopBounds[i];
       if (!bounds || vid.currentTime < bounds.end) return;
       tileLoopCount[i] = (tileLoopCount[i] || 0) + 1;
-      if (tileLoopCount[i] >= LOOP_MAX_REPEATS) {
+      if (tileLoopCount[i] >= TUNING.LOOP_MAX_REPEATS) {
         tileLoopBounds[i] = null;
       } else {
         vid.currentTime = bounds.start;

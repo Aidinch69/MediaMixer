@@ -575,12 +575,11 @@ function startCanvasOverlayFx(tile, vid, ms, className, downscale, style, onEnd)
 // fully recognisable (unlike the mirrored kaleidoscope this replaced) but
 // blooms brighter and dreamier, breathing slowly while it's up. Drawn at
 // quarter resolution and blurred by CSS, so it stays cheap.
-const BLOOM_PEAK_OPACITY = 0.7;
 const BLOOM_BREATHS = 2; // slow swells over the run
 function startBloomFx(tile, vid, ms) {
   startCanvasOverlayFx(tile, vid, ms, 'fx-bloom-canvas', 4, (canvas, elapsed) => {
     const breath = 0.75 + 0.25 * Math.sin((elapsed / ms) * Math.PI * 2 * BLOOM_BREATHS - Math.PI / 2);
-    canvas.style.opacity = (fxEnvelope(elapsed, ms) * BLOOM_PEAK_OPACITY * breath).toFixed(3);
+    canvas.style.opacity = (fxEnvelope(elapsed, ms) * TUNING.BLOOM_PEAK_OPACITY * breath).toFixed(3);
     canvas.style.transform = 'scale(' + (1.02 + 0.03 * breath).toFixed(4) + ')';
   });
 }
@@ -589,7 +588,6 @@ function startBloomFx(tile, vid, ms) {
 // bright highlight), like a screen-print poster, faded in over the real
 // video and back out. Each run gets its own SVG gradient-map filter so two
 // tiles can wear different palettes at once; it's removed when the run ends.
-const DUOTONE_PEAK_OPACITY = 0.85;
 let duotoneSeq = 0;
 function duotoneFilter(theme) {
   const ns = 'http://www.w3.org/2000/svg';
@@ -619,14 +617,13 @@ function startDuotoneFx(tile, vid, ms) {
   const filter = duotoneFilter(theme);
   startCanvasOverlayFx(tile, vid, ms, 'fx-duotone-canvas', 2, (canvas, elapsed) => {
     if (!canvas.style.filter) canvas.style.filter = 'url(#' + filter.id + ') contrast(1.15)';
-    canvas.style.opacity = (fxEnvelope(elapsed, ms) * DUOTONE_PEAK_OPACITY).toFixed(3);
+    canvas.style.opacity = (fxEnvelope(elapsed, ms) * TUNING.DUOTONE_PEAK_OPACITY).toFixed(3);
   }, () => filter.remove());
 }
 
 // Warm film-style light spilling in from one side and drifting across -
 // two blurred amber/pink patches screened over the tile. Pure CSS
 // gradients (no per-frame drawing); JS only drives the fade and drift.
-const LIGHT_LEAK_PEAK_OPACITY = 0.75;
 function startLightLeakFx(tile, ms) {
   const leak = document.createElement('div');
   leak.className = 'fx-leak-overlay';
@@ -641,7 +638,7 @@ function startLightLeakFx(tile, ms) {
     const elapsed = ts - start;
     if (elapsed >= ms || !leak.isConnected) { leak.remove(); return; }
     const flicker = 0.9 + 0.1 * Math.sin(elapsed / 170) * Math.sin(elapsed / 430);
-    leak.style.opacity = (fxEnvelope(elapsed, ms) * LIGHT_LEAK_PEAK_OPACITY * flicker).toFixed(3);
+    leak.style.opacity = (fxEnvelope(elapsed, ms) * TUNING.LIGHT_LEAK_PEAK_OPACITY * flicker).toFixed(3);
     leak.style.setProperty('--leak-p', (elapsed / ms).toFixed(4));
     requestAnimationFrame(step);
   }
@@ -805,9 +802,7 @@ function awardChaseMilestone(idx, chain) {
 //
 // Engaged manually, or automatically for as long as Auto-Pilot's Rhythm
 // Zone runs (rhythmZoneActive) and during a Finale's build/peak.
-const RHYTHM_WAVE_PERIOD_MS = 80000;
 const RHYTHM_WAVE_RISE_FRAC = 0.85; // rises over 85% of the period, drops back over the last 15%
-const RHYTHM_WAVE_DEPTH = 0.45; // top of a wave = base bpm * 1.45
 let rhythmEnabled = false;
 let rhythmZoneActive = false;
 let rhythmBaseBpm = 90;
@@ -833,14 +828,6 @@ let rhythmRunMinutesPaid = 0;
 // ~12s instead of a flat 5s block that switched off, and the drive rises
 // over ~8s but settles over ~20s. Replaying that session: 3.8 -> 1.5
 // direction swings a minute, changes ~2.5x gentler, same overall range.
-const RHYTHM_DRIVE_MIN = 0.85;
-const RHYTHM_DRIVE_MAX = 1.3;
-const RHYTHM_DRIVE_RISE_MS = 8000;
-const RHYTHM_DRIVE_FALL_MS = 20000;
-const RHYTHM_PAYOFF_GLOW_ADD = 0.07;
-const RHYTHM_PAYOFF_GLOW_CAP = 0.14;
-const RHYTHM_PAYOFF_GLOW_HALFLIFE_MS = 12000;
-const RHYTHM_MAX_BPM = 180;
 let rhythmPayoffGlow = 0;
 let rhythmPayoffSeenAt = 0;
 let rhythmReactive = true;
@@ -860,7 +847,7 @@ function rhythmDriveTarget() {
   if (floaterBarrageActive) d -= 0.12;
   if (autopilotZone === 'vault') d -= 0.06;
   else if (autopilotZone === 'jackpot') d += 0.04;
-  return Math.max(RHYTHM_DRIVE_MIN, Math.min(RHYTHM_DRIVE_MAX, d));
+  return Math.max(TUNING.RHYTHM_DRIVE_MIN, Math.min(TUNING.RHYTHM_DRIVE_MAX, d));
 }
 
 function rhythmTempoDrive() {
@@ -871,13 +858,13 @@ function updateRhythmDrive() {
   const now = Date.now();
   const dt = now - rhythmDriveUpdatedAt;
   rhythmDriveUpdatedAt = now;
-  rhythmPayoffGlow *= Math.pow(0.5, dt / RHYTHM_PAYOFF_GLOW_HALFLIFE_MS);
+  rhythmPayoffGlow *= Math.pow(0.5, dt / TUNING.RHYTHM_PAYOFF_GLOW_HALFLIFE_MS);
   if (lastAnyPayoffAt > rhythmPayoffSeenAt) {
-    if (rhythmPayoffSeenAt) rhythmPayoffGlow = Math.min(RHYTHM_PAYOFF_GLOW_CAP, rhythmPayoffGlow + RHYTHM_PAYOFF_GLOW_ADD);
+    if (rhythmPayoffSeenAt) rhythmPayoffGlow = Math.min(TUNING.RHYTHM_PAYOFF_GLOW_CAP, rhythmPayoffGlow + TUNING.RHYTHM_PAYOFF_GLOW_ADD);
     rhythmPayoffSeenAt = lastAnyPayoffAt; // the first read is the session-start seed, not a payoff
   }
   if (now - rhythmDriveTargetAt > 250) { rhythmDriveTargetValue = rhythmDriveTarget(); rhythmDriveTargetAt = now; }
-  const tau = rhythmDriveTargetValue > rhythmDrive ? RHYTHM_DRIVE_RISE_MS : RHYTHM_DRIVE_FALL_MS;
+  const tau = rhythmDriveTargetValue > rhythmDrive ? TUNING.RHYTHM_DRIVE_RISE_MS : TUNING.RHYTHM_DRIVE_FALL_MS;
   rhythmDrive += (rhythmDriveTargetValue - rhythmDrive) * (1 - Math.exp(-dt / tau));
 }
 
@@ -892,8 +879,6 @@ const RHYTHM_PATTERNS = {
   heartbeat: { label: '💓 Heartbeat', energy: 'hype' },
 };
 const RHYTHM_PATTERN_NAMES = Object.keys(RHYTHM_PATTERNS);
-const RHYTHM_PATTERN_SWITCH_BEATS = 16; // every 4 bars
-const RHYTHM_PATTERN_SWITCH_CHANCE = 0.6;
 let rhythmPatternPref = 'mix';
 let rhythmPattern = 'snake';
 let rhythmLastScatter = -1;
@@ -961,7 +946,7 @@ function rhythmActive() {
 
 function rhythmWaveFrac() {
   if (!rhythmWaves || !rhythmActive()) return 0;
-  const phase = ((Date.now() - rhythmStartedAt) % RHYTHM_WAVE_PERIOD_MS) / RHYTHM_WAVE_PERIOD_MS;
+  const phase = ((Date.now() - rhythmStartedAt) % TUNING.RHYTHM_WAVE_PERIOD_MS) / TUNING.RHYTHM_WAVE_PERIOD_MS;
   if (phase < RHYTHM_WAVE_RISE_FRAC) {
     const t = phase / RHYTHM_WAVE_RISE_FRAC;
     return t * t * (3 - 2 * t); // smoothstep - eases into the climb and into the top
@@ -975,7 +960,7 @@ function rhythmEffectiveBaseBpm() {
 }
 
 function currentRhythmBpm() {
-  return Math.min(RHYTHM_MAX_BPM, rhythmEffectiveBaseBpm() * (1 + RHYTHM_WAVE_DEPTH * rhythmWaveFrac()) * finaleTempoMult() * rhythmTempoDrive());
+  return Math.min(TUNING.RHYTHM_MAX_BPM, rhythmEffectiveBaseBpm() * (1 + TUNING.RHYTHM_WAVE_DEPTH * rhythmWaveFrac()) * finaleTempoMult() * rhythmTempoDrive());
 }
 
 function rhythmSpeedMult() {
@@ -1002,9 +987,9 @@ function rhythmWalkOrder() {
 
 function onRhythmBeat(n) {
   const downbeat = n % 4 === 0;
-  if (n > 0 && n % RHYTHM_PATTERN_SWITCH_BEATS === 0) {
+  if (n > 0 && n % TUNING.RHYTHM_PATTERN_SWITCH_BEATS === 0) {
     if (rhythmPatternPref !== 'mix') rhythmPattern = rhythmPatternPref;
-    else if (Math.random() < RHYTHM_PATTERN_SWITCH_CHANCE) rhythmPattern = pickRhythmPattern();
+    else if (Math.random() < TUNING.RHYTHM_PATTERN_SWITCH_CHANCE) rhythmPattern = pickRhythmPattern();
   }
   if (!anticipationActive) rhythmPatternHits(n).forEach(([idx, s]) => reactPulseTile(idx, s));
   onPulseBeat(n);

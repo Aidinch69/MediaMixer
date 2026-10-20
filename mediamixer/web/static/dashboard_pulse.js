@@ -15,8 +15,6 @@
 // With Rhythm Mode on the pulse uses its beat clock; otherwise it keeps an
 // invisible one at the same tempo (no beat walker, nothing on the tiles).
 const PULSE_TICK_MS = 100;
-const PULSE_SPIRAL_RATE_MIN = 0.75;
-const PULSE_SPIRAL_RATE_MAX = 1.45;
 const PULSE_BINAURAL_MIN_HZ = 1;
 const PULSE_BINAURAL_MAX_HZ = 16;
 let sharedPulseEnabled = true;
@@ -29,7 +27,7 @@ let pulseSpiralsReset = true;
 function pulseSpiralRate() {
   let rate = rhythmDrive;
   if (rhythmActive()) rate *= 1 + 0.25 * rhythmWaveFrac();
-  return Math.max(PULSE_SPIRAL_RATE_MIN, Math.min(PULSE_SPIRAL_RATE_MAX, rate));
+  return Math.max(TUNING.PULSE_SPIRAL_RATE_MIN, Math.min(TUNING.PULSE_SPIRAL_RATE_MAX, rate));
 }
 
 // Multiplier on the binaural beat frequency (called from updateSynthParams).
@@ -114,10 +112,7 @@ setInterval(updatePulseUi, 1000);
 //  - a few pseudo-likes pull every lift toward 1 until there's real data;
 //  - everything learned decays 15% per page load, so recent taste counts most.
 const TASTE_KEY = 'mm_taste';
-const TASTE_PRIOR_LIKES = 4;
-const TASTE_LOAD_DECAY = 0.85;
 const TASTE_LIFT_RANGE = [0.33, 3];
-const TASTE_LOW_ENGAGEMENT = 1.4;
 let tasteStrength = 0.25;
 let taste = { fx: {}, pattern: {}, base: { likes: 0, ms: 0 }, rhythmBase: { likes: 0, ms: 0 } };
 const tasteTileFx = {}; // tile idx -> { kind, until }
@@ -132,7 +127,7 @@ function loadTastePrefs() {
   if (saved && saved.fx && saved.pattern && saved.base) {
     taste = Object.assign(taste, saved);
     if (!taste.rhythmBase) taste.rhythmBase = { likes: 0, ms: 0 };
-    const decay = (e) => { e.likes *= TASTE_LOAD_DECAY; e.ms *= TASTE_LOAD_DECAY; };
+    const decay = (e) => { e.likes *= TUNING.TASTE_LOAD_DECAY; e.ms *= TUNING.TASTE_LOAD_DECAY; };
     [taste.base, taste.rhythmBase].forEach(decay);
     ['fx', 'pattern'].forEach((g) => Object.values(taste[g]).forEach(decay));
   }
@@ -171,13 +166,13 @@ function tasteLift(group, key) {
   const base = group === 'pattern' ? taste.rhythmBase : taste.base;
   if (!e || !base.ms || !base.likes) return 1;
   const expected = e.ms * (base.likes / base.ms);
-  const lift = (e.likes + TASTE_PRIOR_LIKES) / (expected + TASTE_PRIOR_LIKES);
+  const lift = (e.likes + TUNING.TASTE_PRIOR_LIKES) / (expected + TUNING.TASTE_PRIOR_LIKES);
   return Math.max(TASTE_LIFT_RANGE[0], Math.min(TASTE_LIFT_RANGE[1], lift));
 }
 
 function tasteWeight(group, key) {
   if (tasteStrength <= 0) return 1;
-  const strength = Math.min(1, tasteStrength * (readEngagement() < TASTE_LOW_ENGAGEMENT ? 2 : 1));
+  const strength = Math.min(1, tasteStrength * (readEngagement() < TUNING.TASTE_LOW_ENGAGEMENT ? 2 : 1));
   return Math.pow(tasteLift(group, key), strength);
 }
 
