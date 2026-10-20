@@ -41,3 +41,22 @@ def test_zero_cooldown_allows_back_to_back(config, db):
     starts = barrage_start_times(config, db, cooldown_s=0)
     gaps = [b - a for a, b in zip(starts, starts[1:])]
     assert max(gaps) < 15
+
+
+def test_layout_change_keeps_surviving_clips(config, db):
+    make_clips(config, [f"{i}.mp4" for i in range(20)])
+    library.sync_library(db, config)
+    state = RuntimeState(config)
+    engine = RotationEngine(state, db, config)
+
+    engine.set_layout_and_rotate("grid2x2")
+    four = state.current_paths()
+    assert len(four) == 4 and all(four) and len(set(four)) == 4
+
+    engine.set_layout_and_rotate("grid2x3")
+    six = state.current_paths()
+    assert six[:4] == four  # surviving tiles keep playing
+    assert all(six) and len(set(six)) == 6  # new ones filled, no duplicates
+
+    engine.set_layout_and_rotate("dual")
+    assert state.current_paths() == six[:2]

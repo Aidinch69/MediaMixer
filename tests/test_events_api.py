@@ -38,7 +38,7 @@ def test_events_round_trip(client):
 
 
 def test_bad_events_are_dropped_or_clamped(client):
-    r = post(client, [{"k": ""}, {"t": "junk", "k": "x"}, {"t": 1, "k": "y"}, {"k": "big", "d": {"s": "z" * 5000}}])
+    r = post(client, [{"k": ""}, {"t": "junk", "k": "x"}, {"t": 1, "k": "y"}, {"k": "big", "d": {"s": "z" * 10000}}])
     assert r.get_json()["stored"] == 3
     events = client.get("/api/events").get_json()["events"]
     assert all(abs(e["t"] - time.time()) < 60 for e in events)  # junk/ancient clocks fall back to arrival time

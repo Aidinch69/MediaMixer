@@ -63,6 +63,14 @@ function buildIntervals(evs, endT) {
   const out = {};
   const push = (name, start, end, v) => (out[name] = out[name] || []).push({ start, end, v });
   for (const e of evs) {
+    // A page load (or reload) resets everything the dashboard had running;
+    // the watchers re-announce whatever is on again with fresh .start events.
+    // Older logs have no page.load marker - their session.open came first.
+    if (e.k === 'page.load' || (e.k === 'session.open' && !(e.d && e.d.tuning))) {
+      for (const name in open) push(name, open[name].start, e.t, open[name].v);
+      for (const name in open) delete open[name];
+      continue;
+    }
     const dot = e.k.lastIndexOf('.');
     const name = e.k.slice(0, dot);
     const phase = e.k.slice(dot + 1);

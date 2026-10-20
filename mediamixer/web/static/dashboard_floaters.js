@@ -259,7 +259,7 @@ function maybeTriggerFloaterBarrage() {
   if (Date.now() < floaterBarrageEndsAt + TUNING.FLOATER_BARRAGE_COOLDOWN_MS) return;
   // Never on top of another full-screen moment.
   if (lastKnownBarrage > 0 || anticipationActive || finaleActive || overdriveActive || colorRushActive || spotlightTileIndex >= 0) return;
-  if (Math.random() < TUNING.FLOATER_BARRAGE_PROBABILITY * autopilotZoneMultiplier('colorRush')) startFloaterBarrage();
+  if (Math.random() < TUNING.FLOATER_BARRAGE_PROBABILITY * autopilotZoneMultiplier('colorRush')) startFloaterBarrage(undefined, 'auto');
 }
 startTunableInterval('FLOATER_BARRAGE_CHECK_MS', maybeTriggerFloaterBarrage);
 
@@ -286,7 +286,9 @@ function floaterBarrageSlots(n) {
   });
 }
 
-function startFloaterBarrage(durationMs) {
+// source: 'auto' from the random check; anything else (the preview
+// button) is logged as a preview.
+function startFloaterBarrage(durationMs, source) {
   if (floaterBarrageActive || !tileElements.length) return false;
   const ms = durationMs || TUNING.FLOATER_BARRAGE_MIN_MS + Math.random() * TUNING.FLOATER_BARRAGE_RANGE_MS;
   floaterBarrageActive = true;
@@ -296,8 +298,8 @@ function startFloaterBarrage(durationMs) {
   dim.style.opacity = String(TUNING.FLOATER_BARRAGE_DIM);
   toast('🌌 Floater Barrage');
 
-  const source = fxSource === 'dedicated' ? pickFxSourceList() : fetchFxList('library');
-  source.then((items) => (items && items.length ? items : fetchFxList('library'))).then((items) => {
+  const clipList = fxSource === 'dedicated' ? pickFxSourceList() : fetchFxList('library');
+  clipList.then((items) => (items && items.length ? items : fetchFxList('library'))).then((items) => {
     if (!floaterBarrageActive || !items || !items.length) return;
     const layer = document.getElementById('fx-layer');
     const pool = items.slice();

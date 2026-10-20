@@ -151,6 +151,8 @@ function initTelemetry() {
   });
   telemetryWrap('fireColorSplashPiece', () => colorRushActive,
     ([piece], rushing) => (rushing ? undefined : { k: 'splash.piece', d: { piece: lastColorSplashPiece || piece } }));
+  telemetryWrap('startFloaterBarrage', null, ([ms, source], before, started) =>
+    (started ? { k: 'floaterBarrage.trigger', d: { source: source === 'auto' ? 'auto' : 'preview' } } : undefined));
   telemetryWrap('showMantra', null, ([style]) => ({ k: 'mantra', d: { style } }));
 
   // Spin / bank-or-push.
@@ -171,7 +173,20 @@ function initTelemetry() {
   telemetryWrap('rollNewAutopilotZone', () => autopilotZone,
     (args, before) => ({ k: 'zone.forced', d: { from: before, to: autopilotZone } }));
 
-  logEvent('session.open', { w: window.innerWidth, h: window.innerHeight, tiles: tileElements.length });
+  // Marks the page load before the watchers' first sample re-announces
+  // what's on, so /debug can close everything from the previous page.
+  logEvent('page.load');
+  // After window.onload (dashboard_boot.js) has loaded saved prefs and built the tiles.
+  addEventListener('load', () => setTimeout(() => logEvent('session.open', {
+    w: window.innerWidth, h: window.innerHeight,
+    // What this browser has changed from the shipped defaults, so the data
+    // can be read against the settings actually in use.
+    tuning: tuningOverridesNow(),
+    toggles: {
+      autopilot: autopilotEnabled, floaters: fxEnabled, floaterCount: fxCount, rhythm: rhythmEnabled,
+      mosaicDrift: dynamicMosaicDriftMode, mosaicZone: dynamicMosaicZoneMode, mosaicRange: [dynamicMosaicMinTiles, dynamicMosaicMaxTiles],
+    },
+  }), 0));
   sampleTelemetryWatchers();
   setInterval(sampleTelemetryWatchers, TELEMETRY_SAMPLE_MS);
   setInterval(() => flushTelemetry(false), TELEMETRY_FLUSH_MS);

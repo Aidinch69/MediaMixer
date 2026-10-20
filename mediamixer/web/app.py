@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 _HERE = os.path.dirname(__file__)
 STREAM_INTERVAL_S = 0.3
 EVENT_BATCH_MAX = 500
-EVENT_DATA_MAX = 2000
+EVENT_DATA_MAX = 8000  # session.open carries the tuning overrides
 _NO_SESSION_PREFIXES = ("/media/", "/audio/", "/overlay_fx/", "/spirals/", "/assets/", "/sw.js")
 
 

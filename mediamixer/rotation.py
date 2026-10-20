@@ -53,16 +53,22 @@ class RotationEngine:
             self._rotate_locked(override_folder, side)
 
     def set_layout_and_rotate(self, name: str):
-        """Resize to a new layout and repopulate every screen as one atomic
-        step. Doing the resize and the repopulating rotate() as two separate
-        calls left a window where the scheduler's own expiry-driven rotation
-        could see the freshly-added (and therefore already-"expired") blank
-        screens and rotate them itself in between - racing with this method's
-        own repopulation and occasionally handing two screens the same clip.
+        """Resize to a new layout and fill any new screens as one atomic
+        step. Doing the resize and the fill as two separate calls left a
+        window where the scheduler's own expiry-driven rotation could see the
+        freshly-added (and therefore already-"expired") blank screens and
+        rotate them itself in between - racing with this method and
+        occasionally handing two screens the same clip.
+
+        Screens that survive the resize keep their clip and timer: this used
+        to re-roll every screen, so Dynamic Mosaic drifting every 30s cut
+        every clip on screen every 30s regardless of pace.
         """
         with self._rotate_lock:
             preset = self._state.set_layout(name)
-            self._rotate_locked(None, "all")
+            for index, path in enumerate(self._state.current_paths()):
+                if not path:
+                    self._rotate_locked(None, index)
             return preset
 
     def _rotate_locked(self, override_folder: Optional[str], side: Side):
