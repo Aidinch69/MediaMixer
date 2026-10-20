@@ -135,14 +135,17 @@ function restorePanelState() {
   document.getElementById('panel-toggle').innerText = collapsed ? '☰' : '✕';
 }
 
-const PANEL_TAB_NAMES = ['display', 'autopilot', 'engagement', 'audio', 'more', 'tuning'];
+const PANEL_TAB_NAMES = ['screen', 'flow', 'rewards', 'sound', 'controls'];
+// Tabs from before the regroup, so a remembered tab still opens somewhere sensible.
+const PANEL_TAB_RENAMES = { display: 'screen', autopilot: 'flow', engagement: 'rewards', audio: 'sound', more: 'screen', tuning: 'controls' };
 
 function switchPanelTab(name) {
+  name = PANEL_TAB_RENAMES[name] || name;
   if (!PANEL_TAB_NAMES.includes(name)) name = PANEL_TAB_NAMES[0];
   document.querySelectorAll('.panel-tab').forEach(el => el.classList.toggle('active', el.dataset.tab === name));
   document.querySelectorAll('.panel-tab-btn').forEach(el => el.classList.toggle('active', el.dataset.tab === name));
   try { localStorage.setItem('mm_panel_tab', name); } catch (e) {}
-  if (name === 'tuning') loadEngineConfig();
+  if (name === 'controls') loadEngineConfig();
 }
 
 function restorePanelTab() {
@@ -198,3 +201,45 @@ function setConnected(ok) {
   document.getElementById('conn-dot').classList.toggle('down', !ok);
   document.getElementById('conn-label').innerText = ok ? 'Connected' : 'Reconnecting…';
 }
+
+// ---- Menu polish: quick switches, on/off switches, live section status ----
+// One 500ms pass keeps all three in step with the real state, however it
+// changed (a click, a Scene, Auto-Pilot, another device's prefs on reload).
+const QUICK_SWITCH_STATE = {
+  autopilot: () => autopilotEnabled,
+  pulse: () => sharedPulseEnabled,
+  rhythm: () => rhythmActive(),
+  spiral: () => manualSpiralEnabled,
+};
+
+const SECTION_LIVE = {
+  layout: () => (currentLayout || '').replace('grid', '').replace('dual', '2 tiles') + (lastStatusData ? ' · ' + ['10s', 'rapid', 'balanced', 'full'][lastStatusData.pace_idx] : ''),
+  mosaic: () => (dynamicMosaicDriftMode ? 'drifting' : dynamicMosaicZoneMode ? 'zone-driven' : 'off'),
+  floaters: () => (fxEnabled ? fxCount + ' · ' + fxOpacity + '%' : 'off'),
+  spiral: () => (manualSpiralEnabled ? Math.round(manualSpiralOpacity * 100) + '%' : 'off'),
+  autopilot: () => (autopilotEnabled ? (autopilotZone ? AUTOPILOT_ZONES[autopilotZone].label : 'on') : 'off'),
+  pulse: () => (sharedPulseEnabled ? 'energy ×' + rhythmDrive.toFixed(2) : 'off'),
+  rhythm: () => (rhythmActive() ? Math.round(currentRhythmBpm()) + ' BPM · ' + RHYTHM_PATTERNS[rhythmPattern].label : 'off'),
+  taste: () => (tasteStrength > 0 ? Math.round(tasteStrength * 100) + '%' : 'off'),
+  sound: () => (lastSynthParams ? Math.round(lastSynthParams.carrier_hz) + ' Hz · beat ' + pulseBinauralHz(lastSynthParams).toFixed(1) + ' Hz' : ''),
+};
+
+function updateMenuState() {
+  document.querySelectorAll('.quick-switch').forEach((b) => {
+    const get = QUICK_SWITCH_STATE[b.dataset.quick];
+    try { b.classList.toggle('on', !!(get && get())); } catch (e) {}
+  });
+  // Every ON/OFF button is drawn as a switch; its text is the source of truth.
+  document.querySelectorAll('button.badge[id$="-toggle"]').forEach((b) => {
+    b.classList.add('switch');
+    b.classList.toggle('on', b.innerText.trim().toUpperCase() === 'ON');
+  });
+  document.querySelectorAll('.section-live').forEach((el) => {
+    const get = SECTION_LIVE[el.dataset.live];
+    let text = '';
+    try { text = get ? get() : ''; } catch (e) {}
+    if (el.textContent !== text) el.textContent = text;
+    el.classList.toggle('off', text === 'off');
+  });
+}
+setInterval(updateMenuState, 500);
