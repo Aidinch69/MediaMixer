@@ -150,7 +150,7 @@
           <button class="badge" id="mosaic-toggle" onclick="toggleMosaic()">OFF</button>
         </div>
         <div class="slider"><label>Tile Gestures</label><button class="badge" id="gestures-toggle" onclick="toggleTileGestures()">ON</button></div>
-        <div class="metric" style="font-size:.72rem">👉 Swipe a tile to swap it · ✋ long-press to 📌 pin it (keeps its clip) · 🖱 scroll over it to change its speed</div>
+        <div class="metric" style="font-size:.72rem">👉 Swipe a tile to swap it · ✋ long-press to 📌 pin it (keeps its clip) · 👆👆 double-tap for ✨ More like this · 🖱 scroll over it to change its speed</div>
         <details class="hint-details"><summary>What does this do?</summary><p class="hint">Sizes tiles by each clip's own aspect ratio to cut down on black bars, instead of a uniform grid. Reflows every few seconds, not on every clip change, to stay calm.</p></details>
         <div class="slider"><label>Playback Speed: <b><span id="l-manual-speed">1.00x</span></b></label><input type="range" id="manual-speed-input" min="0.25" max="2" step="0.05" value="1" oninput="setManualSpeed(this.value)"></div>
         <details class="hint-details"><summary>What does this do?</summary><p class="hint">A baseline speed multiplier for every tile, on top of whatever the server's own tension/barrage speed is doing - 1.00x leaves that untouched. Saved on this device, applies to every layout.</p></details>
@@ -204,12 +204,13 @@
         <div class="slider"><label>Slow-Mo Moments</label><button class="badge" id="living-slowmo-toggle" onclick="toggleLiving('slowmo')">ON</button></div>
         <div class="slider"><label>Double Exposure</label><button class="badge" id="living-double-toggle" onclick="toggleLiving('double')">ON</button></div>
         <div class="slider"><label>Spirals React to Audio</label><button class="badge" id="living-spiral-audio-toggle" onclick="toggleLiving('spiralAudio')">ON</button></div>
+        <div class="slider"><label>Smart Framing</label><button class="badge" id="living-framing-toggle" onclick="toggleLiving('smartFraming')">ON</button></div>
         <div class="slider"><label>Colour Mood</label><button class="badge" id="living-mood-toggle" onclick="toggleLiving('colorMood')">ON</button></div>
         <div class="grid">
           <button class="badge" onclick="startSlowmo(pickAmbientTarget())">⏱ Preview Slow-Mo</button>
           <button class="badge" onclick="startDoubleExposure(pickAmbientTarget())">👥 Preview Double</button>
         </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Breathing Tiles: every tile slowly drifts and zooms a few percent on its own cycle, faster or slower with the Shared Pulse. Slow-Mo Moments: at high-energy moments one tile eases into slow motion for a couple of seconds with a motion-trail ghost, a soft push-in and a vignette, then eases back - it only picks a tile with plenty already buffered, so it never coincides with a real stall. Double Exposure: now and then a second clip fades in over a tile as a light blend, then separates. Colour Mood: the screen-edge glow, Light Leaks and Duotone palettes follow how warm or cool the clips on screen are (from Clip DNA), shifting gradually - jackpot flashes keep their own rotating colours. Spirals React to Audio: hits in the overlay track (or tile audio) give the spirals a quick swell - needs Audio-Reactive FX on. Fine-tune amounts and timing in Master Controls → Living Screen.</p></details>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Breathing Tiles: every tile slowly drifts and zooms a few percent on its own cycle, faster or slower with the Shared Pulse. Slow-Mo Moments: at high-energy moments one tile eases into slow motion for a couple of seconds with a motion-trail ghost, a soft push-in and a vignette, then eases back - it only picks a tile with plenty already buffered, so it never coincides with a real stall. Double Exposure: now and then a second clip fades in over a tile as a light blend, then separates. Smart Framing: each tile pans gently toward where the movement is in its clip (from Clip DNA), following it as it moves, with a slight zoom for room - like a slow camera operator. Colour Mood: the screen-edge glow, Light Leaks and Duotone palettes follow how warm or cool the clips on screen are (from Clip DNA), shifting gradually - jackpot flashes keep their own rotating colours. Spirals React to Audio: hits in the overlay track (or tile audio) give the spirals a quick swell - needs Audio-Reactive FX on. Fine-tune amounts and timing in Master Controls → Living Screen.</p></details>
       </div>
     </details>
     <details class="settings-section">

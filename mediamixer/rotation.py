@@ -7,6 +7,7 @@ is active.
 from __future__ import annotations
 
 import logging
+import os
 import random
 import threading
 import time
@@ -20,6 +21,9 @@ from .state import RuntimeState
 log = logging.getLogger(__name__)
 
 Side = Union[int, str]  # a screen index, or "all"
+
+
+LIKE_THIS_SHARE = 0.7  # share of picks drawn from the More like this pool while it runs
 
 
 class RotationEngine:
@@ -150,8 +154,11 @@ class RotationEngine:
         preferred: Optional[str] = None,
     ) -> Optional[str]:
         cfg = self._config
+        like_this = None if is_jackpot else self._pick_like_this(exclude)
         if is_jackpot:
             picked = library.pick_video_jackpot(self._db, folder, offset=offset, exclude=exclude)
+        elif like_this:
+            picked = like_this
         elif preferred and preferred not in exclude:
             # Already picked last rotation and preloaded by the browser since -
             # use it so the swap is instant instead of starting a cold fetch.
@@ -166,6 +173,16 @@ class RotationEngine:
         nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | {picked}, exploration_bonus=bonus, energy=self._state.get_energy(), taste_strength=self._state.taste_strength) or picked
         self._state.set_screen(index, picked, nxt, time.time() + expires_in)
         return picked
+
+    def _pick_like_this(self, exclude: set) -> Optional[str]:
+        """While More like this is running, most picks come from its pool of
+        look-alike clips (the rest stay normal, for variety)."""
+        pool = self._state.like_this_pool()
+        if not pool or random.random() >= LIKE_THIS_SHARE:
+            return None
+        excluded = {os.path.normpath(p).lower() for p in exclude if p}
+        free = [p for p in pool if os.path.normpath(p).lower() not in excluded]
+        return random.choice(free[:15]) if free else None
 
     def force_screen(self, index: int, path: str, hold_s: float = None) -> bool:
         """Directly place `path` on `index`, bypassing the normal bandit

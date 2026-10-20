@@ -188,6 +188,12 @@ const TUNING_DEFAULTS = {
   GRADIENT_PROBABILITY: 0.06,
   GRADIENT_COOLDOWN_MS: 360000,
   GRADIENT_HOLD_MS: 20000,
+  BEST_START_CHANCE: 0.6,
+  BEST_START_LEAD_S: 8,
+  BEST_START_MIN_LEFT_S: 15,
+  SMART_FRAMING_STRENGTH: 0.8,
+  SMART_FRAMING_ZOOM: 0.06,
+  LIKE_THIS_MS: 60000,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -341,7 +347,7 @@ const TUNING_GROUPS = [
   { label: 'Taste Learning', desc: 'How much evidence it wants, how fast it forgets, and when it leans harder. Strength itself is in Flow -> Taste Learning.', keys: ['TASTE_PRIOR_LIKES', 'TASTE_LOAD_DECAY', 'TASTE_LOW_ENGAGEMENT'] },
   { label: 'Surges', desc: 'Random surges - odds and the rest between them (the odds boost itself is under Multipliers & XP).', keys: ['SURGE_PROBABILITY', 'SURGE_COOLDOWN_MS'] },
   { label: 'Custom Loop Point', desc: 'Which favourites replay their best section, how often, and how many times.', keys: ['LOOP_HEART_THRESHOLD', 'LOOP_TOP_FRACTION', 'LOOP_CHANCE', 'LOOP_MAX_REPEATS'] },
-  { label: 'Living Screen', desc: 'Breathing tiles, slow-motion moments and double exposures.', keys: ['BREATHE_ZOOM', 'BREATHE_DRIFT', 'BREATHE_PERIOD_MS', 'SLOWMO_PROBABILITY', 'SLOWMO_COOLDOWN_MS', 'SLOWMO_ENERGY_MIN', 'SLOWMO_SPEED', 'SLOWMO_HOLD_MS', 'DOUBLE_EXPOSURE_PROBABILITY', 'DOUBLE_EXPOSURE_COOLDOWN_MS', 'DOUBLE_EXPOSURE_MS', 'DOUBLE_EXPOSURE_OPACITY', 'GRADIENT_PROBABILITY', 'GRADIENT_COOLDOWN_MS', 'GRADIENT_HOLD_MS'] },
+  { label: 'Living Screen', desc: 'Breathing tiles, slow-motion moments and double exposures.', keys: ['BREATHE_ZOOM', 'BREATHE_DRIFT', 'BREATHE_PERIOD_MS', 'SLOWMO_PROBABILITY', 'SLOWMO_COOLDOWN_MS', 'SLOWMO_ENERGY_MIN', 'SLOWMO_SPEED', 'SLOWMO_HOLD_MS', 'DOUBLE_EXPOSURE_PROBABILITY', 'DOUBLE_EXPOSURE_COOLDOWN_MS', 'DOUBLE_EXPOSURE_MS', 'DOUBLE_EXPOSURE_OPACITY', 'GRADIENT_PROBABILITY', 'GRADIENT_COOLDOWN_MS', 'GRADIENT_HOLD_MS', 'BEST_START_CHANCE', 'BEST_START_LEAD_S', 'BEST_START_MIN_LEFT_S', 'SMART_FRAMING_STRENGTH', 'SMART_FRAMING_ZOOM', 'LIKE_THIS_MS'] },
 ];
 const TUNING_META = {
   XP_PER_BONUS_CLAIM: { label: 'Bonus-tap XP', unit: 'n', min: 5, max: 50, step: 1 },
@@ -509,6 +515,12 @@ const TUNING_META = {
   DOUBLE_EXPOSURE_MS: { label: 'Double exposure length', unit: 's', min: 3000, max: 30000, step: 1000 },
   DOUBLE_EXPOSURE_OPACITY: { label: 'Double exposure strength', unit: 'pct', min: 0.1, max: 1, step: 0.05 },
   GRADIENT_PROBABILITY: { label: 'Gradient moment chance per check (every 45s)', unit: 'pct', min: 0, max: 1, step: 0.01 },
+  BEST_START_CHANCE: { label: 'Best-moment start chance', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  BEST_START_LEAD_S: { label: 'Best-moment lead-in (seconds before)', unit: '', min: 0, max: 30, step: 1 },
+  BEST_START_MIN_LEFT_S: { label: 'Best-moment: always leave at least (seconds)', unit: '', min: 5, max: 60, step: 1 },
+  SMART_FRAMING_STRENGTH: { label: 'Smart framing: how far it follows the action', unit: 'pct', min: 0, max: 1.5, step: 0.05 },
+  SMART_FRAMING_ZOOM: { label: 'Smart framing: extra zoom for room to move', unit: 'pct', min: 0, max: 0.2, step: 0.01 },
+  LIKE_THIS_MS: { label: 'More like this: how long it lasts', unit: 's', min: 15000, max: 300000, step: 15000 },
   GRADIENT_HOLD_MS: { label: 'Gradient hold (before tiles rotate on)', unit: 's', min: 5000, max: 90000, step: 1000 },
   GRADIENT_COOLDOWN_MS: { label: 'Rest between Gradient moments', unit: 's', min: 30000, max: 1800000, step: 30000 },
 };

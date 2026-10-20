@@ -5,6 +5,7 @@ WAL mode so the web, rotation and audio threads don't block each other.
 """
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import threading
@@ -53,6 +54,8 @@ CREATE TABLE IF NOT EXISTS clip_dna (
     warmth          REAL,
     saturation      REAL,
     duration        REAL,
+    peak_at         REAL,
+    track           TEXT,
     analyzed_at     REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS scenes (
@@ -113,6 +116,13 @@ class Database:
             ("debuted_at", "ALTER TABLE video_weights ADD COLUMN debuted_at REAL"),
         ):
             if column not in existing:
+                conn.execute(ddl)
+        dna_cols = {row["name"] for row in conn.execute("PRAGMA table_info(clip_dna)")}
+        for column, ddl in (
+            ("peak_at", "ALTER TABLE clip_dna ADD COLUMN peak_at REAL"),
+            ("track", "ALTER TABLE clip_dna ADD COLUMN track TEXT"),
+        ):
+            if column not in dna_cols:
                 conn.execute(ddl)
         conn.execute("DELETE FROM events WHERE ts < ?", (time.time() - EVENT_RETENTION_S,))
         conn.commit()
@@ -294,13 +304,14 @@ class Database:
         d = dna or {}
         conn = self._connect()
         conn.execute(
-            "INSERT INTO clip_dna (video_path, version, ok, brightness, motion, hue, accent_hue, accent_strength, warmth, saturation, duration, analyzed_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(video_path) DO UPDATE SET version=excluded.version, ok=excluded.ok, "
+            "INSERT INTO clip_dna (video_path, version, ok, brightness, motion, hue, accent_hue, accent_strength, warmth, saturation, duration, peak_at, track, analyzed_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(video_path) DO UPDATE SET version=excluded.version, ok=excluded.ok, "
             "brightness=excluded.brightness, motion=excluded.motion, hue=excluded.hue, accent_hue=excluded.accent_hue, "
             "accent_strength=excluded.accent_strength, warmth=excluded.warmth, saturation=excluded.saturation, "
-            "duration=excluded.duration, analyzed_at=excluded.analyzed_at",
+            "duration=excluded.duration, peak_at=excluded.peak_at, track=excluded.track, analyzed_at=excluded.analyzed_at",
             (path, version, 1 if dna else 0, d.get("brightness"), d.get("motion"), d.get("hue"), d.get("accent_hue"),
-             d.get("accent_strength"), d.get("warmth"), d.get("saturation"), d.get("duration"), time.time()),
+             d.get("accent_strength"), d.get("warmth"), d.get("saturation"), d.get("duration"), d.get("peak_at"),
+             json.dumps(d["track"], separators=(",", ":")) if d.get("track") else None, time.time()),
         )
         conn.commit()
 
@@ -324,11 +335,12 @@ class Database:
     def dna_for(self, path: str):
         return self._connect().execute("SELECT * FROM clip_dna WHERE video_path=? AND ok=1", (path,)).fetchone()
 
-    def dna_counts(self) -> dict:
+    def dna_counts(self, version: int = 0) -> dict:
+        """Progress at `version`: older analyses still count as usable, just not as done."""
         conn = self._connect()
         total = conn.execute("SELECT COUNT(*) AS n FROM video_weights").fetchone()["n"]
-        ok = conn.execute("SELECT COUNT(*) AS n FROM clip_dna WHERE ok=1").fetchone()["n"]
-        failed = conn.execute("SELECT COUNT(*) AS n FROM clip_dna WHERE ok=0").fetchone()["n"]
+        ok = conn.execute("SELECT COUNT(*) AS n FROM clip_dna WHERE ok=1 AND version>=?", (version,)).fetchone()["n"]
+        failed = conn.execute("SELECT COUNT(*) AS n FROM clip_dna WHERE ok=0 AND version>=?", (version,)).fetchone()["n"]
         return {"total": total, "analysed": ok, "failed": failed}
 
     # -- scenes (saved looks, shared by every device) --

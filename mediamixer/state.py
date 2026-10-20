@@ -46,6 +46,7 @@ class RuntimeState:
         self.recent_shown: dict = {}
         self.energy = 1.0  # the dashboard's Shared Pulse energy (see /api/energy)
         self.taste_strength = 0.25  # the dashboard's Taste Learning strength (see /api/taste)
+        self.like_this = None  # More like this: {path, pool, until}
         self.energy_at = 0.0  # path -> last time it went on a screen (see recent_paths)
 
         self.tone_index = 0
@@ -185,6 +186,17 @@ class RuntimeState:
         """Neutral (1.0) if the dashboard hasn't reported in a while."""
         with self._lock:
             return self.energy if time.time() - self.energy_at < 60 else 1.0
+
+    def set_like_this(self, path: str, pool: list, seconds: float):
+        with self._lock:
+            self.like_this = {"path": path, "pool": list(pool), "until": time.time() + seconds}
+
+    def like_this_pool(self) -> list:
+        with self._lock:
+            if not self.like_this or time.time() > self.like_this["until"]:
+                self.like_this = None
+                return []
+            return list(self.like_this["pool"])
 
     def set_pinned(self, index: int, pinned: bool) -> bool:
         with self._lock:

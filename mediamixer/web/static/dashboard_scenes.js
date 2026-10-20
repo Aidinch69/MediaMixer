@@ -25,7 +25,7 @@ function captureScene() {
       speed: manualSpeedMult,
       floaters: { enabled: fxEnabled, count: fxCount, opacity: fxOpacity, source: fxSource },
       manualSpiral: { enabled: manualSpiralEnabled, name: manualSpiralName, opacity: manualSpiralOpacity },
-      living: { breathe: livingBreathe, slowmo: livingSlowmo, double: livingDouble, spiralAudio: livingSpiralAudio, gradient: livingGradient, doubleMatch: livingDoubleMatch, colorMood: livingColorMood },
+      living: { breathe: livingBreathe, slowmo: livingSlowmo, double: livingDouble, spiralAudio: livingSpiralAudio, gradient: livingGradient, doubleMatch: livingDoubleMatch, colorMood: livingColorMood, smartFraming: livingSmartFraming },
       mantra: { enabled: mantraEnabled, frequency: mantraFrequency, opacity: mantraOpacity, styles: Object.assign({}, mantraStyles) },
     },
     flow: {
@@ -97,6 +97,7 @@ function applyScene(data, fromZone) {
     if (l.gradient != null && l.gradient !== livingGradient) toggleLiving('gradient');
     if (l.doubleMatch != null && l.doubleMatch !== livingDoubleMatch) toggleLiving('doubleMatch');
     if (l.colorMood != null && l.colorMood !== livingColorMood) toggleLiving('colorMood');
+    if (l.smartFraming != null && l.smartFraming !== livingSmartFraming) toggleLiving('smartFraming');
   });
   if (scr.mantra) step(() => {
     const m = scr.mantra;

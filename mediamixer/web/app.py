@@ -19,6 +19,7 @@ import qrcode.image.svg
 from flask import Flask, Response, g, jsonify, render_template, request, send_from_directory
 
 from .. import library, proxy
+from ..clip_dna import DNA_VERSION
 from ..context import AppContext
 from ..live_config import SESSION_MIRRORED, LiveConfig
 from ..network import get_lan_ip, get_tailscale_https_url
@@ -531,7 +532,11 @@ def create_app(ctx: AppContext) -> Flask:
     def _dna_json(row):
         if row is None:
             return None
-        return {k: row[k] for k in ("brightness", "motion", "hue", "accent_hue", "accent_strength", "warmth", "saturation", "duration")}
+        out = {k: row[k] for k in ("brightness", "motion", "hue", "accent_hue", "accent_strength", "warmth", "saturation", "duration")}
+        keys = row.keys()
+        out["peak_at"] = row["peak_at"] if "peak_at" in keys else None
+        out["track"] = json.loads(row["track"]) if "track" in keys and row["track"] else None
+        return out
 
     @app.route("/api/energy")
     def api_energy():
@@ -562,7 +567,7 @@ def create_app(ctx: AppContext) -> Flask:
 
     @app.route("/api/dna/status")
     def api_dna_status():
-        counts = db.dna_counts()
+        counts = db.dna_counts(DNA_VERSION)
         worker = ctx.dna
         return jsonify(
             running=bool(worker and worker._thread.is_alive()),
@@ -590,6 +595,42 @@ def create_app(ctx: AppContext) -> Flask:
         hold = request.args.get("hold", 20, type=float) + 0.7 * len(free)
         placed = sum(1 for i, path in zip(free, picks) if g.session.rotation.force_screen(i, path, hold_s=hold))
         return jsonify(ok=True, placed=placed, metric=metric)
+
+    @app.route("/api/dna/like_this")
+    def api_dna_like_this():
+        """More like this: look-alike clips onto the tapped tile's neighbours
+        now, and lean picks toward the same look for a while."""
+        session = g.session
+        try:
+            index = int(request.args.get("screen", ""))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="invalid screen index"), 400
+        current = session.state.current_paths()
+        if not (0 <= index < len(current)) or not current[index]:
+            return jsonify(ok=False, error="screen index out of range"), 400
+        seconds = max(10.0, min(600.0, request.args.get("s", 60, type=float)))
+        recent = session.state.recent_paths(config.recent_repeat_window_s)
+        pool = library.similar_clips(db, current[index], limit=40, exclude=set(current) | recent)
+        if not pool:
+            return jsonify(ok=True, placed=0, reason="this clip hasn't been analysed yet")
+        session.state.set_like_this(current[index], pool, seconds)
+        cols = max(1, _layout_columns(config, session.state.snapshot()["layout"]))
+        row, col = divmod(index, cols)
+        neighbours = [r * cols + c for r, c in ((row, col - 1), (row, col + 1), (row - 1, col), (row + 1, col))
+                      if r >= 0 and 0 <= c < cols and r * cols + c < len(current)]
+        busy = session.state.busy_indexes()
+        placed, used = [], set()
+        for n in neighbours:
+            if n in busy or len(placed) >= 3:
+                continue
+            for path in pool:
+                if path in used:
+                    continue
+                used.add(path)
+                if session.rotation.force_screen(n, path):
+                    placed.append(n)
+                    break
+        return jsonify(ok=True, placed=len(placed), tiles=placed, seconds=seconds)
 
     @app.route("/api/dna/similar")
     def api_dna_similar():

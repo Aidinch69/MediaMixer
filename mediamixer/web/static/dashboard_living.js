@@ -4,6 +4,8 @@
 // spirals that react to the audio, and Clip DNA's Gradient moment.
 
 let livingBreathe = true;
+let livingSmartFraming = true;
+const framingPan = []; // per tile: smoothed { x, y } pan toward the action, in % of the tile
 let livingSlowmo = true;
 let livingDouble = true;
 let livingSpiralAudio = true;
@@ -34,7 +36,7 @@ setInterval(() => {
   const now = performance.now();
   const dt = Math.min(200, now - breatheLastAt);
   breatheLastAt = now;
-  const on = livingBreathe && !document.hidden;
+  const on = (livingBreathe || livingSmartFraming) && !document.hidden;
   tileElements.forEach((tile, i) => {
     if (!tile) return;
     tile.classList.toggle('breathing', on);
@@ -42,13 +44,48 @@ setInterval(() => {
     const sh = breatheShapeFor(i);
     breathePhase[i] += (dt / TUNING.BREATHE_PERIOD_MS) * Math.PI * 2 * sh.rate * (sharedPulseEnabled ? rhythmDrive : 1);
     const p = breathePhase[i];
-    const zoom = 1 + TUNING.BREATHE_ZOOM * (0.5 + 0.5 * Math.sin(p));
-    const drift = TUNING.BREATHE_DRIFT * 100;
+    let zoom = 1, x = 0, y = 0;
+    if (livingBreathe) {
+      zoom += TUNING.BREATHE_ZOOM * (0.5 + 0.5 * Math.sin(p));
+      const drift = TUNING.BREATHE_DRIFT * 100;
+      x = Math.sin(p * 0.7 + sh.ax) * drift * sh.dir;
+      y = Math.cos(p * 0.5 + sh.ay) * drift;
+    }
+    const pan = smartFramingPan(i, dt);
+    if (pan) {
+      zoom += TUNING.SMART_FRAMING_ZOOM;
+      const room = (zoom - 1) / 2 * 100; // how far it can pan before an edge shows
+      x = Math.max(-room, Math.min(room, x + pan.x * room));
+      y = Math.max(-room, Math.min(room, y + pan.y * room));
+    }
     tile.style.setProperty('--kb-s', zoom.toFixed(4));
-    tile.style.setProperty('--kb-x', (Math.sin(p * 0.7 + sh.ax) * drift * sh.dir).toFixed(3) + '%');
-    tile.style.setProperty('--kb-y', (Math.cos(p * 0.5 + sh.ay) * drift).toFixed(3) + '%');
+    tile.style.setProperty('--kb-x', x.toFixed(3) + '%');
+    tile.style.setProperty('--kb-y', y.toFixed(3) + '%');
   });
 }, 50);
+
+// ---- Smart framing ----
+// Clip DNA's motion track says where in the frame things are moving, every
+// 2 seconds. The tile pans gently toward it (and zooms a touch to have room),
+// glided over ~2s so it reads like a slow camera operator, not a jolt.
+// Returns the pan as -1..1 of the available room, or null when off/unknown.
+function smartFramingPan(i, dt) {
+  if (!livingSmartFraming) { framingPan[i] = null; return null; }
+  const meta = videoMetaCache[currentPaths[i]];
+  const track = meta && meta.dna && meta.dna.track;
+  const vid = getTileVideo(i);
+  if (!track || !track.length || !vid) return framingPan[i] || null;
+  const k = Math.max(0, Math.min(track.length - 1, Math.floor((vid.currentTime || 0) / 2)));
+  const [, motion, cx, cy] = track[k];
+  // Little movement = no clear subject: drift back toward centre.
+  const sure = Math.min(1, motion / 0.03);
+  const tx = Math.max(-1, Math.min(1, (0.5 - cx) * 2 * sure)) * TUNING.SMART_FRAMING_STRENGTH;
+  const ty = Math.max(-1, Math.min(1, (0.5 - cy) * 2 * sure)) * TUNING.SMART_FRAMING_STRENGTH;
+  const cur = framingPan[i] || { x: 0, y: 0 };
+  const a = 1 - Math.exp(-dt / 2000);
+  framingPan[i] = { x: cur.x + (tx - cur.x) * a, y: cur.y + (ty - cur.y) * a };
+  return framingPan[i];
+}
 
 // ---- Slow-motion moments ----
 // Built to read as deliberate, never as buffering: the speed eases down
@@ -325,7 +362,7 @@ function moodLeakHueDeg() {
 
 // ---- prefs / UI ----
 function loadLivingPrefs() {
-  const p = loadJsonPref('mm_living', { breathe: true, slowmo: true, double: true, spiralAudio: true, gradient: true, doubleMatch: true, colorMood: true });
+  const p = loadJsonPref('mm_living', { breathe: true, slowmo: true, double: true, spiralAudio: true, gradient: true, doubleMatch: true, colorMood: true, smartFraming: true });
   livingBreathe = p.breathe !== false;
   livingSlowmo = p.slowmo !== false;
   livingDouble = p.double !== false;
@@ -333,12 +370,13 @@ function loadLivingPrefs() {
   livingGradient = p.gradient !== false;
   livingDoubleMatch = p.doubleMatch !== false;
   livingColorMood = p.colorMood !== false;
+  livingSmartFraming = p.smartFraming !== false;
   updateLivingUi();
   updateDnaStatus();
 }
 
 function saveLivingPrefs() {
-  saveJsonPref('mm_living', { breathe: livingBreathe, slowmo: livingSlowmo, double: livingDouble, spiralAudio: livingSpiralAudio, gradient: livingGradient, doubleMatch: livingDoubleMatch, colorMood: livingColorMood });
+  saveJsonPref('mm_living', { breathe: livingBreathe, slowmo: livingSlowmo, double: livingDouble, spiralAudio: livingSpiralAudio, gradient: livingGradient, doubleMatch: livingDoubleMatch, colorMood: livingColorMood, smartFraming: livingSmartFraming });
   updateLivingUi();
 }
 
@@ -350,6 +388,7 @@ function toggleLiving(which) {
   else if (which === 'gradient') livingGradient = !livingGradient;
   else if (which === 'doubleMatch') livingDoubleMatch = !livingDoubleMatch;
   else if (which === 'colorMood') livingColorMood = !livingColorMood;
+  else if (which === 'smartFraming') livingSmartFraming = !livingSmartFraming;
   saveLivingPrefs();
 }
 
@@ -361,4 +400,5 @@ function updateLivingUi() {
   setToggleBadge('dna-gradient-toggle', livingGradient);
   setToggleBadge('dna-match-toggle', livingDoubleMatch);
   setToggleBadge('living-mood-toggle', livingColorMood);
+  setToggleBadge('living-framing-toggle', livingSmartFraming);
 }

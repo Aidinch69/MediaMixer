@@ -2,8 +2,9 @@
 // loaded in the order listed in dashboard.html.
 // Tile gestures: swipe a tile to swap just that one, long-press to pin it
 // (keeps its clip until you long-press again), mouse wheel to change that
-// tile's speed. The heart/dislike buttons keep their own behaviour, and a
-// gesture never also counts as a tap on a catch/bonus/locked tile.
+// tile's speed, double-tap for More like this. The heart/dislike buttons
+// keep their own behaviour, and a gesture never also counts as a tap on a
+// catch/bonus/locked tile.
 
 const GESTURE_LONG_PRESS_MS = 600;
 const GESTURE_SWIPE_MIN_PX = 70;
@@ -91,6 +92,37 @@ document.addEventListener('wheel', (e) => {
   const cur = tileUserSpeed[hit.idx] || 1;
   setTileUserSpeed(hit.idx, cur + (e.deltaY < 0 ? 0.1 : -0.1));
 }, { passive: false });
+
+// Double-tap: More like this - look-alike clips (Clip DNA) on this tile's
+// neighbours now, and picks lean toward the same look for a minute.
+let likeThisTile = -1;
+let likeThisTimer = null;
+document.addEventListener('dblclick', (e) => {
+  if (!tileGesturesEnabled) return;
+  const hit = gestureTile(e);
+  if (!hit) return;
+  e.preventDefault();
+  moreLikeThis(hit.idx);
+}, true);
+
+function moreLikeThis(idx) {
+  const tile = tileElements[idx];
+  if (!tile) return Promise.resolve(false);
+  const ms = TUNING.LIKE_THIS_MS;
+  return fetch('/api/dna/like_this?screen=' + idx + '&s=' + Math.round(ms / 1000)).then((r) => r.json()).then((d) => {
+    if (!d.ok) return false;
+    if (!d.placed && d.reason) { toast('✨ ' + d.reason, true); return false; }
+    if (likeThisTile >= 0 && tileElements[likeThisTile]) tileElements[likeThisTile].classList.remove('like-this-source');
+    likeThisTile = idx;
+    tile.classList.add('like-this-source');
+    showClaimRewardLabel(idx, '✨ More like this');
+    toast('✨ More like this for ' + Math.round(ms / 1000) + 's');
+    try { if (navigator.vibrate) navigator.vibrate([15, 40, 15]); } catch (err) {}
+    clearTimeout(likeThisTimer);
+    likeThisTimer = setTimeout(() => { if (tileElements[idx]) tileElements[idx].classList.remove('like-this-source'); likeThisTile = -1; }, ms);
+    return true;
+  }).catch(() => false);
+}
 
 function swipeTile(idx, dir) {
   const tile = tileElements[idx];

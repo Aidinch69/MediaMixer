@@ -93,3 +93,32 @@ def test_dna_taste_learns_from_hearts_per_play(config, db):
         return sum(n for p, n in c.items() if paths.index(p) < 20) / 3000
     assert calm_share(0.0) < calm_share(0.5)
     library._dna_taste_cache.update(at=0, value=None)
+
+
+def test_more_like_this_fills_neighbours_and_leans_picks(config, db):
+    from mediamixer.context import AppContext
+    from mediamixer.session import SessionManager
+    from mediamixer.web.app import create_app
+    library._dna_taste_cache.update(at=0, value=None)
+    paths = make_clips(config, [f"{i:03}.mp4" for i in range(160)])
+    library.sync_library(db, config)
+    for i, p in enumerate(paths):  # two looks: dark/cool (even) and bright/warm (odd)
+        v = 0.1 if i % 2 == 0 else 0.8
+        db.save_dna(p, {"brightness": v, "warmth": v, "motion": 0.05, "saturation": 0.3, "accent_hue": None}, clip_dna.DNA_VERSION)
+    sessions = SessionManager(db, config)
+    client = create_app(AppContext(config, db, sessions)).test_client()
+    client.get("/")
+    client.get("/api/layout?mode=grid3x3")
+    sess = next(iter(sessions._sessions.values()))
+    look = lambda p: db.dna_for(p)["brightness"]
+    centre_look = look(sess.state.current_paths()[4])
+    r = client.get("/api/dna/like_this?screen=4").get_json()
+    assert r["placed"] >= 2 and set(r["tiles"]) <= {1, 3, 5, 7}
+    assert all(look(sess.state.current_paths()[t]) == centre_look for t in r["tiles"])
+    random.seed(2)
+    picks = []
+    for _ in range(20):
+        sess.rotation.rotate(side=0)
+        picks.append(look(sess.state.current_paths()[0]))
+    assert sum(1 for v in picks if v == centre_look) >= 14  # ~70% from the look-alike pool, vs ~50% by chance
+    sessions.stop()

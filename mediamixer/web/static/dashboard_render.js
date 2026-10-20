@@ -166,12 +166,39 @@ function ensureTiles(count) {
   return true;
 }
 
+// Best-moment starts: some of the time a clip starts a little before its
+// best part - where it's been hearted (its loop anchor) or, if it hasn't,
+// its strongest stretch from Clip DNA - instead of a random point in its
+// first half. Only the start moves: the lead-in keeps the build-up (and
+// anything you liked late), and the clip plays on past the moment as usual.
+function chooseStartTime(path, duration) {
+  const random = Math.random() * RANDOM_START_MAX_FRACTION * duration;
+  if (Math.random() >= TUNING.BEST_START_CHANCE) return { t: random, kind: 'random' };
+  const meta = videoMetaCache[path];
+  if (!meta) return { t: random, kind: 'random' };
+  let moment = null, kind = 'random';
+  if (meta.loop_anchor && (meta.heart_count || 0) >= 2) { moment = meta.loop_anchor.min; kind = 'hearted'; }
+  else if (meta.dna && meta.dna.peak_at != null) { moment = meta.dna.peak_at; kind = 'peak'; }
+  if (moment == null) return { t: random, kind: 'random' };
+  const start = Math.max(0, moment - TUNING.BEST_START_LEAD_S);
+  return { t: Math.min(start, Math.max(0, duration - TUNING.BEST_START_MIN_LEFT_S)), kind };
+}
+
 function applyRandomStart(vid, idx) {
+  const path = currentPaths[idx];
   const onMeta = () => {
     vid.removeEventListener('loadedmetadata', onMeta);
-    if (isFinite(vid.duration) && vid.duration > 0) {
-      vid.currentTime = Math.random() * RANDOM_START_MAX_FRACTION * vid.duration;
-    }
+    // The clip's info is normally back before its video metadata; give it a
+    // moment if not, so the start can use it.
+    let waited = 0;
+    const decide = () => {
+      if (!Object.prototype.hasOwnProperty.call(videoMetaCache, path) && waited < 600 && currentPaths[idx] === path) { waited += 100; setTimeout(decide, 100); return; }
+      if (currentPaths[idx] !== path || !isFinite(vid.duration) || vid.duration <= 0) return;
+      const start = chooseStartTime(path, vid.duration);
+      vid.currentTime = start.t;
+      if (typeof logEvent === 'function') logEvent('clip.start', { tile: idx, kind: start.kind, at: Math.round(start.t) });
+    };
+    decide();
     // Loading a new .src resets playbackRate back to 1 even though a
     // held speed effect (most notably a sealed-tile miss-hold, which can
     // run up to 15s - long enough for the clip underneath to rotate on

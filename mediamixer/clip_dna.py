@@ -2,9 +2,12 @@
 colour, duration - so the engine can pick and pair clips by what they look
 like, not just by how they've been rated.
 
-Analysis samples ~20s of the clip at 2 frames a second, scaled down to a
-48x27 thumbnail, via ffmpeg (the same binary the proxies use, and the small
-proxy file when one exists, so it's quick). It runs in a background thread
+Analysis samples the whole clip (up to SAMPLE_SECONDS) at 2 frames a second,
+scaled down to a 48x27 thumbnail, via ffmpeg (the same binary the proxies
+use, and the small proxy file when one exists, so it's quick). Version 2
+adds a motion track - every TRACK_STEP_S, how much moves and where in the
+frame (for Smart Framing) - and the clip's strongest stretch (peak_at, for
+best-moment starts). It runs in a background thread
 at below-normal priority, one clip at a time, and results are kept in the
 clip_dna table - each clip is analysed once (or again after DNA_VERSION
 changes).
@@ -24,10 +27,14 @@ from .proxy import _find_ffmpeg
 
 log = logging.getLogger(__name__)
 
-DNA_VERSION = 1
+DNA_VERSION = 2
 SAMPLE_W, SAMPLE_H = 48, 27
 SAMPLE_FPS = 2
-SAMPLE_SECONDS = 20
+SAMPLE_SECONDS = 240
+COLOUR_EVERY = 4  # colour stats from every 4th sample - plenty, and much quicker
+TRACK_STEP_S = 2.0
+PEAK_WINDOW_S = 6.0
+MOTION_NOISE = 6  # per-pixel luma change below this is compression noise, not movement
 HUE_BINS = 24
 # Skin tones sit around 345-50 degrees and dominate clips of people, so a
 # plain "dominant hue" is orange for nearly everything. The accent hue is
@@ -112,11 +119,12 @@ def analyze(path: str, config) -> Optional[dict]:
     sat_total = 0.0
     warm_total = 0.0
     px_total = 0
-    for f in frames:
-        luma = []
+    for n, f in enumerate(frames):
+        lumas.append([0.2126 * f[i] + 0.7152 * f[i + 1] + 0.0722 * f[i + 2] for i in range(0, frame_bytes, 3)])
+        if n % COLOUR_EVERY:
+            continue
         for i in range(0, frame_bytes, 3):
             r, g, b = f[i], f[i + 1], f[i + 2]
-            luma.append(0.2126 * r + 0.7152 * g + 0.0722 * b)
             h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
             sat_total += s
             warm_total += (r - b) / 255
@@ -125,12 +133,26 @@ def analyze(path: str, config) -> Optional[dict]:
             w = s * v
             if w > 0.08:
                 hue_bins[int(h * HUE_BINS) % HUE_BINS] += w
-        lumas.append(luma)
 
     brightness = sum(sum(l) for l in lumas) / (len(lumas) * len(lumas[0]) * 255)
-    # Motion: mean absolute luma change between consecutive samples (0.5s apart).
-    diffs = [sum(abs(a - b) for a, b in zip(l1, l2)) / (len(l1) * 255) for l1, l2 in zip(lumas, lumas[1:])]
-    motion = sum(diffs) / len(diffs) if diffs else 0.0
+    # Motion between consecutive samples (0.5s apart): how much changed, and
+    # where - the change-weighted centre of the frame (0..1 across, 0..1 down).
+    pairs = []
+    for l1, l2 in zip(lumas, lumas[1:]):
+        total = wx = wy = amount = 0.0
+        for k, (a, b) in enumerate(zip(l1, l2)):
+            d = abs(a - b)
+            amount += d
+            if d > MOTION_NOISE:
+                total += d
+                wx += d * (k % SAMPLE_W)
+                wy += d * (k // SAMPLE_W)
+        cx = (wx / total + 0.5) / SAMPLE_W if total else 0.5
+        cy = (wy / total + 0.5) / SAMPLE_H if total else 0.5
+        pairs.append((amount / (len(l1) * 255), cx, cy))
+    motion = sum(p[0] for p in pairs) / len(pairs) if pairs else 0.0
+    track = _motion_track(pairs)
+    peak_at = _peak_start(track)
     hue, _ = _circular_peak(hue_bins, lambda k: True)
     accent_hue, accent_weight = _circular_peak(hue_bins, lambda k: not _is_skin_bin(k))
     accent_strength = accent_weight / max(1, px_total)
@@ -148,7 +170,33 @@ def analyze(path: str, config) -> Optional[dict]:
         "warmth": round(warm_total / max(1, px_total), 4),  # >0 warm (red/orange), <0 cool (blue)
         "duration": _probe_duration(ffmpeg, path),
         "frames": len(frames),
+        "track": track,
+        "peak_at": peak_at,
     }
+
+
+def _motion_track(pairs) -> list:
+    """[[t, motion, cx, cy], ...] every TRACK_STEP_S seconds."""
+    per = max(1, int(TRACK_STEP_S * SAMPLE_FPS))
+    track = []
+    for start in range(0, len(pairs), per):
+        chunk = pairs[start:start + per]
+        w = sum(p[0] for p in chunk)
+        m = w / len(chunk)
+        w = w or 1.0
+        cx = sum(p[0] * p[1] for p in chunk) / w
+        cy = sum(p[0] * p[2] for p in chunk) / w
+        track.append([round(start / SAMPLE_FPS, 1), round(m, 4), round(cx, 3), round(cy, 3)])
+    return track
+
+
+def _peak_start(track) -> Optional[float]:
+    """Start (seconds) of the PEAK_WINDOW_S stretch with the most movement."""
+    span = max(1, int(PEAK_WINDOW_S / TRACK_STEP_S))
+    if len(track) < span:
+        return None
+    best = max(range(len(track) - span + 1), key=lambda i: sum(t[1] for t in track[i:i + span]))
+    return track[best][0]
 
 
 class DnaWorker:
