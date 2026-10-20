@@ -57,6 +57,8 @@ const TELEMETRY_WATCHERS = [
   ['rhythm', () => (rhythmEnabled || rhythmZoneActive ? 'on' : null)],
   ['rhythmPattern', () => (rhythmActive() ? rhythmPattern : null)],
   ['floaterBarrage', () => (floaterBarrageActive ? 'on' : null)],
+  ['slowmo', () => (slowmoTileIndex >= 0 ? slowmoTileIndex : null)],
+  ['doubleExposure', () => (doubleExposureTileIndex >= 0 ? doubleExposureTileIndex : null)],
   ['autopilot', () => (autopilotEnabled ? 'on' : null)],
   ['zone', () => autopilotZone || null],
   ['layout', () => currentLayout || null],
@@ -91,6 +93,8 @@ function ratingContext(i) {
   const fx = telemetryTileFx[i] && telemetryTileFx[i].until > now ? telemetryTileFx[i].kind : null;
   const states = RATING_CONTEXT_STATES.filter((n) => telemetryWatchState[n] && telemetryWatchState[n].value !== null);
   if (spotlightTileIndex === i) states.push('spotlightTile');
+  if (slowmoTileIndex === i) states.push('slowmoTile');
+  if (doubleExposureTileIndex === i) states.push('doubleExposureTile');
   if (lastKnownBarrage > 0 && lastKnownBarrageTiles.includes(i)) states.push('barrageTile');
   const vid = getTileVideo(i);
   return {

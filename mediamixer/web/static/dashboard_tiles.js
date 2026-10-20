@@ -213,7 +213,7 @@ let mosaicSettleTimer = null;
 // order itself is a real, visible decision now instead of an accident:
 // a sealed-locked tile should never have its speed hijacked by a
 // barrage dim, for instance, so sealedLock outranks everything else.
-const SPEED_PRIORITY = { sealedLock: 40, barrageBoost: 25, overdrive: 22, spinSurge: 21, bonusClaim: 20, chaseCatch: 20, barrageDim: 15, heartKick: 10 };
+const SPEED_PRIORITY = { sealedLock: 40, slowmo: 30, barrageBoost: 25, overdrive: 22, spinSurge: 21, bonusClaim: 20, chaseCatch: 20, barrageDim: 15, heartKick: 10 };
 let tileSpeedEffects = []; // per-tile: Map<id, effectState> | undefined (lazy)
 
 function getTileVideo(idx) {

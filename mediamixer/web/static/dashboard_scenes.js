@@ -25,6 +25,7 @@ function captureScene() {
       speed: manualSpeedMult,
       floaters: { enabled: fxEnabled, count: fxCount, opacity: fxOpacity, source: fxSource },
       manualSpiral: { enabled: manualSpiralEnabled, name: manualSpiralName, opacity: manualSpiralOpacity },
+      living: { breathe: livingBreathe, slowmo: livingSlowmo, double: livingDouble, spiralAudio: livingSpiralAudio },
       mantra: { enabled: mantraEnabled, frequency: mantraFrequency, opacity: mantraOpacity, styles: Object.assign({}, mantraStyles) },
     },
     flow: {
@@ -86,6 +87,13 @@ function applyScene(data, fromZone) {
     else if (!s.enabled && manualSpiralEnabled) toggleManualSpiral();
     else if (s.enabled && nameChanged) { fadeManualSpiral(0, MANUAL_SPIRAL_SWAP_MS); setTimeout(() => showManualSpiral(), MANUAL_SPIRAL_SWAP_MS); }
     saveManualSpiralPrefs();
+  });
+  if (scr.living) step(() => {
+    const l = scr.living;
+    if (l.breathe != null && l.breathe !== livingBreathe) toggleLiving('breathe');
+    if (l.slowmo != null && l.slowmo !== livingSlowmo) toggleLiving('slowmo');
+    if (l.double != null && l.double !== livingDouble) toggleLiving('double');
+    if (l.spiralAudio != null && l.spiralAudio !== livingSpiralAudio) toggleLiving('spiralAudio');
   });
   if (scr.mantra) step(() => {
     const m = scr.mantra;

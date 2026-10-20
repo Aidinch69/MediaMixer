@@ -195,6 +195,20 @@
       </div>
     </details>
     <details class="settings-section">
+      <summary><span class="section-title">🌬️ Living Screen</span><span class="settings-section-desc">Breathing tiles, slow-motion moments, double exposures, audio-reactive spirals.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider"><label>Breathing Tiles</label><button class="badge" id="living-breathe-toggle" onclick="toggleLiving('breathe')">ON</button></div>
+        <div class="slider"><label>Slow-Mo Moments</label><button class="badge" id="living-slowmo-toggle" onclick="toggleLiving('slowmo')">ON</button></div>
+        <div class="slider"><label>Double Exposure</label><button class="badge" id="living-double-toggle" onclick="toggleLiving('double')">ON</button></div>
+        <div class="slider"><label>Spirals React to Audio</label><button class="badge" id="living-spiral-audio-toggle" onclick="toggleLiving('spiralAudio')">ON</button></div>
+        <div class="grid">
+          <button class="badge" onclick="startSlowmo(pickAmbientTarget())">⏱ Preview Slow-Mo</button>
+          <button class="badge" onclick="startDoubleExposure(pickAmbientTarget())">👥 Preview Double</button>
+        </div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Breathing Tiles: every tile slowly drifts and zooms a few percent on its own cycle, faster or slower with the Shared Pulse. Slow-Mo Moments: at high-energy moments one tile eases into slow motion for a couple of seconds with a motion-trail ghost, a soft push-in and a vignette, then eases back - it only picks a tile with plenty already buffered, so it never coincides with a real stall. Double Exposure: now and then a second clip fades in over a tile as a light blend, then separates. Spirals React to Audio: hits in the overlay track (or tile audio) give the spirals a quick swell - needs Audio-Reactive FX on. Fine-tune amounts and timing in Master Controls → Living Screen.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
       <summary><span class="section-title">🌀 Manual Spiral</span><span class="section-live" data-live="spiral"></span><span class="settings-section-desc">Keep a spiral of your choice up, at your own opacity.</span></summary>
       <div class="settings-section-body">
         <div class="slider">
@@ -543,6 +557,7 @@
 <script src="{{ url_for('static', filename='dashboard_boot.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_layers.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_pulse.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_living.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_scenes.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_master.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_events.js') }}"></script>

@@ -10,7 +10,7 @@ const LANES = [
   ['surge', 'Surge', '#ff8a3d'], ['spinSurge', 'Spin Surge', '#3de0ff'], ['colorRush', 'Color Rush', '#ff5fa2'],
   ['overdrive', 'Overdrive', '#ff6b6b'], ['spotlight', 'Spotlight', '#ffffff'], ['bonus', 'Bonus tap', '#ffe27a'],
   ['sealed', 'Locked tile', '#4fb3ff'], ['chase', 'Catch', '#5fd38d'], ['mystery', 'Mystery', '#9aa5ff'],
-  ['finale', 'Finale', '#ff9df0'], ['floaterBarrage', 'Floater Barrage', '#b48cff'], ['rhythm', 'Rhythm', '#7fe0a6'],
+  ['finale', 'Finale', '#ff9df0'], ['floaterBarrage', 'Floater Barrage', '#b48cff'], ['slowmo', 'Slow-mo', '#8cbcff'], ['doubleExposure', 'Double exposure', '#ffb3d9'], ['rhythm', 'Rhythm', '#7fe0a6'],
 ];
 const OVERLAP_KEYS = ['barrage', 'buildup', 'spiral', 'surge', 'spinSurge', 'colorRush', 'overdrive', 'spotlight', 'finale', 'floaterBarrage', 'bonus', 'sealed', 'chase', 'mystery'];
 const MARKERS = {
@@ -345,6 +345,8 @@ function renderLikes(start, end, intervals, inWin) {
   const special = [
     ['Spotlighted tile', likes.filter((e) => e.d.states.includes('spotlightTile')).length, dislikes.filter((e) => e.d.states.includes('spotlightTile')).length],
     ['Highlighted barrage tile', likes.filter((e) => e.d.states.includes('barrageTile')).length, dislikes.filter((e) => e.d.states.includes('barrageTile')).length],
+    ['Tile in slow-mo', likes.filter((e) => e.d.states.includes('slowmoTile')).length, dislikes.filter((e) => e.d.states.includes('slowmoTile')).length],
+    ['Tile in double exposure', likes.filter((e) => e.d.states.includes('doubleExposureTile')).length, dislikes.filter((e) => e.d.states.includes('doubleExposureTile')).length],
   ];
 
   let group = '';

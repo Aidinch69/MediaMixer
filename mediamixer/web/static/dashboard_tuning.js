@@ -172,6 +172,19 @@ const TUNING_DEFAULTS = {
   LOOP_TOP_FRACTION: 0.05,
   LOOP_CHANCE: 0.35,
   LOOP_MAX_REPEATS: 2,
+  // Living Screen
+  BREATHE_ZOOM: 0.05,
+  BREATHE_DRIFT: 0.012,
+  BREATHE_PERIOD_MS: 28000,
+  SLOWMO_PROBABILITY: 0.3,
+  SLOWMO_COOLDOWN_MS: 75000,
+  SLOWMO_ENERGY_MIN: 1.1,
+  SLOWMO_SPEED: 0.4,
+  SLOWMO_HOLD_MS: 2400,
+  DOUBLE_EXPOSURE_PROBABILITY: 0.15,
+  DOUBLE_EXPOSURE_COOLDOWN_MS: 120000,
+  DOUBLE_EXPOSURE_MS: 9000,
+  DOUBLE_EXPOSURE_OPACITY: 0.55,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -325,6 +338,7 @@ const TUNING_GROUPS = [
   { label: 'Taste Learning', desc: 'How much evidence it wants, how fast it forgets, and when it leans harder. Strength itself is in Flow -> Taste Learning.', keys: ['TASTE_PRIOR_LIKES', 'TASTE_LOAD_DECAY', 'TASTE_LOW_ENGAGEMENT'] },
   { label: 'Surges', desc: 'Random surges - odds and the rest between them (the odds boost itself is under Multipliers & XP).', keys: ['SURGE_PROBABILITY', 'SURGE_COOLDOWN_MS'] },
   { label: 'Custom Loop Point', desc: 'Which favourites replay their best section, how often, and how many times.', keys: ['LOOP_HEART_THRESHOLD', 'LOOP_TOP_FRACTION', 'LOOP_CHANCE', 'LOOP_MAX_REPEATS'] },
+  { label: 'Living Screen', desc: 'Breathing tiles, slow-motion moments and double exposures.', keys: ['BREATHE_ZOOM', 'BREATHE_DRIFT', 'BREATHE_PERIOD_MS', 'SLOWMO_PROBABILITY', 'SLOWMO_COOLDOWN_MS', 'SLOWMO_ENERGY_MIN', 'SLOWMO_SPEED', 'SLOWMO_HOLD_MS', 'DOUBLE_EXPOSURE_PROBABILITY', 'DOUBLE_EXPOSURE_COOLDOWN_MS', 'DOUBLE_EXPOSURE_MS', 'DOUBLE_EXPOSURE_OPACITY'] },
 ];
 const TUNING_META = {
   XP_PER_BONUS_CLAIM: { label: 'Bonus-tap XP', unit: 'n', min: 5, max: 50, step: 1 },
@@ -479,6 +493,18 @@ const TUNING_META = {
   LOOP_TOP_FRACTION: { label: 'Only the top % most-hearted clips loop', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
   LOOP_CHANCE: { label: 'Chance an eligible clip loops', unit: 'pct', min: 0, max: 1, step: 0.05 },
   LOOP_MAX_REPEATS: { label: 'Max passes through the loop', unit: '', min: 1, max: 6, step: 1 },
+  BREATHE_ZOOM: { label: 'Breathing zoom', unit: 'pct', min: 0, max: 0.2, step: 0.005 },
+  BREATHE_DRIFT: { label: 'Breathing drift', unit: 'pct', min: 0, max: 0.06, step: 0.002 },
+  BREATHE_PERIOD_MS: { label: 'Breathing cycle', unit: 's', min: 6000, max: 90000, step: 1000 },
+  SLOWMO_PROBABILITY: { label: 'Slow-mo chance per check (every 6s)', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  SLOWMO_COOLDOWN_MS: { label: 'Rest between slow-mo moments', unit: 's', min: 10000, max: 600000, step: 5000 },
+  SLOWMO_ENERGY_MIN: { label: 'Slow-mo needs energy above', unit: 'x', min: 0.85, max: 1.3, step: 0.01 },
+  SLOWMO_SPEED: { label: 'Slow-mo speed', unit: 'x', min: 0.2, max: 0.8, step: 0.05 },
+  SLOWMO_HOLD_MS: { label: 'Slow-mo hold', unit: 's', min: 1000, max: 6000, step: 200 },
+  DOUBLE_EXPOSURE_PROBABILITY: { label: 'Double exposure chance per check (every 30s)', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  DOUBLE_EXPOSURE_COOLDOWN_MS: { label: 'Rest between double exposures', unit: 's', min: 15000, max: 900000, step: 15000 },
+  DOUBLE_EXPOSURE_MS: { label: 'Double exposure length', unit: 's', min: 3000, max: 30000, step: 1000 },
+  DOUBLE_EXPOSURE_OPACITY: { label: 'Double exposure strength', unit: 'pct', min: 0.1, max: 1, step: 0.05 },
 };
 
 function formatTuningValue(key, value) {

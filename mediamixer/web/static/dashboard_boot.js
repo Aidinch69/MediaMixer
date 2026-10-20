@@ -37,6 +37,7 @@ window.onload = () => {
   loadManualSpiralPrefs();
   loadPulsePrefs();
   loadTastePrefs();
+  loadLivingPrefs();
   loadScenes();
   loadAnticipationPrefs();
   loadAutopilotPrefs();

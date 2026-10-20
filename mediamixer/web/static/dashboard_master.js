@@ -8,7 +8,7 @@ const MASTER_AREAS = ['Screen', 'Flow', 'Rewards', 'Sound'];
 // TUNING_GROUPS label -> menu area.
 const MASTER_AREA_OF_GROUP = {
   'Spiral': 'Screen', 'Layout Fade / Dynamic Mosaic': 'Screen', 'Clip Transitions': 'Screen', 'Spotlight Takeover': 'Screen',
-  'Floater Barrage': 'Screen', 'Custom Loop Point': 'Screen',
+  'Floater Barrage': 'Screen', 'Custom Loop Point': 'Screen', 'Living Screen': 'Screen',
   'Auto-Pilot': 'Flow', 'Rhythm & Pulse': 'Flow', 'Taste Learning': 'Flow', 'Surges': 'Flow', 'Fresh Drops': 'Flow',
   'Audio-Reactive': 'Sound',
 };
