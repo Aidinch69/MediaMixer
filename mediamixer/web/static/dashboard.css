@@ -639,6 +639,16 @@ button:hover{background:#251538;border-color:#b84dff;box-shadow:0 0 10px rgba(18
 .gradient-sweep{position:absolute;inset:0;z-index:5;pointer-events:none;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.18) 48%,rgba(214,153,255,.22) 52%,transparent 70%);background-size:300% 100%;animation:gradient-sweep 2.2s ease-in-out forwards;mix-blend-mode:screen}
 @keyframes gradient-sweep{from{background-position:100% 0}to{background-position:0 0}}
 .fx-stutter-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;opacity:0}
+.fx-split{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1;pointer-events:none;opacity:0;transition:opacity .35s ease;background:#020105}
+.fx-split.shown{opacity:1}
+.split-lines{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0;transition:opacity .35s ease}
+.split-lines.shown{opacity:1}
+.split-lines::before,.split-lines::after{content:'';position:absolute;background:rgba(5,2,10,.85);box-shadow:0 0 6px rgba(var(--mood-glow,var(--theme-glow,255,70,30)),.45)}
+.split-lines.split-cols::before,.split-lines.split-quad::before{left:calc(50% - 1px);top:0;bottom:0;width:2px}
+.split-lines.split-rows::after,.split-lines.split-quad::after{top:calc(50% - 1px);left:0;right:0;height:2px}
+#film-grain{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0;mix-blend-mode:overlay;background-size:192px 192px;transition:opacity 2s linear}
+#film-dust{position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none}
+#edge-bleed{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;filter:blur(16px);opacity:0;transition:opacity 1.5s ease}
 .fx-cascade{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1;pointer-events:none;opacity:0;transition:opacity .18s ease;background:#020105}
 #moment-dim{position:fixed;inset:0;z-index:13;background:#04010a;opacity:0;pointer-events:none}
 .heart-burst-piece{position:fixed;z-index:30;font-size:26px;pointer-events:none;filter:drop-shadow(0 0 6px rgba(255,80,140,.8));will-change:transform,opacity}

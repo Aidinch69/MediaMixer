@@ -114,9 +114,11 @@ function scheduleSessionLength() {
   if (sessionLengthMin) toast('🕐 ' + sessionLengthMin + ' min session - wind-down starts in ' + Math.round((windDownScheduledAt - Date.now()) / 60000) + ' min');
 }
 
+let sessionIntentKey = null; // the intent picked for this session (read by Visual Textures)
 function chooseSessionIntent(key) {
   const intent = SESSION_INTENTS[key];
   if (!intent) return;
+  sessionIntentKey = key;
   if (windDown) cancelWindDown();
   applyScene(intent.scene, false);
   if (intent.autopilotMinutes) { setAutopilotMinutes(intent.autopilotMinutes); setSceneInput('autopilot-minutes-input', intent.autopilotMinutes); }

@@ -215,6 +215,19 @@
       </div>
     </details>
     <details class="settings-section">
+      <summary><span class="section-title">🎞️ Visual Textures</span><span class="settings-section-desc">Split frames, film grain &amp; dust, edge bleed.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider"><label>Split Frames</label><button class="badge" id="texture-split-toggle" onclick="toggleTexture('split')">ON</button></div>
+        <div class="slider"><label>Film Grain &amp; Dust</label><button class="badge" id="texture-grain-toggle" onclick="toggleTexture('grain')">ON</button></div>
+        <div class="slider"><label>Edge Bleed</label><button class="badge" id="texture-bleed-toggle" onclick="toggleTexture('bleed')">ON</button></div>
+        <div class="grid">
+          <button class="badge" onclick="startSplitFrames(-1, 2) || toast('🎞️ No tile free for a split right now', true)">🎞️ Preview Split</button>
+          <button class="badge" onclick="startSplitFrames(-1, 4) || toast('🎞️ No tile free for a split right now', true)">🎞️ Preview Quad</button>
+        </div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Split Frames: now and then one tile splits into two or four panes, each showing the same clip at a different moment, for a few seconds - the panes only appear once they're all loaded and in place, so it never looks like buffering. Film Grain &amp; Dust: a light film grain over the screens with the odd speck of dust - barely there normally, stronger in calm moments (Vault zone, a Drift session, a wind-down, a Breath). Edge Bleed: each tile's colour glows softly into the gaps around it, so the grid feels like one picture. Fine-tune in Master Controls → Visual Textures.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
       <summary><span class="section-title">🌀 Manual Spiral</span><span class="section-live" data-live="spiral"></span><span class="settings-section-desc">Keep a spiral of your choice up, at your own opacity.</span></summary>
       <div class="settings-section-body">
         <div class="slider">
@@ -655,6 +668,7 @@
 <script src="{{ url_for('static', filename='dashboard_gestures.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_rhythmfx.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_moments.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_textures.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_session.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_scenes.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_master.js') }}"></script>

@@ -223,6 +223,13 @@ const TUNING_DEFAULTS = {
   HEART_BURST_COOLDOWN_MS: 30000,
   HEART_BURST_LEAN_MS: 30000,
   HEART_BURST_LEAN_SHARE: 0.4,
+  SPLIT_CHANCE: 0.12,
+  SPLIT_COOLDOWN_MS: 150000,
+  SPLIT_MS: 6000,
+  GRAIN_OPACITY: 0.05,
+  GRAIN_CALM_BOOST: 2.5,
+  DUST_RATE: 0.04,
+  EDGE_BLEED_OPACITY: 0.55,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -378,6 +385,7 @@ const TUNING_GROUPS = [
   { label: 'Custom Loop Point', desc: 'Which favourites replay their best section, how often, and how many times.', keys: ['LOOP_HEART_THRESHOLD', 'LOOP_TOP_FRACTION', 'LOOP_CHANCE', 'LOOP_MAX_REPEATS'] },
   { label: 'Living Screen', desc: 'Breathing tiles, slow-motion moments and double exposures.', keys: ['BREATHE_ZOOM', 'BREATHE_DRIFT', 'BREATHE_PERIOD_MS', 'SLOWMO_PROBABILITY', 'SLOWMO_COOLDOWN_MS', 'SLOWMO_ENERGY_MIN', 'SLOWMO_SPEED', 'SLOWMO_HOLD_MS', 'DOUBLE_EXPOSURE_PROBABILITY', 'DOUBLE_EXPOSURE_COOLDOWN_MS', 'DOUBLE_EXPOSURE_MS', 'DOUBLE_EXPOSURE_OPACITY', 'GRADIENT_PROBABILITY', 'GRADIENT_COOLDOWN_MS', 'GRADIENT_HOLD_MS', 'BEST_START_CHANCE', 'BEST_START_LEAD_S', 'BEST_START_MIN_LEFT_S', 'SMART_FRAMING_STRENGTH', 'SMART_FRAMING_ZOOM', 'LIKE_THIS_MS'] },
   { label: 'Rhythm FX', desc: 'Stutter edits and Cascades - how often, how long, how many repeats.', keys: ['STUTTER_CHANCE', 'STUTTER_COOLDOWN_MS', 'STUTTER_REPEATS', 'CASCADE_CHANCE', 'CASCADE_COOLDOWN_MS', 'CASCADE_HOLD_BEATS'] },
+  { label: 'Visual Textures', desc: 'Split frames, film grain & dust, and edge bleed - odds, strength and how much calm moments add.', keys: ['SPLIT_CHANCE', 'SPLIT_COOLDOWN_MS', 'SPLIT_MS', 'GRAIN_OPACITY', 'GRAIN_CALM_BOOST', 'DUST_RATE', 'EDGE_BLEED_OPACITY'] },
   { label: 'Moments', desc: 'The Drop, Breath, Focus pull, Call & response, Echo trails, Favourite takeover and Heart burst - odds, rests and lengths.', keys: ['DROP_CHANCE', 'DROP_MIN_ENERGY', 'DROP_COOLDOWN_MS', 'BREATH_CHANCE', 'BREATH_COOLDOWN_MS', 'BREATH_MS', 'BREATH_SPEED', 'FOCUS_PULL_CHANCE', 'FOCUS_PULL_COOLDOWN_MS', 'FOCUS_PULL_BARS', 'CALL_RESPONSE_CHANCE', 'CALL_RESPONSE_COOLDOWN_MS', 'ECHO_CHANCE', 'ECHO_MIN_ENERGY', 'ECHO_COOLDOWN_MS', 'ECHO_MS', 'FAVORITE_TAKEOVER_HEARTS', 'FAVORITE_TAKEOVER_MS', 'FAVORITE_TAKEOVER_COOLDOWN_MS', 'HEART_BURST_WINDOW_MS', 'HEART_BURST_COOLDOWN_MS', 'HEART_BURST_LEAN_MS', 'HEART_BURST_LEAN_SHARE'] },
 ];
 const TUNING_META = {
@@ -573,6 +581,13 @@ const TUNING_META = {
   HEART_BURST_WINDOW_MS: { label: 'Heart burst: two hearts within', unit: 's', min: 400, max: 3000, step: 100 },
   HEART_BURST_COOLDOWN_MS: { label: 'Rest between heart bursts', unit: 's', min: 5000, max: 300000, step: 5000 },
   HEART_BURST_LEAN_MS: { label: 'Heart burst: picks lean toward that look for', unit: 's', min: 0, max: 120000, step: 5000 },
+  SPLIT_CHANCE: { label: 'Split frames: chance per check (every 15s)', unit: 'pct', min: 0, max: 1, step: 0.01 },
+  SPLIT_COOLDOWN_MS: { label: 'Rest between split frames', unit: 's', min: 15000, max: 1800000, step: 15000 },
+  SPLIT_MS: { label: 'Split frames length', unit: 's', min: 2000, max: 20000, step: 500 },
+  GRAIN_OPACITY: { label: 'Film grain strength', unit: 'pct', min: 0, max: 0.3, step: 0.01 },
+  GRAIN_CALM_BOOST: { label: 'Grain & dust: boost in calm moments (Vault, Drift, wind-down)', unit: 'x', min: 1, max: 5, step: 0.1 },
+  DUST_RATE: { label: 'Dust: how often specks appear', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
+  EDGE_BLEED_OPACITY: { label: 'Edge bleed strength', unit: 'pct', min: 0, max: 1, step: 0.05 },
   HEART_BURST_LEAN_SHARE: { label: 'Heart burst: how much of the picking leans', unit: 'pct', min: 0, max: 1, step: 0.05 },
   STUTTER_CHANCE: { label: 'Stutter chance per bar', unit: 'pct', min: 0, max: 1, step: 0.01 },
   STUTTER_COOLDOWN_MS: { label: 'Rest between stutters', unit: 's', min: 2000, max: 300000, step: 1000 },
