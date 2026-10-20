@@ -37,7 +37,7 @@ function captureScene() {
     },
     sound: {
       binauralVolume, overlayVolume, tileAudio: tileAudioVolume, sfx: sfxVolume,
-      tone: st.tone_index, beat: st.binaural_knob,
+      tone: st.tone_index, beat: st.binaural_knob, brainwave: brainwaveMode,
       audioReact: { enabled: audioReactEnabled, reactivity: audioReactivity },
     },
   };
@@ -128,6 +128,7 @@ function applyScene(data, fromZone) {
     const l = document.getElementById('l-beat');
     if (l) l.innerText = (+snd.beat).toFixed(2);
   });
+  if (snd.brainwave) step(() => setBrainwaveMode(snd.brainwave));
   if (snd.audioReact) step(() => {
     const a = snd.audioReact;
     if (a.enabled != null && a.enabled !== audioReactEnabled) toggleAudioReact();

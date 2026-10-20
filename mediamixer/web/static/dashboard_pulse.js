@@ -1,7 +1,7 @@
 // Part of the dashboard client - classic scripts sharing one global scope,
 // loaded in the order listed in dashboard.html.
-// Shared Pulse (one energy/tempo signal the sensory layers ride together)
-// and Taste Learning (a gentle lean toward the FX and beat patterns you like).
+// Shared Pulse (one energy/tempo signal the sensory layers ride together),
+// brainwave presets for the binaural beat, and Taste Learning (a gentle lean toward the FX and beat patterns you like).
 
 // ---- Shared Pulse ----
 // rhythmDrive (dashboard_layers.js) is the session's energy: engagement,
@@ -36,6 +36,8 @@ function pulseBinauralMult() {
 }
 
 function pulseBinauralHz(synth) {
+  const band = brainwaveBand();
+  if (band) return band.hz; // a brainwave preset sits exactly on its band - no drift
   return Math.max(PULSE_BINAURAL_MIN_HZ, Math.min(PULSE_BINAURAL_MAX_HZ, synth.beat_hz * pulseBinauralMult()));
 }
 
@@ -101,6 +103,81 @@ function updatePulseUi() {
   el.innerText = 'Energy ×' + rhythmDrive.toFixed(2) + ' · spirals ×' + pulseSpiralRate().toFixed(2) + hz;
 }
 setInterval(updatePulseUi, 1000);
+
+// ---- Brainwave presets ----
+// The binaural beat locked to a specific brainwave frequency instead of
+// wandering with the beat slider, clip tension and the Shared Pulse (which
+// lands it between bands - "off key"). 'free' keeps the old behaviour.
+// 'mood' picks Theta / Alpha / Beta from the zone and energy, only after a
+// mood has held for BRAINWAVE_MOOD_HOLD_MS, glides across, then sits exactly
+// on the new frequency.
+const BRAINWAVE_BANDS = {
+  delta: { label: 'Delta', hz: 2.5, desc: 'deep' },
+  theta: { label: 'Theta', hz: 6, desc: 'dreamy, trance' },
+  alpha: { label: 'Alpha', hz: 10, desc: 'relaxed flow' },
+  beta: { label: 'Beta', hz: 15, desc: 'alert, energised' },
+  gamma: { label: 'Gamma', hz: 40, desc: 'peak' },
+};
+const BRAINWAVE_MOOD_HOLD_MS = 15000;
+const BRAINWAVE_GLIDE_TAU_S = 2.5; // ~7s to settle on a new band
+let brainwaveMode = 'free'; // 'free' | 'mood' | a band key
+let brainwaveMoodBand = 'alpha';
+let brainwaveMoodCandidate = null;
+let brainwaveMoodCandidateAt = 0;
+
+function brainwaveMoodTarget() {
+  if (floaterBarrageActive || autopilotZone === 'vault' || rhythmDrive < 0.95) return 'theta';
+  if (rhythmDrive > 1.18 || autopilotZone === 'jackpot' || autopilotZone === 'chase') return 'beta';
+  return 'alpha';
+}
+
+setInterval(() => {
+  if (brainwaveMode !== 'mood') return;
+  const want = brainwaveMoodTarget();
+  const now = Date.now();
+  if (want === brainwaveMoodBand) { brainwaveMoodCandidate = null; return; }
+  if (want !== brainwaveMoodCandidate) { brainwaveMoodCandidate = want; brainwaveMoodCandidateAt = now; return; }
+  if (now - brainwaveMoodCandidateAt >= BRAINWAVE_MOOD_HOLD_MS) {
+    brainwaveMoodBand = want;
+    brainwaveMoodCandidate = null;
+    if (lastSynthParams) updateSynthParams(lastSynthParams);
+  }
+}, 1000);
+
+// The band in effect right now, or null in free mode.
+function brainwaveBand() {
+  if (brainwaveMode === 'free') return null;
+  return BRAINWAVE_BANDS[brainwaveMode === 'mood' ? brainwaveMoodBand : brainwaveMode] || null;
+}
+
+function setBrainwaveMode(mode) {
+  brainwaveMode = mode === 'free' || mode === 'mood' || BRAINWAVE_BANDS[mode] ? mode : 'free';
+  if (brainwaveMode === 'mood') { brainwaveMoodBand = brainwaveMoodTarget(); brainwaveMoodCandidate = null; }
+  saveJsonPref('mm_brainwave', { mode: brainwaveMode });
+  if (lastSynthParams) updateSynthParams(lastSynthParams);
+  updateBrainwaveUi();
+}
+
+function loadBrainwavePrefs() {
+  const p = loadJsonPref('mm_brainwave', { mode: 'free' });
+  brainwaveMode = p.mode === 'mood' || BRAINWAVE_BANDS[p.mode] ? p.mode : 'free';
+  if (brainwaveMode === 'mood') brainwaveMoodBand = brainwaveMoodTarget();
+  updateBrainwaveUi();
+}
+
+function updateBrainwaveUi() {
+  ['free', 'mood'].concat(Object.keys(BRAINWAVE_BANDS)).forEach((m) => {
+    const b = document.getElementById('brainwave-' + m);
+    if (b) b.classList.toggle('active', brainwaveMode === m);
+  });
+  const el = document.getElementById('brainwave-status');
+  if (!el) return;
+  const band = brainwaveBand();
+  el.innerText = band
+    ? band.label + ' · ' + band.hz + ' Hz exactly (' + band.desc + ')' + (brainwaveMode === 'mood' ? ' - following the mood' + (brainwaveMoodCandidate ? ', heading to ' + BRAINWAVE_BANDS[brainwaveMoodCandidate].label : '') : '')
+    : 'Free - the beat follows the slider, clip tension and the Shared Pulse.';
+}
+setInterval(updateBrainwaveUi, 1000);
 
 // ---- Taste Learning ----
 // Counts likes while each tile FX / beat pattern is showing against how long

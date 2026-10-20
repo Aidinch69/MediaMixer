@@ -36,6 +36,7 @@ window.onload = () => {
   loadFxPrefs();
   loadManualSpiralPrefs();
   loadPulsePrefs();
+  loadBrainwavePrefs();
   loadTastePrefs();
   loadLivingPrefs();
   loadGesturePrefs();

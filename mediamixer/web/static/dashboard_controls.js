@@ -221,7 +221,7 @@ const SECTION_LIVE = {
   pulse: () => (sharedPulseEnabled ? 'energy ×' + rhythmDrive.toFixed(2) : 'off'),
   rhythm: () => (rhythmActive() ? Math.round(currentRhythmBpm()) + ' BPM · ' + RHYTHM_PATTERNS[rhythmPattern].label : 'off'),
   taste: () => (tasteStrength > 0 ? Math.round(tasteStrength * 100) + '%' : 'off'),
-  sound: () => (lastSynthParams ? Math.round(lastSynthParams.carrier_hz) + ' Hz · beat ' + pulseBinauralHz(lastSynthParams).toFixed(1) + ' Hz' : ''),
+  sound: () => (lastSynthParams ? Math.round(lastSynthParams.carrier_hz) + ' Hz · ' + (brainwaveBand() ? brainwaveBand().label + ' ' : 'beat ') + pulseBinauralHz(lastSynthParams).toFixed(1) + ' Hz' : ''),
 };
 
 function updateMenuState() {

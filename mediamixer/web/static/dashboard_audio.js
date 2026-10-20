@@ -95,8 +95,10 @@ function updateSynthParams(synth) {
   const now = audioCtx.currentTime;
   const beatHz = pulseBinauralHz(synth); // the server's beat, scaled by the Shared Pulse when it's on
   synthNodes.leftOsc.frequency.setTargetAtTime(synth.carrier_hz, now, 0.1);
-  synthNodes.rightOsc.frequency.setTargetAtTime(synth.carrier_hz + beatHz, now, 0.4);
-  synthNodes.lfo.frequency.setTargetAtTime(Math.max(0.01, beatHz), now, 0.4);
+  // A brainwave preset glides between bands slowly, then holds exactly.
+  const tau = brainwaveBand() ? BRAINWAVE_GLIDE_TAU_S : 0.4;
+  synthNodes.rightOsc.frequency.setTargetAtTime(synth.carrier_hz + beatHz, now, tau);
+  synthNodes.lfo.frequency.setTargetAtTime(Math.max(0.01, beatHz), now, tau);
   synthNodes.lfoGain.gain.setTargetAtTime(0.5 * synth.iso, now, 0.1);
   synthNodes.offset.offset.setTargetAtTime(1 - 0.5 * synth.iso, now, 0.1);
 }

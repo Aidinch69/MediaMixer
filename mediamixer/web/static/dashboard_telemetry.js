@@ -47,6 +47,7 @@ const TELEMETRY_WATCHERS = [
   ['mystery', () => (mysteryTileIndex >= 0 ? mysteryTileIndex : null)],
   ['spotlight', () => (spotlightTileIndex >= 0 ? spotlightTileIndex : null)],
   ['spiral', () => (spiralActive ? 'on' : null)],
+  ['brainwave', () => (brainwaveBand() ? brainwaveBand().label : null)],
   ['manualSpiral', () => (manualSpiralEnabled && manualSpiralName ? manualSpiralName : null)],
   ['colorRush', () => (colorRushActive ? 'on' : null)],
   ['surge', () => (Date.now() < surgeExpireAt ? 'on' : null)],
@@ -193,7 +194,7 @@ function initTelemetry() {
     // can be read against the settings actually in use.
     tuning: tuningOverridesNow(),
     toggles: {
-      autopilot: autopilotEnabled, sharedPulse: sharedPulseEnabled, taste: Math.round(tasteStrength * 100) + '%', manualSpiral: manualSpiralEnabled ? Math.round(manualSpiralOpacity * 100) + '%' : false, floaters: fxEnabled, floaterCount: fxCount, rhythm: rhythmEnabled,
+      autopilot: autopilotEnabled, sharedPulse: sharedPulseEnabled, brainwave: brainwaveMode, taste: Math.round(tasteStrength * 100) + '%', manualSpiral: manualSpiralEnabled ? Math.round(manualSpiralOpacity * 100) + '%' : false, floaters: fxEnabled, floaterCount: fxCount, rhythm: rhythmEnabled,
       mosaicDrift: dynamicMosaicDriftMode, mosaicZone: dynamicMosaicZoneMode, mosaicRange: [dynamicMosaicMinTiles, dynamicMosaicMaxTiles],
     },
   }), 0));
