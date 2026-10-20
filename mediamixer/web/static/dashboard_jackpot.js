@@ -450,8 +450,12 @@ const SURGE_PROBABILITY = 0.08;
 const SURGE_DURATION_RANGE_MS = [60000, 90000];
 let surgeExpireAt = 0;
 
+// surgeExpireAt doubles as "when the last surge ended" - Overdrive, Spin
+// Surge and Finale all extend it too, so a random surge also rests after
+// those. A 36-minute session had random surges (60-90s each) running
+// roughly every 4 minutes on top of Overdrive's own.
 function maybeTriggerSurge() {
-  if (Date.now() < surgeExpireAt) return;
+  if (Date.now() < surgeExpireAt + TUNING.SURGE_COOLDOWN_MS) return;
   if (Math.random() < SURGE_PROBABILITY) {
     const [lo, hi] = SURGE_DURATION_RANGE_MS;
     surgeExpireAt = Date.now() + lo + Math.random() * (hi - lo);

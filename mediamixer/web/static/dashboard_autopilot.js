@@ -209,8 +209,17 @@ function decayEngagementToNow() {
   engagementScore = 1.0 + (engagementScore - 1.0) * decay;
 }
 
+// Diminishing returns on the way up: a positive nudge shrinks with the
+// headroom left above neutral, so the score approaches the cap instead of
+// pinning to it. Without this, steady hearting (~20/min) held it at the
+// 2.2 cap ~85% of the time, leaving Auto-Pilot no way to tell "into it"
+// from "really into it". Replaying real sessions: avg 2.11 -> 1.79,
+// range 1.58-1.93, never pinned. Negative nudges land at full strength.
+const ENGAGEMENT_SOFTCAP_CURVE = 1.5;
+
 function nudgeEngagement(amount) {
   decayEngagementToNow();
+  if (amount > 0) amount *= Math.pow(Math.max(0, (ENGAGEMENT_MAX - engagementScore) / (ENGAGEMENT_MAX - 1)), ENGAGEMENT_SOFTCAP_CURVE);
   engagementScore = Math.max(ENGAGEMENT_MIN, Math.min(ENGAGEMENT_MAX, engagementScore + amount));
 }
 
