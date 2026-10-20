@@ -74,7 +74,8 @@ def test_jackpot_draws_hearted_clips_weighted_by_hearts(config, db):
     random.seed(5)
     counts = Counter(library.pick_video_jackpot(db, library.GENERAL_FOLDER) for _ in range(2000))
     assert set(counts) == {paths[-1], paths[-2]}
-    assert counts[paths[-1]] > 5 * counts[paths[-2]]
+    # sqrt weighting: 9 hearts vs 1 -> ~3x, not 9x
+    assert 2.4 < counts[paths[-1]] / counts[paths[-2]] < 3.8
 
 
 def test_jackpot_without_hearts_does_not_favor_alphabetical_order(config, db):
@@ -113,3 +114,13 @@ def test_plays_do_not_erode_a_like(config, db):
     row = db.video_rewards(library.GENERAL_FOLDER)[0]
     assert row["play_count"] == 20
     assert row["ema_reward"] == pytest.approx(before)
+
+
+def test_heart_rank_in_video_meta(config, db):
+    paths = make_clips(config, [f"{i}.mp4" for i in range(4)])
+    library.sync_library(db, config)
+    for i, n in enumerate((10, 5, 1)):
+        library.heart_video(db, paths[i], amount=n)
+    assert library.get_video_meta(db, paths[0])["heart_top_frac"] == 0
+    assert abs(library.get_video_meta(db, paths[2])["heart_top_frac"] - 2 / 3) < 1e-9
+    assert library.get_video_meta(db, paths[3])["heart_top_frac"] is None

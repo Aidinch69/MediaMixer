@@ -146,6 +146,10 @@ class Config:
     # feeding a 0.0 reward) every clip's ema_reward sat at ~0, so ratings
     # had almost no pull on what played.
     decay_halflife_s: float = 259200.0  # 3 days
+    # A clip shown in the last N seconds (this session) isn't picked again
+    # unless nothing else is left - the picker used to avoid only what was on
+    # screen right now, so favourites could come straight back.
+    recent_repeat_window_s: float = 600.0
     exploration_bonus_c: float = 0.50  # UCB-style bonus so rarely-played clips stay in rotation - nudged up for a bit more default discovery
 
     skip_penalty: float = -0.25

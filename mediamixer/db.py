@@ -315,7 +315,16 @@ class Database:
         loop_anchor = None
         if row["loop_anchor_min"] is not None and row["loop_anchor_max"] is not None:
             loop_anchor = {"min": row["loop_anchor_min"], "max": row["loop_anchor_max"]}
-        return {"heart_count": row["heart_count"], "loop_anchor": loop_anchor}
+        # Where this clip sits among all hearted clips (0 = most hearted, 1 =
+        # least), so "a real favourite" can be judged relative to the library
+        # instead of by a fixed count that hearting keeps outgrowing.
+        heart_top_frac = None
+        if row["heart_count"] > 0:
+            conn = self._connect()
+            above = conn.execute("SELECT COUNT(*) AS n FROM video_weights WHERE heart_count > ?", (row["heart_count"],)).fetchone()["n"]
+            hearted = conn.execute("SELECT COUNT(*) AS n FROM video_weights WHERE heart_count > 0").fetchone()["n"]
+            heart_top_frac = above / max(1, hearted)
+        return {"heart_count": row["heart_count"], "loop_anchor": loop_anchor, "heart_top_frac": heart_top_frac}
 
     def bump_loop_anchor(self, path: str, position: float) -> Optional[dict]:
         """Widen (never narrow) this video's hearted-position range to

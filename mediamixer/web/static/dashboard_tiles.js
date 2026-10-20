@@ -94,8 +94,16 @@ const LOOP_MIN_DURATION_S = 15;
 // bit further since looping is a much bigger commitment than a visual
 // highlight, and capped to a handful of passes before it's allowed to
 // finish normally and rotate on, same as anything else.
+//
+// The fixed 5-heart bar was outgrown: with heavy hearting ~300 clips
+// qualified and repeated their segment 3x, read as "videos repeating back
+// to back to back". Now: only the top 5% most-hearted clips (relative to
+// the library, so it doesn't drift as hearts pile up), only on about a
+// third of their plays, and 2 passes at most.
 const LOOP_HEART_THRESHOLD = 5;
-const LOOP_MAX_REPEATS = 3;
+const LOOP_TOP_FRACTION = 0.05;
+const LOOP_CHANCE = 0.35;
+const LOOP_MAX_REPEATS = 2;
 const loopAnchorCache = {}; // video_path -> {min,max} | null (null = confirmed none)
 let tileLoopBounds = []; // per-tile index -> {start,end} | null
 let tileLoopCount = []; // per-tile index -> completed passes through the bounded segment so far
@@ -119,8 +127,10 @@ function applyLoopAnchorIfReady(i, path) {
   if (currentPaths[i] !== path) return;
   const vid = tileElements[i] && tileElements[i].querySelector('#screen-' + i);
   if (!vid) return;
-  const heartCount = videoMetaCache[path] ? videoMetaCache[path].heart_count : 0;
-  const anchor = heartCount >= LOOP_HEART_THRESHOLD ? loopAnchorCache[path] : null;
+  const meta = videoMetaCache[path] || {};
+  const topFrac = meta.heart_top_frac == null ? 1 : meta.heart_top_frac;
+  const eligible = (meta.heart_count || 0) >= LOOP_HEART_THRESHOLD && topFrac <= LOOP_TOP_FRACTION && Math.random() < LOOP_CHANCE;
+  const anchor = eligible ? loopAnchorCache[path] : null;
   tileLoopBounds[i] = (anchor && vid.duration) ? computeLoopBounds(anchor, vid.duration) : null;
   tileLoopCount[i] = 0;
 }

@@ -60,3 +60,26 @@ def test_layout_change_keeps_surviving_clips(config, db):
 
     engine.set_layout_and_rotate("dual")
     assert state.current_paths() == six[:2]
+
+
+def test_recently_shown_clips_are_not_repicked(config, db):
+    make_clips(config, [f"{i}.mp4" for i in range(12)])
+    library.sync_library(db, config)
+    state = RuntimeState(config)
+    engine = RotationEngine(state, db, config)
+    engine.set_layout_and_rotate("dual")
+    seen = list(state.current_paths())
+    for _ in range(5):  # 10 more picks on 2 tiles: 12 clips total, so no repeats possible yet
+        engine.rotate(side="all")
+        seen += state.current_paths()
+    assert len(seen) == len(set(seen)) == 12
+    engine.rotate(side="all")  # pool exhausted: falls back instead of going blank
+    assert all(state.current_paths())
+
+
+def test_repeat_window_zero_disables_memory(config, db):
+    cfg = dataclasses.replace(config, recent_repeat_window_s=0)
+    make_clips(cfg, ["a.mp4", "b.mp4", "c.mp4"])
+    library.sync_library(db, cfg)
+    state = RuntimeState(cfg)
+    assert state.recent_paths(0) == set()

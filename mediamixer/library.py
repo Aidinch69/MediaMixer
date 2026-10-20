@@ -146,7 +146,8 @@ def pick_video_jackpot(
     db: Database, folder: str, offset: int = 0, exclude: Union[str, Iterable[str], None] = None
 ) -> Optional[str]:
     """Jackpot pick: a draw from the hearted clips in `folder`, weighted by
-    heart count, skipping anything in `exclude` (so two screens can't land on
+    the square root of heart count (linear weighting snowballed: the most
+    picked clips got hearted most, 42 -> 98 hearts in a week), skipping anything in `exclude` (so two screens can't land on
     the same clip in one jackpot batch). More hearts = more likely, but no
     fixed top-N wins every time. Falls back to rank order (`offset`-th best)
     only when nothing usable is hearted yet."""
@@ -161,7 +162,7 @@ def pick_video_jackpot(
         if os.path.normpath(r["video_path"]).lower() not in exclude_norm
     ]
     if pool:
-        return random.choices([r["video_path"] for r in pool], weights=[r["heart_count"] for r in pool], k=1)[0]
+        return random.choices([r["video_path"] for r in pool], weights=[r["heart_count"] ** 0.5 for r in pool], k=1)[0]
 
     # Fetch extra headroom past `offset` so there's enough to skip past any
     # excluded videos and still land on a real pick.

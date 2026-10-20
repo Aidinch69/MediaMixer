@@ -90,9 +90,11 @@ class RotationEngine:
         indexes = range(len(current_paths)) if side == "all" else [side]
 
         # Every video currently visible on any screen is off-limits for a new pick,
-        # so the same clip never ends up playing in two tiles at once. Paths picked
-        # earlier in this same batch are added in as we go, too.
-        in_use = {p for p in current_paths if p}
+        # so the same clip never ends up playing in two tiles at once - and so is
+        # anything shown in the last few minutes (pickers fall back to the full
+        # pool if that would leave nothing). Paths picked earlier in this same
+        # batch are added in as we go, too.
+        in_use = {p for p in current_paths if p} | self._state.recent_paths(cfg.recent_repeat_window_s)
 
         # A folder switch invalidates whatever was preloaded (it was picked from
         # the old folder), so only honor each screen's preloaded "next" pick when

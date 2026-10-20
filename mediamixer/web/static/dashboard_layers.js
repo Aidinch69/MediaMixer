@@ -824,13 +824,25 @@ let rhythmRunMinutesPaid = 0;
 
 // Tempo follows the session's energy: engagement, a barrage build-up or
 // fresh payoff, surges, Overdrive and the Auto-Pilot zone push a target
-// multiplier that the actual tempo glides toward over a few seconds - so
-// the beat quickens into a hype moment and settles after it, instead of
-// jumping. A Floater Barrage slows it into a dreamier pace.
+// multiplier that the actual tempo glides toward - so the beat quickens
+// into a hype moment and settles after it, instead of jumping. A Floater
+// Barrage slows it into a dreamier pace.
+//
+// Shaped to flow rather than see-saw (real-session feedback: "a high, then
+// low, then high state"): each payoff adds a swell that fades out over
+// ~12s instead of a flat 5s block that switched off, and the drive rises
+// over ~8s but settles over ~20s. Replaying that session: 3.8 -> 1.5
+// direction swings a minute, changes ~2.5x gentler, same overall range.
 const RHYTHM_DRIVE_MIN = 0.85;
 const RHYTHM_DRIVE_MAX = 1.3;
-const RHYTHM_DRIVE_GLIDE_MS = 4000;
+const RHYTHM_DRIVE_RISE_MS = 8000;
+const RHYTHM_DRIVE_FALL_MS = 20000;
+const RHYTHM_PAYOFF_GLOW_ADD = 0.07;
+const RHYTHM_PAYOFF_GLOW_CAP = 0.14;
+const RHYTHM_PAYOFF_GLOW_HALFLIFE_MS = 12000;
 const RHYTHM_MAX_BPM = 180;
+let rhythmPayoffGlow = 0;
+let rhythmPayoffSeenAt = 0;
 let rhythmReactive = true;
 let rhythmDrive = 1;
 let rhythmDriveTargetValue = 1;
@@ -841,8 +853,8 @@ let rhythmDriveTargetAt = 0;
 // Rhythm Mode's tempo only follows it with Tempo Follows Energy on.
 function rhythmDriveTarget() {
   let d = 1 + Math.max(-0.08, Math.min(0.08, (readEngagement() - 1.6) * 0.16));
-  if (lastKnownBarrage > 0 || anticipationActive) d += 0.12;
-  else if (Date.now() - lastAnyPayoffAt < 5000) d += 0.08;
+  if (lastKnownBarrage > 0 || anticipationActive) d += 0.1;
+  d += rhythmPayoffGlow;
   if (isSurgeActive()) d += 0.05;
   if (overdriveActive) d += 0.1;
   if (floaterBarrageActive) d -= 0.12;
@@ -857,10 +869,16 @@ function rhythmTempoDrive() {
 
 function updateRhythmDrive() {
   const now = Date.now();
-  if (now - rhythmDriveTargetAt > 250) { rhythmDriveTargetValue = rhythmDriveTarget(); rhythmDriveTargetAt = now; }
   const dt = now - rhythmDriveUpdatedAt;
   rhythmDriveUpdatedAt = now;
-  rhythmDrive += (rhythmDriveTargetValue - rhythmDrive) * (1 - Math.exp(-dt / RHYTHM_DRIVE_GLIDE_MS));
+  rhythmPayoffGlow *= Math.pow(0.5, dt / RHYTHM_PAYOFF_GLOW_HALFLIFE_MS);
+  if (lastAnyPayoffAt > rhythmPayoffSeenAt) {
+    if (rhythmPayoffSeenAt) rhythmPayoffGlow = Math.min(RHYTHM_PAYOFF_GLOW_CAP, rhythmPayoffGlow + RHYTHM_PAYOFF_GLOW_ADD);
+    rhythmPayoffSeenAt = lastAnyPayoffAt; // the first read is the session-start seed, not a payoff
+  }
+  if (now - rhythmDriveTargetAt > 250) { rhythmDriveTargetValue = rhythmDriveTarget(); rhythmDriveTargetAt = now; }
+  const tau = rhythmDriveTargetValue > rhythmDrive ? RHYTHM_DRIVE_RISE_MS : RHYTHM_DRIVE_FALL_MS;
+  rhythmDrive += (rhythmDriveTargetValue - rhythmDrive) * (1 - Math.exp(-dt / tau));
 }
 
 // Beat patterns - how the beat moves across the grid. 'mix' rotates

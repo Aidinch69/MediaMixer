@@ -41,6 +41,7 @@ class RuntimeState:
     def __init__(self, config: Config):
         self._lock = threading.RLock()
         self._config = config
+        self.recent_shown: dict = {}  # path -> last time it went on a screen (see recent_paths)
 
         self.tone_index = 0
         self.binaural_knob = 0.30
@@ -166,6 +167,14 @@ class RuntimeState:
             return ""
 
     # -- rotation --
+    def recent_paths(self, window_s: float) -> set:
+        """Clips shown within the last `window_s` seconds (pruning older ones)."""
+        cutoff = time.time() - window_s
+        with self._lock:
+            for path in [p for p, t in self.recent_shown.items() if t < cutoff]:
+                del self.recent_shown[path]
+            return set(self.recent_shown)
+
     def rotation_context(self):
         with self._lock:
             return (
@@ -182,6 +191,8 @@ class RuntimeState:
                 return
             screen = self.screens[index]
             screen.current = current
+            if current:
+                self.recent_shown[current] = time.time()
             screen.next = nxt
             screen.expires_at = expires_at
             screen.tension = 1.0
