@@ -848,6 +848,7 @@ function rhythmDriveTarget() {
   if (floaterBarrageActive) d -= 0.12;
   if (autopilotZone === 'vault') d -= 0.06;
   else if (autopilotZone === 'jackpot') d += 0.04;
+  if (typeof windDownK === 'function') d -= 0.2 * windDownK(); // winding down settles everything
   return Math.max(TUNING.RHYTHM_DRIVE_MIN, Math.min(TUNING.RHYTHM_DRIVE_MAX, d));
 }
 

@@ -2,6 +2,20 @@ html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
 body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .theater{position:fixed;inset:0;z-index:1;width:100%;height:100vh;height:100dvh;background:#000;padding:10px;box-sizing:border-box;transition:box-shadow .3s ease}
 #floater-barrage-dim{position:fixed;inset:0;z-index:13;background:#000;opacity:0;pointer-events:none}
+#wind-down-dim{position:fixed;inset:0;z-index:13;background:#05020c;opacity:0;pointer-events:none;transition:opacity 2s linear}
+.session-intent{position:fixed;inset:0;z-index:44;display:flex;align-items:center;justify-content:center;background:rgba(5,2,12,.72);backdrop-filter:blur(6px);padding:16px;box-sizing:border-box}
+.session-intent-card{width:min(520px,100%);background:linear-gradient(165deg,#1b0f33,#0c0620);border:1px solid #3d2a5c;border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.session-intent-title{font-size:1.1rem;font-weight:bold;color:#e6d4ff;text-align:center}
+.session-intent-options{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.session-intent-options button{margin:0;width:auto;display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 8px;background:#140a22;border:1px solid #3d2a5c;border-radius:12px;color:#fff;font-size:1rem;font-weight:bold;cursor:pointer;transition:.15s}
+.session-intent-options button:hover{border-color:#d699ff;box-shadow:0 0 16px rgba(214,153,255,.3)}
+.session-intent-options span{font-size:.68rem;font-weight:normal;color:#a894c8;text-align:center}
+.session-intent-scenes{justify-content:center}
+.session-intent-length{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;font-size:.75rem;color:#a894c8}
+.session-length-btn{margin:0;width:auto;padding:5px 10px;border-radius:999px;background:#140a22;border:1px solid #3d2a5c;color:#d6c4f2;font-size:.72rem;cursor:pointer}
+.session-length-btn.active{border-color:#d699ff;background:#2f1d4f;color:#fff}
+.session-intent-skip{margin:0;background:none;border:none;color:#8e8e93;font-size:.75rem;cursor:pointer;text-decoration:underline}
+@media (max-width:480px){.session-intent-options{grid-template-columns:1fr}}
 #fx-layer{position:fixed;inset:0;z-index:15;overflow:hidden;pointer-events:none}
 .fx-barrage-sprite{border-radius:6px;overflow:hidden;box-shadow:0 0 24px rgba(0,0,0,.6)}
 .fx-sprite{position:absolute;top:0;left:0;opacity:0;will-change:transform,opacity;

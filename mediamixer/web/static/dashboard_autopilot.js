@@ -633,10 +633,14 @@ function autopilotTick() {
     cycleTone();
   }
 
-  if (!overdriveActive) fetch('/api/intensity?barrage=' + barrageP.toFixed(3) + '&jackpot=' + jackpotP.toFixed(3));
+  // A wind-down scales Auto-Pilot down instead of fighting it.
+  const wdOdds = typeof windDownOddsMult === 'function' ? windDownOddsMult() : 1;
+  if (typeof windDownPaceFloor === 'function') targetPace = Math.max(targetPace, windDownPaceFloor());
+  const wdFxTarget = typeof windDownFxCap === 'function' ? Math.min(fxTarget, windDownFxCap()) : fxTarget;
+  if (!overdriveActive) fetch('/api/intensity?barrage=' + (barrageP * wdOdds).toFixed(3) + '&jackpot=' + (jackpotP * wdOdds).toFixed(3));
   fetch('/api/novelty?bonus=' + noveltyBonus.toFixed(3));
   if (targetPace !== autopilotLastPace) { autopilotLastPace = targetPace; pace(targetPace, true); }
-  if (fxCount !== fxTarget) setFxCount(fxTarget);
+  if (fxCount !== wdFxTarget) setFxCount(wdFxTarget);
 
   if (typeof logEvent === 'function') {
     logEvent('autopilot.tick', {

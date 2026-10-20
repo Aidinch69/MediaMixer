@@ -40,6 +40,7 @@ window.onload = () => {
   loadTastePrefs();
   loadLivingPrefs();
   loadGesturePrefs();
+  loadSessionPrefs();
   loadScenes();
   loadAnticipationPrefs();
   loadAutopilotPrefs();

@@ -26,6 +26,7 @@
 </div>
 <div id="audio-glow"></div>
 <div id="floater-barrage-dim"></div>
+<div id="wind-down-dim"></div>
 <div id="fx-layer"></div>
 <div id="disco-rain"></div>
 <div id="disco-border"></div>
@@ -265,6 +266,19 @@
   </div>
 
   <div class="panel-tab" data-tab="flow">
+    <details class="settings-section">
+      <summary><span class="section-title">🧭 Session</span><span class="settings-section-desc">Start how you want, and wind down gently at the end.</span></summary>
+      <div class="settings-section-body">
+        <div class="metric" id="session-status">Open-ended session</div>
+        <div class="grid">
+          <button class="badge" onclick="openSessionIntent()">🧭 Start a session…</button>
+          <button class="badge" onclick="startWindDown()">🌙 Wind down (5 min)</button>
+        </div>
+        <button class="badge" id="session-keep-going" onclick="cancelWindDown()" style="display:none">🌊 Keep going</button>
+        <div class="slider"><label>Ask at the start of a session</label><button class="badge" id="session-ask-toggle" onclick="toggleSessionAsk()">ON</button></div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">When you come back after 30+ minutes away, a card asks how you want this session: Drift (calm, Theta, breathing tiles), Ride (Auto-Pilot with the beat on Mood) or Chaos (rapid, punchy, Beta), or one of your Scenes - plus an optional length. With a length set, the wind-down starts 5 minutes before the end. Wind-down eases everything toward calm over about 5 minutes: energy and tempo settle, clips play longer, floaters thin out, barrage and jackpot odds fall, build-ups and slow-mo/double exposure pause, the binaural beat moves to Theta and the screen dims a little. Nothing stops, nothing you've saved changes, and Keep going restores it all.</p></details>
+      </div>
+    </details>
     <details class="settings-section">
       <summary><span class="section-title">🎬 Auto-Pilot<span class="experimental-pill">Experimental</span></span><span class="section-live" data-live="autopilot"></span><span class="settings-section-desc">Scripts pace, odds, and content novelty through a repeating calm-to-climax arc.</span></summary>
       <div class="settings-section-body">
@@ -551,6 +565,25 @@
   </details>
 </div>
 <audio id="overlay-audio" loop></audio>
+<div id="session-intent" class="session-intent" style="display:none" onclick="if (event.target === this) closeSessionIntent()">
+  <div class="session-intent-card">
+    <div class="session-intent-title">How do you want this session?</div>
+    <div class="session-intent-options">
+      <button onclick="chooseSessionIntent('drift')">🌊 Drift<span>calm, dreamy · Theta</span></button>
+      <button onclick="chooseSessionIntent('ride')">🎢 Ride<span>Auto-Pilot takes you through it</span></button>
+      <button onclick="chooseSessionIntent('chaos')">⚡ Chaos<span>fast, punchy · Beta</span></button>
+    </div>
+    <div class="scene-chips session-intent-scenes" id="session-intent-scenes"></div>
+    <div class="session-intent-length">
+      <span>Length</span>
+      <button class="session-length-btn" data-min="0" onclick="setSessionLength(0)">Open</button>
+      <button class="session-length-btn" data-min="15" onclick="setSessionLength(15)">15 min</button>
+      <button class="session-length-btn" data-min="30" onclick="setSessionLength(30)">30 min</button>
+      <button class="session-length-btn" data-min="60" onclick="setSessionLength(60)">60 min</button>
+    </div>
+    <button class="session-intent-skip" onclick="closeSessionIntent()">Just start - keep things as they are</button>
+  </div>
+</div>
 <div id="toast"></div>
 <script>window.LAYOUT_PRESETS = {{ layout_presets_json | tojson }};</script>
 <!-- Classic scripts sharing one global scope. Order matters only for code
@@ -574,6 +607,7 @@
 <script src="{{ url_for('static', filename='dashboard_pulse.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_living.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_gestures.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_session.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_scenes.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_master.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_events.js') }}"></script>

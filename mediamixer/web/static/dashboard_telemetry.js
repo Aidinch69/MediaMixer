@@ -164,6 +164,9 @@ function initTelemetry() {
     (ok ? { k: 'scene.apply', d: { name, source: source === 'zone' ? 'zone' : 'manual' } } : undefined));
   telemetryWrap('swipeTile', null, ([idx, dir]) => ({ k: 'gesture.swipe', d: { tile: idx, dir } }));
   telemetryWrap('toggleTilePin', () => null, ([idx]) => ({ k: 'gesture.pin', d: { tile: idx, on: !!(tileElements[idx] && tileElements[idx].classList.contains('tile-pinned')) } }));
+  telemetryWrap('chooseSessionIntent', null, ([key]) => ({ k: 'session.intent', d: { intent: key, lengthMin: sessionLengthMin } }));
+  telemetryWrap('startWindDown', () => !!windDown, (args, was) => (was ? undefined : { k: 'session.windDown' }));
+  telemetryWrap('cancelWindDown', () => (windDown ? Math.round(windDownK() * 100) : null), (args, pct) => (pct == null ? undefined : { k: 'session.keepGoing', d: { atPct: pct } }));
   telemetryWrap('showMantra', null, ([style]) => ({ k: 'mantra', d: { style } }));
 
   // Spin / bank-or-push.
