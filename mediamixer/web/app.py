@@ -28,6 +28,9 @@ log = logging.getLogger(__name__)
 
 _HERE = os.path.dirname(__file__)
 STREAM_INTERVAL_S = 0.3
+SCENE_NAME_MAX = 40
+SCENE_DATA_MAX = 32000
+SCENE_ZONES = ("chase", "color", "jackpot", "vault", "rhythm")
 EVENT_BATCH_MAX = 500
 EVENT_DATA_MAX = 8000  # session.open carries the tuning overrides
 _NO_SESSION_PREFIXES = ("/media/", "/audio/", "/overlay_fx/", "/spirals/", "/assets/", "/sw.js")
@@ -177,6 +180,9 @@ def create_app(ctx: AppContext) -> Flask:
             "audio_path": _relative_audio_path(config, session.overlay.current_path()),
             "audio_available": bool(session.overlay.tracks),
             "synth": {"carrier_hz": carrier_hz, "beat_hz": beat_hz, "iso": iso},
+            "pace_idx": pace_idx,
+            "tone_index": snap["tone_index"],
+            "binaural_knob": snap["binaural_knob"],
             "lock_label": (
                 "Continuous Mode"
                 if pace_idx == 3
@@ -526,6 +532,86 @@ def create_app(ctx: AppContext) -> Flask:
         if key == "binaural":
             g.session.state.set_binaural(val)
         return jsonify(ok=True)
+
+    @app.route("/api/tone")
+    def api_tone():
+        try:
+            index = int(request.args.get("index", ""))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="invalid tone index"), 400
+        g.session.state.set_tone(index)
+        return jsonify(ok=True)
+
+    # -- scenes: saved looks, stored in the engine's DB so every device shares them --
+    def _scene_zones() -> dict:
+        try:
+            saved = json.loads(db.get_setting("scene_zones", "{}"))
+        except ValueError:
+            saved = {}
+        return {z: saved.get(z) for z in SCENE_ZONES}
+
+    def _scene_payload():
+        return jsonify(
+            scenes=[{"name": r["name"], "data": json.loads(r["data"]), "updated_at": r["updated_at"]} for r in db.list_scenes()],
+            zones=_scene_zones(),
+        )
+
+    def _clean_scene_name(raw) -> str:
+        return " ".join(str(raw or "").split())[:SCENE_NAME_MAX]
+
+    @app.route("/api/scenes")
+    def api_scenes():
+        return _scene_payload()
+
+    @app.route("/api/scenes", methods=["POST"])
+    def api_scenes_save():
+        body = request.get_json(silent=True, force=True) or {}
+        name = _clean_scene_name(body.get("name"))
+        if not name or not isinstance(body.get("data"), dict):
+            return jsonify(ok=False, error="a scene needs a name and data"), 400
+        data = json.dumps(body["data"], separators=(",", ":"))
+        if len(data) > SCENE_DATA_MAX:
+            return jsonify(ok=False, error="scene data too large"), 400
+        db.save_scene(name, data)
+        return _scene_payload()
+
+    @app.route("/api/scenes/delete", methods=["POST"])
+    def api_scenes_delete():
+        name = _clean_scene_name((request.get_json(silent=True, force=True) or {}).get("name"))
+        db.delete_scene(name)
+        zones = _scene_zones()
+        if name in zones.values():  # drop zone links to the deleted scene
+            db.set_setting("scene_zones", json.dumps({z: (None if v == name else v) for z, v in zones.items()}))
+        return _scene_payload()
+
+    @app.route("/api/scenes/rename", methods=["POST"])
+    def api_scenes_rename():
+        body = request.get_json(silent=True, force=True) or {}
+        old, new = _clean_scene_name(body.get("from")), _clean_scene_name(body.get("to"))
+        if not old or not new:
+            return jsonify(ok=False, error="need from and to"), 400
+        if old != new and not db.rename_scene(old, new):
+            return jsonify(ok=False, error="that name is taken or the scene is gone"), 409
+        zones = _scene_zones()
+        if old in zones.values():
+            db.set_setting("scene_zones", json.dumps({z: (new if v == old else v) for z, v in zones.items()}))
+        return _scene_payload()
+
+    @app.route("/api/scenes/zones", methods=["POST"])
+    def api_scenes_zones():
+        body = request.get_json(silent=True, force=True) or {}
+        zone = body.get("zone")
+        value = body.get("value")
+        if zone not in SCENE_ZONES:
+            return jsonify(ok=False, error="unknown zone"), 400
+        if value not in (None, "auto"):
+            value = _clean_scene_name(value)
+            if value not in {r["name"] for r in db.list_scenes()}:
+                return jsonify(ok=False, error="unknown scene"), 400
+        zones = _scene_zones()
+        zones[zone] = value
+        db.set_setting("scene_zones", json.dumps(zones))
+        return _scene_payload()
 
     @app.route("/api/cycle_tone")
     def api_cycle_tone():

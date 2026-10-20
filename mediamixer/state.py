@@ -109,6 +109,10 @@ class RuntimeState:
             beat = (4.0 + self.binaural_knob * 6.0) * max_tension
             return carrier, beat, self.isochronic_pulse
 
+    def set_tone(self, index: int):
+        with self._lock:
+            self.tone_index = index % len(self._config.tone_modes)
+
     def cycle_tone(self):
         with self._lock:
             self.tone_index = (self.tone_index + 1) % len(self._config.tone_modes)

@@ -112,6 +112,10 @@
     <div style="margin-top:4px;color:#aaa;font-size:11px" id="t-lock">…</div>
     <div style="margin-top:4px;color:#ff668c;font-size:11px;font-weight:bold" id="t-barrage"></div>
   </div>
+  <div class="scene-bar">
+    <div class="scene-bar-title">🎬 Scenes</div>
+    <div class="scene-chips" id="scene-chips"></div>
+  </div>
   <div class="panel-tabs" id="panel-tabs">
     <button class="panel-tab-btn" data-tab="display" onclick="switchPanelTab('display')">🖥️ Display</button>
     <button class="panel-tab-btn" data-tab="autopilot" onclick="switchPanelTab('autopilot')">🤖 Auto-Pilot</button>
@@ -215,7 +219,11 @@
           <span id="l-autopilot-zone" class="zone-readout"></span>
         </div>
         <button class="badge" onclick="switchItUp()">🔀 Switch It Up</button>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Scripts pace, barrage/jackpot odds, floater count, and content novelty through a calm -&gt; building -&gt; climax -&gt; cooldown arc, instead of those staying wherever you last set them. "Typical Pace" is a baseline, not a fixed timer - each zone actually extends itself for as long as you're genuinely engaged with it (up to a cap) and cuts short if you're not, so a real cycle can run noticeably shorter or longer than this number depending on how the session's actually going. Each cycle also picks a fresh "zone" (Chase/Color/Jackpot/Vault) that leans the climax toward a different mix of the passive stuff above - one cycle's climax might be chase-flash heavy, the next a Color Rush, the next sealed tiles - instead of every climax looking the same. Turns Floating Overlay on if it's off. Does not touch Mosaic Fit - that stays exactly wherever you set it manually. "Switch It Up" forces an immediate zone change plus a fresh novelty push, for whenever the satiation logic's own timing isn't fast enough for you.</p></details>
+        <div class="slider">
+          <label>Zone Scenes</label>
+          <div id="scene-zone-links" class="scene-zone-links"></div>
+        </div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Scripts pace, barrage/jackpot odds, floater count, and content novelty through a calm -&gt; building -&gt; climax -&gt; cooldown arc, instead of those staying wherever you last set them. "Typical Pace" is a baseline, not a fixed timer - each zone actually extends itself for as long as you're genuinely engaged with it (up to a cap) and cuts short if you're not, so a real cycle can run noticeably shorter or longer than this number depending on how the session's actually going. Each cycle also picks a fresh "zone" (Chase/Color/Jackpot/Vault) that leans the climax toward a different mix of the passive stuff above - one cycle's climax might be chase-flash heavy, the next a Color Rush, the next sealed tiles - instead of every climax looking the same. Turns Floating Overlay on if it's off. Does not touch Mosaic Fit - that stays exactly wherever you set it manually. "Switch It Up" forces an immediate zone change plus a fresh novelty push, for whenever the satiation logic's own timing isn't fast enough for you. Zone Scenes: link a zone to one of your Scenes (or Auto, for any of them at random) and it blends in whenever that zone starts - Auto-Pilot keeps steering pace and floater count itself, and the layout too while zone-driven Dynamic Mosaic is on.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -430,7 +438,7 @@
         <button onclick="nextAudio()">⏭️ Next Audio</button>
         <div class="slider"><label>Rotation Pace: <b><span id="l-pace">{{ pace_label }}</span></b></label><input type="range" id="pace-input" min="0" max="3" step="1" value="{{ pace_idx }}" onchange="pace(this.value)"></div>
         <div class="slider"><label>Carrier: <b><span id="l-freq">{{ tone_hz }} Hz</span></b></label><button onclick="cycleTone()">Cycle Frequency</button></div>
-        <div class="slider"><label>Binaural Beat: <b><span id="l-beat">{{ beat_knob }}</span></b></label><input type="range" min="0" max="1" step="0.01" value="{{ beat_knob }}" oninput="vec('binaural',this.value);document.getElementById('l-beat').innerText=this.value"></div>
+        <div class="slider"><label>Binaural Beat: <b><span id="l-beat">{{ beat_knob }}</span></b></label><input type="range" id="beat-input" min="0" max="1" step="0.01" value="{{ beat_knob }}" oninput="vec('binaural',this.value);document.getElementById('l-beat').innerText=this.value"></div>
         <div class="slider"><label>Binaural Tone: <b><span id="l-binaural-vol">80%</span></b></label><input type="range" id="binaural-vol-input" min="0" max="100" value="80" oninput="setBinauralVolume(this.value)"></div>
         <div class="slider"><label>Overlay Track: <b><span id="l-overlay-vol">85%</span></b></label><input type="range" id="overlay-vol-input" min="0" max="100" value="85" oninput="setOverlayVolume(this.value)"></div>
         <div class="slider"><label>Tile Audio: <b><span id="l-tile-audio-vol">0%</span></b></label><input type="range" id="tile-audio-vol-input" min="0" max="100" value="0" oninput="setTileAudioVolume(this.value)"></div>
@@ -521,6 +529,7 @@
 <script src="{{ url_for('static', filename='dashboard_boot.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_layers.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_pulse.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_scenes.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_events.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_telemetry.js') }}"></script>
 </body>

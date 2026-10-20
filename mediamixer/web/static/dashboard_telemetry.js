@@ -155,6 +155,8 @@ function initTelemetry() {
     ([piece], rushing) => (rushing ? undefined : { k: 'splash.piece', d: { piece: lastColorSplashPiece || piece } }));
   telemetryWrap('startFloaterBarrage', null, ([ms, source], before, started) =>
     (started ? { k: 'floaterBarrage.trigger', d: { source: source === 'auto' ? 'auto' : 'preview' } } : undefined));
+  telemetryWrap('applySceneByName', null, ([name, source], before, ok) =>
+    (ok ? { k: 'scene.apply', d: { name, source: source === 'zone' ? 'zone' : 'manual' } } : undefined));
   telemetryWrap('showMantra', null, ([style]) => ({ k: 'mantra', d: { style } }));
 
   // Spin / bank-or-push.

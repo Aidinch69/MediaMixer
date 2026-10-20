@@ -186,7 +186,10 @@ function applyRandomStart(vid, idx) {
   vid.addEventListener('loadedmetadata', onMeta);
 }
 
+let lastStatusData = null; // the latest status push (Scenes reads pace/tone/beat from it)
+
 function render(d) {
+  lastStatusData = d;
   if (!d.screens || !d.screens.length) return;
   const tilesRebuilt = ensureTiles(d.screens.length);
   const columnsChanged = d.columns !== currentColumns;

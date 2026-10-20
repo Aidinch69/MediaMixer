@@ -422,6 +422,20 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    picking the right page instead of scrolling past everything else to
    find it. Current tab persists in localStorage, same as every other
    panel preference here. */
+.scene-bar{display:flex;flex-direction:column;gap:6px}
+.scene-bar-title{font-size:.7rem;font-weight:bold;letter-spacing:.06em;color:#b98cff;text-transform:uppercase}
+.scene-chips{display:flex;flex-wrap:wrap;gap:6px}
+.scene-chip{display:inline-flex;align-items:center;gap:6px;background:#1a0f2b;border:1px solid #361e52;color:#e6d4ff;padding:6px 11px;border-radius:999px;font-size:.78rem;cursor:pointer;width:auto;margin:0}
+.scene-chip:hover{border-color:#8a5bd0}
+.scene-chip.active{background:linear-gradient(135deg,#4a2a7a,#2f1d4f);border-color:#d699ff;color:#fff;box-shadow:0 0 12px rgba(214,153,255,.35)}
+.scene-chip.scene-add{border-style:dashed;color:#b98cff}
+.scene-chip.scene-manage{color:#8e8e93}
+.scene-chip-tools{display:inline-flex;gap:2px}
+.scene-chip-tools button{background:none;border:none;padding:0 2px;margin:0;width:auto;font-size:.8rem;cursor:pointer}
+.scene-empty{font-size:.75rem;color:#8e8e93;align-self:center}
+.scene-zone-links{display:flex;flex-direction:column;gap:4px;width:100%}
+.scene-zone-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.78rem}
+.scene-zone-row select{background:#1a0f2b;color:#e6d4ff;border:1px solid #361e52;border-radius:6px;padding:3px 6px;max-width:58%}
 .panel-tabs{display:flex;gap:6px;position:sticky;top:0;z-index:1;background:inherit;padding-bottom:2px}
 .panel-tab-btn{flex:1;background:linear-gradient(180deg,#1a0f2b,#140a22);border:1px solid #361e52;color:#9a7ab8;padding:9px 4px;border-radius:8px;cursor:pointer;font-weight:bold;text-transform:uppercase;font-size:.68rem;transition:.15s}
 .panel-tab-btn:hover{border-color:#b84dff;color:#d6a3ff}

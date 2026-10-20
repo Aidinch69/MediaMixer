@@ -41,6 +41,15 @@ CREATE TABLE IF NOT EXISTS video_weights (
     debuted_at  REAL
 );
 CREATE INDEX IF NOT EXISTS idx_video_weights_folder ON video_weights(folder_name);
+CREATE TABLE IF NOT EXISTS scenes (
+    name        TEXT PRIMARY KEY,
+    data        TEXT NOT NULL,
+    updated_at  REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS app_settings (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS events (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     ts       REAL NOT NULL,
@@ -255,6 +264,42 @@ class Database:
             "SELECT video_path FROM video_weights WHERE " + _FRESH_CONDITION + " ORDER BY added_at ASC"
         ).fetchall()
         return [r["video_path"] for r in rows]
+
+    # -- scenes (saved looks, shared by every device) --
+    def list_scenes(self) -> list:
+        return self._connect().execute("SELECT name, data, updated_at FROM scenes ORDER BY name COLLATE NOCASE").fetchall()
+
+    def save_scene(self, name: str, data: str):
+        conn = self._connect()
+        conn.execute(
+            "INSERT INTO scenes (name, data, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at",
+            (name, data, time.time()),
+        )
+        conn.commit()
+
+    def delete_scene(self, name: str) -> bool:
+        conn = self._connect()
+        cur = conn.execute("DELETE FROM scenes WHERE name=?", (name,))
+        conn.commit()
+        return cur.rowcount > 0
+
+    def rename_scene(self, old: str, new: str) -> bool:
+        conn = self._connect()
+        if conn.execute("SELECT 1 FROM scenes WHERE name=?", (new,)).fetchone():
+            return False
+        cur = conn.execute("UPDATE scenes SET name=?, updated_at=? WHERE name=?", (new, time.time(), old))
+        conn.commit()
+        return cur.rowcount > 0
+
+    def get_setting(self, key: str, default=None):
+        row = self._connect().execute("SELECT value FROM app_settings WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str):
+        conn = self._connect()
+        conn.execute("INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+        conn.commit()
 
     # -- event log --
     def add_events(self, session: str, events: list):
