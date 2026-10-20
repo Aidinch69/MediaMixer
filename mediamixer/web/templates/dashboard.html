@@ -204,11 +204,12 @@
         <div class="slider"><label>Slow-Mo Moments</label><button class="badge" id="living-slowmo-toggle" onclick="toggleLiving('slowmo')">ON</button></div>
         <div class="slider"><label>Double Exposure</label><button class="badge" id="living-double-toggle" onclick="toggleLiving('double')">ON</button></div>
         <div class="slider"><label>Spirals React to Audio</label><button class="badge" id="living-spiral-audio-toggle" onclick="toggleLiving('spiralAudio')">ON</button></div>
+        <div class="slider"><label>Colour Mood</label><button class="badge" id="living-mood-toggle" onclick="toggleLiving('colorMood')">ON</button></div>
         <div class="grid">
           <button class="badge" onclick="startSlowmo(pickAmbientTarget())">⏱ Preview Slow-Mo</button>
           <button class="badge" onclick="startDoubleExposure(pickAmbientTarget())">👥 Preview Double</button>
         </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Breathing Tiles: every tile slowly drifts and zooms a few percent on its own cycle, faster or slower with the Shared Pulse. Slow-Mo Moments: at high-energy moments one tile eases into slow motion for a couple of seconds with a motion-trail ghost, a soft push-in and a vignette, then eases back - it only picks a tile with plenty already buffered, so it never coincides with a real stall. Double Exposure: now and then a second clip fades in over a tile as a light blend, then separates. Spirals React to Audio: hits in the overlay track (or tile audio) give the spirals a quick swell - needs Audio-Reactive FX on. Fine-tune amounts and timing in Master Controls → Living Screen.</p></details>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Breathing Tiles: every tile slowly drifts and zooms a few percent on its own cycle, faster or slower with the Shared Pulse. Slow-Mo Moments: at high-energy moments one tile eases into slow motion for a couple of seconds with a motion-trail ghost, a soft push-in and a vignette, then eases back - it only picks a tile with plenty already buffered, so it never coincides with a real stall. Double Exposure: now and then a second clip fades in over a tile as a light blend, then separates. Colour Mood: the screen-edge glow, Light Leaks and Duotone palettes follow how warm or cool the clips on screen are (from Clip DNA), shifting gradually - jackpot flashes keep their own rotating colours. Spirals React to Audio: hits in the overlay track (or tile audio) give the spirals a quick swell - needs Audio-Reactive FX on. Fine-tune amounts and timing in Master Controls → Living Screen.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -392,7 +393,7 @@
         <div class="slider"><label>Strength: <b><span id="l-taste-strength">25%</span></b></label><input type="range" id="taste-strength-input" min="0" max="100" step="5" value="25" oninput="setTasteStrength(this.value)"></div>
         <div class="metric" id="taste-status" style="white-space:pre-line"></div>
         <button class="badge" onclick="resetTaste()">Reset what it learned</button>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Watches how often you heart tiles while each tile FX or beat pattern is showing, compared with your usual rate, and nudges the random picks toward the ones you like - never away from variety: at 25% something you like 3x more gets picked about 1.3x as often, and something you like less still shows up. It leans twice as hard while your engagement is dipping, and older sessions count a bit less each time, so it follows your taste as it changes. 0% turns it off.</p></details>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Watches how often you heart tiles while each tile FX or beat pattern is showing, compared with your usual rate, and nudges the random picks toward the ones you like - never away from variety: at 25% something you like 3x more gets picked about 1.3x as often, and something you like less still shows up. It leans twice as hard while your engagement is dipping, and older sessions count a bit less each time, so it follows your taste as it changes. The same strength also leans clip picks toward the kinds of clips (Clip DNA: brighter/darker, warmer/cooler, more vivid/muted, calmer/livelier) you heart most per play across all your history. 0% turns it off.</p></details>
       </div>
     </details>
     <details class="settings-section">

@@ -211,6 +211,8 @@ function loadTastePrefs() {
   const s = Number(loadJsonPref('mm_taste_strength', 0.25));
   tasteStrength = Number.isFinite(s) ? Math.max(0, Math.min(1, s)) : 0.25;
   saveTaste();
+  sendTasteStrength();
+  loadDnaTaste();
   updateTasteUi();
 }
 
@@ -263,8 +265,27 @@ function weightedPick(items, weightOf) {
 function setTasteStrength(v) {
   tasteStrength = Math.max(0, Math.min(1, parseInt(v, 10) / 100));
   saveJsonPref('mm_taste_strength', tasteStrength);
+  sendTasteStrength();
   updateTasteUi();
 }
+
+// The engine leans its clip picks by Clip DNA traits at the same strength.
+function sendTasteStrength() { fetch('/api/taste?s=' + tasteStrength.toFixed(2)).catch(() => {}); }
+
+let dnaTasteText = '';
+function loadDnaTaste() {
+  fetch('/api/dna/taste').then((r) => r.json()).then((d) => {
+    if (!d.ready) { dnaTasteText = 'Clips: still analysing'; return; }
+    const parts = [];
+    Object.values(d.traits).forEach((t) => t.lifts.forEach((lift, k) => {
+      if (k !== 1 && Math.abs(lift - 1) >= 0.08) parts.push([t.labels[k], lift]);
+    }));
+    parts.sort((a, b) => Math.abs(Math.log(b[1])) - Math.abs(Math.log(a[1])));
+    dnaTasteText = 'Clips you heart most per play: ' + (parts.map(([l, x]) => l + ' x' + x.toFixed(2)).join(' · ') || 'no strong lean');
+    updateTasteUi();
+  }).catch(() => {});
+}
+setInterval(loadDnaTaste, 600000);
 
 function resetTaste() {
   taste = { fx: {}, pattern: {}, base: { likes: 0, ms: 0 }, rhythmBase: { likes: 0, ms: 0 } };
@@ -289,6 +310,6 @@ function updateTasteUi() {
   const fx = describe('fx', TILE_FX_NAMES.filter((k) => k !== 'shock'), (k) => TILE_FX_KINDS[k].label);
   const pat = describe('pattern', RHYTHM_PATTERN_NAMES, (k) => RHYTHM_PATTERNS[k].label);
   el.innerText = (taste.base.likes < 10 ? 'Still learning - ' + Math.round(taste.base.likes) + ' likes so far.\n' : '')
-    + 'Tile FX: ' + (fx || 'no lean yet') + '\nBeat patterns: ' + (pat || 'no lean yet');
+    + 'Tile FX: ' + (fx || 'no lean yet') + '\nBeat patterns: ' + (pat || 'no lean yet') + (dnaTasteText ? '\n' + dnaTasteText : '');
 }
 setInterval(updateTasteUi, 5000);

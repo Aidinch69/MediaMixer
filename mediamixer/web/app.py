@@ -541,6 +541,25 @@ def create_app(ctx: AppContext) -> Flask:
             return jsonify(ok=False, error="invalid energy"), 400
         return jsonify(ok=True)
 
+    @app.route("/api/taste")
+    def api_taste():
+        try:
+            g.session.state.taste_strength = max(0.0, min(1.0, float(request.args.get("s", ""))))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="invalid strength"), 400
+        return jsonify(ok=True)
+
+    @app.route("/api/dna/taste")
+    def api_dna_taste():
+        taste = library.dna_taste(db)
+        if not taste:
+            return jsonify(ready=False, traits={})
+        out = {}
+        for trait, info in taste.items():
+            low, high = library.DNA_TASTE_TRAITS[trait]
+            out[trait] = {"labels": [low, "middle", high], "lifts": info["lifts"]}
+        return jsonify(ready=True, traits=out)
+
     @app.route("/api/dna/status")
     def api_dna_status():
         counts = db.dna_counts()

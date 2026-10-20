@@ -1,6 +1,7 @@
 """Filesystem discovery and reward-weighted picking of folders/videos."""
 from __future__ import annotations
 
+import math
 import os
 import random
 import time
@@ -111,6 +112,7 @@ def pick_video(
     exclude: Union[str, Iterable[str], None] = None,
     exploration_bonus: Optional[float] = None,
     energy: float = 1.0,
+    taste_strength: float = 0.0,
 ) -> Optional[str]:
     """Pick a video from `folder`, avoiding `exclude` (one path, or any collection of
     paths - e.g. every video currently showing on another screen, so the same clip
@@ -141,6 +143,11 @@ def pick_video(
         for r in rows
     ]
     _apply_motion_lean(scores, rows, energy, config.dna_motion_bias)
+    if taste_strength > 0:
+        taste = dna_taste(db)
+        if taste:
+            for i, r in enumerate(rows):
+                scores[i] += dna_taste_bonus(taste, r, taste_strength)
     return softmax_pick(items, scores, config.softmax_temp)
 
 
@@ -163,6 +170,68 @@ def _apply_motion_lean(scores: list, rows, energy: float, bias: float):
         m = r["motion"] if "motion" in r.keys() else None
         if m is not None:
             scores[i] += bias * lean * max(-2.5, min(2.5, (m - mean) / sd)) * 0.25
+
+
+# ---- Clip DNA taste ----
+# From all-time hearts per play: for each trait (brightness, warmth,
+# saturation, motion), how much more (or less) you heart clips in its low /
+# middle / high third than clips overall. Plays are the exposure, so a trait
+# that's simply shown a lot doesn't look loved just for being around.
+DNA_TASTE_TRAITS = {
+    "brightness": ("dark", "bright"),
+    "warmth": ("cool", "warm"),
+    "saturation": ("muted", "vivid"),
+    "motion": ("calm", "lively"),
+}
+DNA_TASTE_PRIOR_PLAYS = 40  # pseudo-plays pulling every lift toward 1 until there's real evidence
+DNA_TASTE_RANGE = (0.5, 2.0)
+_dna_taste_cache = {"at": 0.0, "value": None}
+
+
+def dna_taste(db: Database, max_age_s: float = 600) -> Optional[dict]:
+    """{trait: {"cuts": (low, high), "lifts": [low, mid, high]}} or None."""
+    now = time.time()
+    if _dna_taste_cache["value"] is not None and now - _dna_taste_cache["at"] < max_age_s:
+        return _dna_taste_cache["value"]
+    rows = db.dna_heart_rows()
+    total_h = sum(r["heart_count"] for r in rows)
+    total_p = sum(r["play_count"] for r in rows)
+    if len(rows) < 30 or total_h < 20 or total_p <= 0:
+        return None
+    rate = total_h / total_p
+    taste = {}
+    for trait in DNA_TASTE_TRAITS:
+        vals = sorted(r[trait] for r in rows if r[trait] is not None)
+        cuts = (vals[len(vals) // 3], vals[2 * len(vals) // 3])
+        h, p = [0, 0, 0], [0, 0, 0]
+        for r in rows:
+            if r[trait] is None:
+                continue
+            t = 0 if r[trait] < cuts[0] else 2 if r[trait] > cuts[1] else 1
+            h[t] += r["heart_count"]
+            p[t] += r["play_count"]
+        lifts = [
+            max(DNA_TASTE_RANGE[0], min(DNA_TASTE_RANGE[1], (h[t] + DNA_TASTE_PRIOR_PLAYS * rate) / (p[t] * rate + DNA_TASTE_PRIOR_PLAYS * rate)))
+            for t in range(3)
+        ]
+        taste[trait] = {"cuts": cuts, "lifts": [round(x, 3) for x in lifts]}
+    _dna_taste_cache.update(at=now, value=taste)
+    return taste
+
+
+def dna_taste_bonus(taste: Optional[dict], row, strength: float) -> float:
+    """Score bonus for one clip: strength x the sum of log-lifts of its traits."""
+    if not taste or strength <= 0:
+        return 0.0
+    keys = row.keys()
+    bonus = 0.0
+    for trait, info in taste.items():
+        v = row[trait] if trait in keys else None
+        if v is None:
+            continue
+        t = 0 if v < info["cuts"][0] else 2 if v > info["cuts"][1] else 1
+        bonus += math.log(info["lifts"][t])
+    return strength * bonus
 
 
 def gradient_picks(db: Database, folder: str, metric: str, count: int, exclude: Iterable[str] = ()) -> list:

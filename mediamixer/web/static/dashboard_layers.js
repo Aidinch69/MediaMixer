@@ -613,7 +613,7 @@ function duotoneFilter(theme) {
 }
 
 function startDuotoneFx(tile, vid, ms) {
-  const theme = COLOR_THEMES[Math.floor(Math.random() * COLOR_THEMES.length)];
+  const theme = moodDuotoneTheme();
   const filter = duotoneFilter(theme);
   startCanvasOverlayFx(tile, vid, ms, 'fx-duotone-canvas', 2, (canvas, elapsed) => {
     if (!canvas.style.filter) canvas.style.filter = 'url(#' + filter.id + ') contrast(1.15)';
@@ -630,7 +630,7 @@ function startLightLeakFx(tile, ms) {
   leak.style.opacity = '0';
   // Random entry angle and a slight hue shift, so repeat leaks don't look stamped.
   leak.style.setProperty('--leak-angle', Math.round(Math.random() * 360) + 'deg');
-  leak.style.setProperty('--leak-hue', Math.round(Math.random() * 40 - 20) + 'deg');
+  leak.style.setProperty('--leak-hue', Math.round(Math.random() * 30 - 15 + moodLeakHueDeg()) + 'deg');
   const vid = tile.querySelector('video:not(.preload)');
   tile.insertBefore(leak, vid ? vid.nextSibling : tile.firstChild);
   const start = performance.now();

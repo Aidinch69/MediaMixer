@@ -272,21 +272,73 @@ function updateDnaStatus() {
 }
 setInterval(updateDnaStatus, 10000);
 
+// ---- Colour mood ----
+// The ambient colour follows what's on screen: the average warmth of the
+// visible clips (from Clip DNA) tints the screen-edge glow, warms or cools
+// Light Leaks, and steers Duotone toward matching palettes - glided over
+// several seconds. Payoff flashes keep the rotating jackpot themes.
+const MOOD_STOPS = [ // warmth 0 (cool) .. 1 (warm)
+  [0, [70, 150, 255]], // azure
+  [0.5, [190, 95, 255]], // violet
+  [1, [255, 135, 60]], // amber
+];
+let livingColorMood = true;
+let moodWarmth = 0.5; // 0 cool .. 1 warm, smoothed
+
+function moodTargetWarmth() {
+  const ws = currentPaths.map((p) => (videoMetaCache[p] && videoMetaCache[p].dna ? videoMetaCache[p].dna.warmth : null)).filter((w) => w != null);
+  if (!ws.length) return null;
+  const avg = ws.reduce((a, b) => a + b, 0) / ws.length;
+  return Math.max(0, Math.min(1, (avg - 0.06) / 0.18)); // library p10..p90 warmth -> 0..1
+}
+
+function moodRgb(t) {
+  for (let k = 1; k < MOOD_STOPS.length; k++) {
+    const [t0, c0] = MOOD_STOPS[k - 1], [t1, c1] = MOOD_STOPS[k];
+    if (t <= t1) { const f = (t - t0) / (t1 - t0); return c0.map((v, i) => Math.round(v + (c1[i] - v) * f)); }
+  }
+  return MOOD_STOPS[MOOD_STOPS.length - 1][1];
+}
+
+setInterval(() => {
+  const root = document.documentElement.style;
+  if (!livingColorMood) { root.removeProperty('--mood-glow'); return; }
+  const target = moodTargetWarmth();
+  if (target == null) return;
+  moodWarmth += (target - moodWarmth) * 0.12; // ~8s glide at this 500ms tick
+  root.setProperty('--mood-glow', moodRgb(moodWarmth).join(','));
+}, 500);
+
+// Duotone palette that suits the mood: warm themes over warm clips, cool over cool.
+const MOOD_WARM_THEMES = [0, 4]; // ember, rose
+const MOOD_COOL_THEMES = [1, 2, 3]; // violet, emerald, azure
+function moodDuotoneTheme() {
+  if (!livingColorMood || Math.random() < 0.25) return COLOR_THEMES[Math.floor(Math.random() * COLOR_THEMES.length)]; // keep some surprise
+  const pool = moodWarmth >= 0.5 ? MOOD_WARM_THEMES : MOOD_COOL_THEMES;
+  return COLOR_THEMES[pool[Math.floor(Math.random() * pool.length)]];
+}
+
+// Light Leak hue nudge: warmer over warm clips, cooler (pinker/violet) over cool ones.
+function moodLeakHueDeg() {
+  return livingColorMood ? Math.round((0.5 - moodWarmth) * 50) : 0;
+}
+
 // ---- prefs / UI ----
 function loadLivingPrefs() {
-  const p = loadJsonPref('mm_living', { breathe: true, slowmo: true, double: true, spiralAudio: true, gradient: true, doubleMatch: true });
+  const p = loadJsonPref('mm_living', { breathe: true, slowmo: true, double: true, spiralAudio: true, gradient: true, doubleMatch: true, colorMood: true });
   livingBreathe = p.breathe !== false;
   livingSlowmo = p.slowmo !== false;
   livingDouble = p.double !== false;
   livingSpiralAudio = p.spiralAudio !== false;
   livingGradient = p.gradient !== false;
   livingDoubleMatch = p.doubleMatch !== false;
+  livingColorMood = p.colorMood !== false;
   updateLivingUi();
   updateDnaStatus();
 }
 
 function saveLivingPrefs() {
-  saveJsonPref('mm_living', { breathe: livingBreathe, slowmo: livingSlowmo, double: livingDouble, spiralAudio: livingSpiralAudio, gradient: livingGradient, doubleMatch: livingDoubleMatch });
+  saveJsonPref('mm_living', { breathe: livingBreathe, slowmo: livingSlowmo, double: livingDouble, spiralAudio: livingSpiralAudio, gradient: livingGradient, doubleMatch: livingDoubleMatch, colorMood: livingColorMood });
   updateLivingUi();
 }
 
@@ -297,6 +349,7 @@ function toggleLiving(which) {
   else if (which === 'spiralAudio') livingSpiralAudio = !livingSpiralAudio;
   else if (which === 'gradient') livingGradient = !livingGradient;
   else if (which === 'doubleMatch') livingDoubleMatch = !livingDoubleMatch;
+  else if (which === 'colorMood') livingColorMood = !livingColorMood;
   saveLivingPrefs();
 }
 
@@ -307,4 +360,5 @@ function updateLivingUi() {
   setToggleBadge('living-spiral-audio-toggle', livingSpiralAudio);
   setToggleBadge('dna-gradient-toggle', livingGradient);
   setToggleBadge('dna-match-toggle', livingDoubleMatch);
+  setToggleBadge('living-mood-toggle', livingColorMood);
 }

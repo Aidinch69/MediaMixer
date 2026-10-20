@@ -158,12 +158,12 @@ class RotationEngine:
             picked = preferred
         else:
             bonus = self._state.get_exploration_bonus()
-            picked = library.pick_video(self._db, cfg, folder, exclude=exclude, exploration_bonus=bonus, energy=self._state.get_energy())
+            picked = library.pick_video(self._db, cfg, folder, exclude=exclude, exploration_bonus=bonus, energy=self._state.get_energy(), taste_strength=self._state.taste_strength)
         if not picked:
             return None
         library.mark_played(self._db, picked)
         bonus = self._state.get_exploration_bonus()
-        nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | {picked}, exploration_bonus=bonus, energy=self._state.get_energy()) or picked
+        nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | {picked}, exploration_bonus=bonus, energy=self._state.get_energy(), taste_strength=self._state.taste_strength) or picked
         self._state.set_screen(index, picked, nxt, time.time() + expires_in)
         return picked
 
@@ -186,7 +186,7 @@ class RotationEngine:
             expires_in = hold_s if hold_s is not None else random.randint(lo, hi)
             library.mark_played(self._db, path)
             bonus = self._state.get_exploration_bonus()
-            nxt = library.pick_video(self._db, cfg, folder, exclude={path}, exploration_bonus=bonus, energy=self._state.get_energy()) or path
+            nxt = library.pick_video(self._db, cfg, folder, exclude={path}, exploration_bonus=bonus, energy=self._state.get_energy(), taste_strength=self._state.taste_strength) or path
             self._state.set_screen(index, path, nxt, time.time() + expires_in)
             self._state.hold_screen(index, time.time() + hold_s if hold_s is not None else 0)
             return True
@@ -211,7 +211,7 @@ class RotationEngine:
             for index, path in zip((index_a, index_b), pair):
                 library.mark_played(self._db, path)
                 bonus = self._state.get_exploration_bonus()
-                nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | set(pair), exploration_bonus=bonus, energy=self._state.get_energy()) or path
+                nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | set(pair), exploration_bonus=bonus, energy=self._state.get_energy(), taste_strength=self._state.taste_strength) or path
                 self._state.set_screen(index, path, nxt, time.time() + random.randint(lo, hi))
             return pair
 

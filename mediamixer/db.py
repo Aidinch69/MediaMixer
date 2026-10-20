@@ -162,7 +162,7 @@ class Database:
         until a clip has been analysed)."""
         fresh_clause = "" if include_fresh else " AND NOT " + _FRESH_CONDITION.replace("added_at", "v.added_at").replace("debuted_at", "v.debuted_at")
         return self._connect().execute(
-            "SELECT v.video_path, v.ema_reward, v.play_count, v.updated_at, d.motion FROM video_weights v "
+            "SELECT v.video_path, v.ema_reward, v.play_count, v.updated_at, d.motion, d.brightness, d.warmth, d.saturation FROM video_weights v "
             "LEFT JOIN clip_dna d ON d.video_path = v.video_path AND d.ok = 1 WHERE v.folder_name=?" + fresh_clause,
             (folder,),
         ).fetchall()
@@ -313,6 +313,13 @@ class Database:
             sql += " AND v.folder_name = ?"
             args = (folder,)
         return self._connect().execute(sql, args).fetchall()
+
+    def dna_heart_rows(self) -> list:
+        """Every analysed clip's traits with its all-time hearts and plays."""
+        return self._connect().execute(
+            "SELECT d.brightness, d.motion, d.warmth, d.saturation, v.heart_count, v.play_count FROM clip_dna d "
+            "JOIN video_weights v ON v.video_path = d.video_path WHERE d.ok = 1"
+        ).fetchall()
 
     def dna_for(self, path: str):
         return self._connect().execute("SELECT * FROM clip_dna WHERE video_path=? AND ok=1", (path,)).fetchone()

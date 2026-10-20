@@ -444,6 +444,18 @@ function renderFeed(inWin) {
   $('feed').innerHTML = rows.map((e) => `<tr><td>${fmtTime(e.t)}</td><td>${esc(e.k)}</td><td class="muted" style="white-space:normal">${e.d ? esc(JSON.stringify(e.d)) : ''}</td></tr>`).join('');
 }
 
+function loadDnaTaste() {
+  fetch('/api/dna/taste').then((r) => r.json()).then((d) => {
+    const el = $('dnaTaste');
+    if (!d.ready) { el.innerHTML = '<tr><td class="muted">Clip DNA is still analysing the library.</td></tr>'; return; }
+    el.innerHTML = '<tr><th></th><th class="num">low third</th><th class="num">middle</th><th class="num">high third</th></tr>' +
+      Object.entries(d.traits).map(([trait, t]) => '<tr><td>' + trait + '</td>' + t.lifts.map((x, k) => {
+        const cls = x >= 1.2 ? 'good' : x <= 0.83 ? 'bad' : '';
+        return '<td class="num ' + cls + '">' + t.labels[k] + ' ×' + x.toFixed(2) + '</td>';
+      }).join('') + '</tr>').join('');
+  }).catch(() => {});
+}
+
 // ---- wiring ----
 $('session').addEventListener('change', () => { sessionId = $('session').value; fetchEvents(true); });
 $('window').addEventListener('change', () => fetchEvents(true));
@@ -452,6 +464,7 @@ $('live').addEventListener('click', () => { live = !live; $('live').classList.to
 addEventListener('resize', render);
 
 (async () => {
+  loadDnaTaste();
   sessionId = await loadSessions();
   await fetchEvents(true);
   setInterval(() => { if (live) fetchEvents(false); }, 3000);

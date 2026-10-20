@@ -71,3 +71,25 @@ def test_missing_dna_queue_and_failures(config, db):
     db.save_dna(paths[0], None, clip_dna.DNA_VERSION)  # undecodable: recorded, not retried
     assert db.paths_missing_dna(clip_dna.DNA_VERSION) == [paths[1]]
     assert db.dna_counts() == {"total": 2, "analysed": 0, "failed": 1}
+
+
+def test_dna_taste_learns_from_hearts_per_play(config, db):
+    library._dna_taste_cache.update(at=0, value=None)
+    paths = make_clips(config, [f"{i}.mp4" for i in range(60)])
+    library.sync_library(db, config)
+    for i, p in enumerate(paths):
+        motion = i / 60  # first third calm, last third lively
+        db.save_dna(p, {"brightness": 0.5, "motion": motion, "warmth": 0.1, "saturation": 0.3}, clip_dna.DNA_VERSION)
+        for _ in range(10):
+            library.mark_played(db, p)
+        if i < 20:
+            library.heart_video(db, p, amount=3)  # calm clips get hearted
+    taste = library.dna_taste(db, max_age_s=0)
+    calm, _mid, lively = taste["motion"]["lifts"]
+    assert calm > 1.5 and lively < 0.8
+    random.seed(9)
+    def calm_share(strength):
+        c = Counter(library.pick_video(db, config, library.GENERAL_FOLDER, taste_strength=strength) for _ in range(3000))
+        return sum(n for p, n in c.items() if paths.index(p) < 20) / 3000
+    assert calm_share(0.0) < calm_share(0.5)
+    library._dna_taste_cache.update(at=0, value=None)

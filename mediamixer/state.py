@@ -45,6 +45,7 @@ class RuntimeState:
         self._config = config
         self.recent_shown: dict = {}
         self.energy = 1.0  # the dashboard's Shared Pulse energy (see /api/energy)
+        self.taste_strength = 0.25  # the dashboard's Taste Learning strength (see /api/taste)
         self.energy_at = 0.0  # path -> last time it went on a screen (see recent_paths)
 
         self.tone_index = 0
