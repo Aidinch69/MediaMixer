@@ -249,6 +249,7 @@ function cutOnBeatActive() {
 }
 
 function flushPendingCuts(downbeat) {
+  if (typeof dropHoldCuts !== 'undefined' && dropHoldCuts) return; // The Drop lands every new clip on its own beat
   // A Gradient reveals one tile per beat, in order, so it sweeps across.
   const cascading = Date.now() < gradientCascadeUntil;
   const keys = Object.keys(pendingCuts).map(Number).sort((a, b) => a - b);
@@ -264,7 +265,7 @@ function flushPendingCuts(downbeat) {
 // Safety net: anything that has waited too long (or Rhythm Mode stopped) goes now.
 setInterval(() => {
   const now = Date.now();
-  const cascading = now < gradientCascadeUntil && cutOnBeatActive();
+  const cascading = (typeof gradientCascadeUntil !== 'undefined' && now < gradientCascadeUntil && cutOnBeatActive()) || (typeof dropHoldCuts !== 'undefined' && dropHoldCuts);
   if (!cascading && Object.values(pendingCuts).some((c) => !cutOnBeatActive() || now - c.at > CUT_ON_BEAT_MAX_WAIT_MS)) flushPendingCuts(false);
   if (pendingLayoutCut && (!cutOnBeatActive() || now - pendingLayoutCut.at > CUT_ON_BEAT_MAX_WAIT_MS * 2)) flushPendingCuts(true);
 }, 100);

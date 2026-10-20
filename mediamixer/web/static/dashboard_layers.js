@@ -849,6 +849,7 @@ function rhythmDriveTarget() {
   if (autopilotZone === 'vault') d -= 0.06;
   else if (autopilotZone === 'jackpot') d += 0.04;
   if (typeof windDownK === 'function') d -= 0.2 * windDownK(); // winding down settles everything
+  if (typeof momentEnergy === 'function') d += momentEnergy(); // The Drop's surge, a Breath's settle
   return Math.max(TUNING.RHYTHM_DRIVE_MIN, Math.min(TUNING.RHYTHM_DRIVE_MAX, d));
 }
 
@@ -994,6 +995,8 @@ function onRhythmBeat(n) {
     else if (Math.random() < TUNING.RHYTHM_PATTERN_SWITCH_CHANCE) rhythmPattern = pickRhythmPattern();
   }
   flushPendingCuts(downbeat);
+  momentsBeat(n);
+  if (dropMuted()) return; // The Drop: the beat drops out for a bar
   if (!anticipationActive) rhythmPatternHits(n).forEach(([idx, s]) => reactPulseTile(idx, s));
   onPulseBeat(n);
   rhythmFxBeat(n);

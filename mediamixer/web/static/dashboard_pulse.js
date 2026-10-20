@@ -147,6 +147,7 @@ setInterval(() => {
 // The band in effect right now, or null in free mode.
 function brainwaveBand() {
   if (brainwaveMode === 'free') return null;
+  if (typeof breathBandUntil !== 'undefined' && Date.now() < breathBandUntil) return BRAINWAVE_BANDS.theta; // a Breath moment settles to Theta
   return BRAINWAVE_BANDS[brainwaveMode === 'mood' ? brainwaveMoodBand : brainwaveMode] || null;
 }
 

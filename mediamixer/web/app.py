@@ -367,6 +367,13 @@ def create_app(ctx: AppContext) -> Flask:
         session.rotation.rotate(side=index)
         return jsonify(ok=True)
 
+    @app.route("/api/rotate_all")
+    def api_rotate_all():
+        """Fresh clips on every free tile at once (The Drop) - unlike Skip
+        All, nothing is marked as skipped. Pinned/held tiles keep theirs."""
+        g.session.rotation.rotate(side="all")
+        return jsonify(ok=True)
+
     @app.route("/api/hold")
     def api_hold():
         """Keep a tile's clip for a moment (e.g. a Cascade's source): it loops,

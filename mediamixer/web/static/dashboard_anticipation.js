@@ -298,6 +298,7 @@ function pickRandomTiles() {
 }
 
 function runAnticipationBuildUp(durationS, isReal, weightedTiles, tierName) {
+  if (isReal && typeof scheduleCountdown === 'function') scheduleCountdown(durationS, tierName);
   if (!anticipationFxEnabled) return;
   anticipationActive = true;
   const runId = ++anticipationRunId;
