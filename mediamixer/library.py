@@ -110,6 +110,7 @@ def pick_video(
     folder: str,
     exclude: Union[str, Iterable[str], None] = None,
     exploration_bonus: Optional[float] = None,
+    energy: float = 1.0,
 ) -> Optional[str]:
     """Pick a video from `folder`, avoiding `exclude` (one path, or any collection of
     paths - e.g. every video currently showing on another screen, so the same clip
@@ -139,7 +140,73 @@ def pick_video(
         )
         for r in rows
     ]
+    _apply_motion_lean(scores, rows, energy, config.dna_motion_bias)
     return softmax_pick(items, scores, config.softmax_temp)
+
+
+def _apply_motion_lean(scores: list, rows, energy: float, bias: float):
+    """Clip DNA: nudge scores toward high-motion clips when the session's
+    energy is up and calmer ones when it's settled. A clip `z` standard
+    deviations from the folder's average motion moves by bias * lean * z *
+    0.25 (lean = energy away from neutral, capped at +-1) - at full lean a
+    clip 2 sd livelier is ~1.65x as likely at the default bias, never a
+    filter. Unanalysed clips stay neutral."""
+    lean = max(-1.0, min(1.0, (energy - 1.0) / 0.25))
+    if not bias or abs(lean) < 0.04:
+        return
+    motions = [r["motion"] for r in rows if "motion" in r.keys() and r["motion"] is not None]
+    if len(motions) < 5:
+        return
+    mean = sum(motions) / len(motions)
+    sd = (sum((m - mean) ** 2 for m in motions) / len(motions)) ** 0.5 or 1.0
+    for i, r in enumerate(rows):
+        m = r["motion"] if "motion" in r.keys() else None
+        if m is not None:
+            scores[i] += bias * lean * max(-2.5, min(2.5, (m - mean) / sd)) * 0.25
+
+
+def gradient_picks(db: Database, folder: str, metric: str, count: int, exclude: Iterable[str] = ()) -> list:
+    """`count` clips spread evenly along `metric` (brightness/warmth/motion),
+    lowest first - the Gradient moment's grid."""
+    excluded = {os.path.normpath(p).lower() for p in exclude if p}
+    rows = [r for r in db.dna_rows(folder) if r[metric] is not None and os.path.normpath(r["video_path"]).lower() not in excluded]
+    if len(rows) < count:
+        return []
+    rows.sort(key=lambda r: r[metric])
+    # Evenly spaced positions along the sorted list, with a little jitter so
+    # the same gradient doesn't repeat exactly.
+    step = (len(rows) - 1) / max(1, count - 1)
+    picks, used = [], set()
+    for k in range(count):
+        target = k * step + random.uniform(-0.35, 0.35) * step
+        idx = max(0, min(len(rows) - 1, int(round(target))))
+        while idx in used and idx + 1 < len(rows):
+            idx += 1
+        used.add(idx)
+        picks.append(rows[idx]["video_path"])
+    return picks
+
+
+def similar_clips(db: Database, path: str, limit: int = 12, exclude: Iterable[str] = ()) -> list:
+    """Clips that look like `path`: close in warmth and brightness, and in
+    accent colour when both have one - for colour-matched double exposure."""
+    ref = db.dna_for(path)
+    if ref is None:
+        return []
+    excluded = {os.path.normpath(p).lower() for p in exclude if p} | {os.path.normpath(path).lower()}
+
+    def distance(r) -> float:
+        d = abs((r["warmth"] or 0) - (ref["warmth"] or 0)) / 0.1 + abs((r["brightness"] or 0) - (ref["brightness"] or 0)) / 0.1
+        if r["accent_hue"] is not None and ref["accent_hue"] is not None:
+            gap = abs(r["accent_hue"] - ref["accent_hue"]) % 360
+            d += min(gap, 360 - gap) / 30
+        elif (r["accent_hue"] is None) != (ref["accent_hue"] is None):
+            d += 1.5
+        return d
+
+    rows = [r for r in db.dna_rows() if os.path.normpath(r["video_path"]).lower() not in excluded]
+    rows.sort(key=distance)
+    return [r["video_path"] for r in rows[:limit]]
 
 
 def pick_video_jackpot(

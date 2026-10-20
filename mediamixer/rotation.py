@@ -89,7 +89,7 @@ class RotationEngine:
         is_jackpot, event_expires_in = self._roll_event(pace_idx)
         # Pinned tiles keep their clip through everything except their own
         # swipe (which unpins first) and filling an empty slot.
-        pinned = self._state.pinned_indexes()
+        pinned = self._state.busy_indexes()  # pinned or held
         indexes = range(len(current_paths)) if side == "all" else [side]
         indexes = [i for i in indexes if i not in pinned or not current_paths[i]]
 
@@ -158,16 +158,16 @@ class RotationEngine:
             picked = preferred
         else:
             bonus = self._state.get_exploration_bonus()
-            picked = library.pick_video(self._db, cfg, folder, exclude=exclude, exploration_bonus=bonus)
+            picked = library.pick_video(self._db, cfg, folder, exclude=exclude, exploration_bonus=bonus, energy=self._state.get_energy())
         if not picked:
             return None
         library.mark_played(self._db, picked)
         bonus = self._state.get_exploration_bonus()
-        nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | {picked}, exploration_bonus=bonus) or picked
+        nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | {picked}, exploration_bonus=bonus, energy=self._state.get_energy()) or picked
         self._state.set_screen(index, picked, nxt, time.time() + expires_in)
         return picked
 
-    def force_screen(self, index: int, path: str) -> bool:
+    def force_screen(self, index: int, path: str, hold_s: float = None) -> bool:
         """Directly place `path` on `index`, bypassing the normal bandit
         pick entirely - used by True Mystery Tile to show one specific,
         deliberately-chosen clip (a never-before-played one) instead of
@@ -180,12 +180,15 @@ class RotationEngine:
             pace_idx, folder, _played, current_paths, _next_paths = self._state.rotation_context()
             if path in current_paths:
                 return False  # already showing somewhere else - don't duplicate it
+            if hold_s is None and index in self._state.busy_indexes():
+                return False  # pinned or mid-moment (e.g. a Gradient) - leave it be
             lo, hi, _label = cfg.pace_presets[pace_idx]
-            expires_in = random.randint(lo, hi)
+            expires_in = hold_s if hold_s is not None else random.randint(lo, hi)
             library.mark_played(self._db, path)
             bonus = self._state.get_exploration_bonus()
-            nxt = library.pick_video(self._db, cfg, folder, exclude={path}, exploration_bonus=bonus) or path
+            nxt = library.pick_video(self._db, cfg, folder, exclude={path}, exploration_bonus=bonus, energy=self._state.get_energy()) or path
             self._state.set_screen(index, path, nxt, time.time() + expires_in)
+            self._state.hold_screen(index, time.time() + hold_s if hold_s is not None else 0)
             return True
 
     def trigger_double_feature(self, index_a: int, index_b: int) -> Optional[list]:
@@ -198,6 +201,8 @@ class RotationEngine:
         with self._rotate_lock:
             cfg = self._config
             pace_idx, folder, _played, current_paths, _next_paths = self._state.rotation_context()
+            if {index_a, index_b} & self._state.busy_indexes():
+                return None  # one of the two is pinned or mid-moment
             exclude = {p for p in current_paths if p}
             pair = library.pick_double_feature_pair(self._db, exclude)
             if not pair:
@@ -206,7 +211,7 @@ class RotationEngine:
             for index, path in zip((index_a, index_b), pair):
                 library.mark_played(self._db, path)
                 bonus = self._state.get_exploration_bonus()
-                nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | set(pair), exploration_bonus=bonus) or path
+                nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | set(pair), exploration_bonus=bonus, energy=self._state.get_energy()) or path
                 self._state.set_screen(index, path, nxt, time.time() + random.randint(lo, hi))
             return pair
 
@@ -235,7 +240,7 @@ class RotationEngine:
             return
 
         lefts, _locked, _barrage = self._state.screen_timers(now)
-        pinned = self._state.pinned_indexes()
+        pinned = self._state.busy_indexes()  # pinned or held
         for index, time_left in enumerate(lefts):
             if time_left <= 0.5 and index not in pinned:
                 self.rotate(side=index, force=False)
@@ -298,7 +303,7 @@ class RotationEngine:
             count = min(random.randint(*tier.tile_count), len(current_paths))
             if count <= 0:
                 return
-            pinned = self._state.pinned_indexes()
+            pinned = self._state.busy_indexes()  # pinned or held
             free = [i for i in range(len(current_paths)) if i not in pinned]
             count = min(count, len(free))
             if count <= 0:

@@ -168,6 +168,7 @@ def create_app(ctx: AppContext) -> Flask:
                 "tension": s["tension"],
                 "speed": s["speed"],
                 "pinned": s["pinned"],
+                "held": s["held"],
             }
             for s in snap["screens"]
         ]
@@ -359,6 +360,9 @@ def create_app(ctx: AppContext) -> Flask:
             return jsonify(ok=False, error="screen index out of range"), 400
         if request.args.get("swap"):  # a deliberate swipe: unpin and change it
             session.state.set_pinned(index, False)
+            session.state.hold_screen(index, 0)
+        elif session.state.screen_held(index):
+            return jsonify(ok=True, held=True)  # mid-moment: the tile loops instead
         session.rotation.rotate(side=index)
         return jsonify(ok=True)
 
@@ -520,7 +524,60 @@ def create_app(ctx: AppContext) -> Flask:
         # absolute, so this has to convert back before looking it up.
         rel_path = request.args.get("path", "")
         abs_path = _absolute_media_path(config, rel_path)
-        return jsonify(ok=True, **library.get_video_meta(db, abs_path))
+        dna = db.dna_for(abs_path)
+        return jsonify(ok=True, dna=_dna_json(dna), **library.get_video_meta(db, abs_path))
+
+    # -- Clip DNA --
+    def _dna_json(row):
+        if row is None:
+            return None
+        return {k: row[k] for k in ("brightness", "motion", "hue", "accent_hue", "accent_strength", "warmth", "saturation", "duration")}
+
+    @app.route("/api/energy")
+    def api_energy():
+        try:
+            g.session.state.set_energy(float(request.args.get("e", "")))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="invalid energy"), 400
+        return jsonify(ok=True)
+
+    @app.route("/api/dna/status")
+    def api_dna_status():
+        counts = db.dna_counts()
+        worker = ctx.dna
+        return jsonify(
+            running=bool(worker and worker._thread.is_alive()),
+            current=getattr(worker, "current", None),
+            **counts,
+        )
+
+    @app.route("/api/dna/gradient")
+    def api_dna_gradient():
+        """Fill the grid with clips spread evenly along one trait, lowest
+        in the first tile - the Gradient moment."""
+        metric = request.args.get("metric", "brightness")
+        if metric not in ("brightness", "warmth", "motion"):
+            return jsonify(ok=False, error="unknown metric"), 400
+        state = g.session.state
+        _pace, folder, _played, current_paths, _next = state.rotation_context()
+        pinned = state.pinned_indexes()
+        free = [i for i in range(len(current_paths)) if i not in pinned]
+        picks = library.gradient_picks(db, folder or library.GENERAL_FOLDER, metric, len(free),
+                                       exclude=set(current_paths) | state.recent_paths(config.recent_repeat_window_s))
+        if not picks:
+            return jsonify(ok=True, placed=0, reason="not enough analysed clips yet")
+        # Every tile holds together long enough to take in the whole gradient
+        # (plus a beat per tile for the reveal), then rotates on as normal.
+        hold = request.args.get("hold", 20, type=float) + 0.7 * len(free)
+        placed = sum(1 for i, path in zip(free, picks) if g.session.rotation.force_screen(i, path, hold_s=hold))
+        return jsonify(ok=True, placed=placed, metric=metric)
+
+    @app.route("/api/dna/similar")
+    def api_dna_similar():
+        abs_path = _absolute_media_path(config, request.args.get("path", ""))
+        on_screen = set(g.session.state.current_paths())
+        picks = library.similar_clips(db, abs_path, limit=min(30, request.args.get("n", 12, type=int)), exclude=on_screen)
+        return jsonify(items=[{"path": _relative_media_path(config, p), "base": "/media/"} for p in picks])
 
     @app.route("/api/rate_audio")
     def api_rate_audio():

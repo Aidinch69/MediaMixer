@@ -41,6 +41,20 @@ CREATE TABLE IF NOT EXISTS video_weights (
     debuted_at  REAL
 );
 CREATE INDEX IF NOT EXISTS idx_video_weights_folder ON video_weights(folder_name);
+CREATE TABLE IF NOT EXISTS clip_dna (
+    video_path      TEXT PRIMARY KEY,
+    version         INTEGER NOT NULL,
+    ok              INTEGER NOT NULL,
+    brightness      REAL,
+    motion          REAL,
+    hue             REAL,
+    accent_hue      REAL,
+    accent_strength REAL,
+    warmth          REAL,
+    saturation      REAL,
+    duration        REAL,
+    analyzed_at     REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS scenes (
     name        TEXT PRIMARY KEY,
     data        TEXT NOT NULL,
@@ -144,10 +158,12 @@ class Database:
     def video_rewards(self, folder: str, include_fresh: bool = False):
         """Fresh (not-yet-debuted) clips are left out by default so ordinary
         rotation can't burn through a new batch before Fresh Drop gets to
-        ration it out one reveal at a time."""
-        fresh_clause = "" if include_fresh else " AND NOT " + _FRESH_CONDITION
+        ration it out one reveal at a time. `motion` comes from Clip DNA (NULL
+        until a clip has been analysed)."""
+        fresh_clause = "" if include_fresh else " AND NOT " + _FRESH_CONDITION.replace("added_at", "v.added_at").replace("debuted_at", "v.debuted_at")
         return self._connect().execute(
-            "SELECT video_path, ema_reward, play_count, updated_at FROM video_weights WHERE folder_name=?" + fresh_clause,
+            "SELECT v.video_path, v.ema_reward, v.play_count, v.updated_at, d.motion FROM video_weights v "
+            "LEFT JOIN clip_dna d ON d.video_path = v.video_path AND d.ok = 1 WHERE v.folder_name=?" + fresh_clause,
             (folder,),
         ).fetchall()
 
@@ -264,6 +280,49 @@ class Database:
             "SELECT video_path FROM video_weights WHERE " + _FRESH_CONDITION + " ORDER BY added_at ASC"
         ).fetchall()
         return [r["video_path"] for r in rows]
+
+    # -- clip DNA --
+    def paths_missing_dna(self, version: int) -> list:
+        rows = self._connect().execute(
+            "SELECT v.video_path FROM video_weights v LEFT JOIN clip_dna d ON d.video_path = v.video_path "
+            "WHERE d.video_path IS NULL OR d.version < ? ORDER BY v.play_count DESC",
+            (version,),
+        ).fetchall()
+        return [r["video_path"] for r in rows]
+
+    def save_dna(self, path: str, dna: Optional[dict], version: int):
+        d = dna or {}
+        conn = self._connect()
+        conn.execute(
+            "INSERT INTO clip_dna (video_path, version, ok, brightness, motion, hue, accent_hue, accent_strength, warmth, saturation, duration, analyzed_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(video_path) DO UPDATE SET version=excluded.version, ok=excluded.ok, "
+            "brightness=excluded.brightness, motion=excluded.motion, hue=excluded.hue, accent_hue=excluded.accent_hue, "
+            "accent_strength=excluded.accent_strength, warmth=excluded.warmth, saturation=excluded.saturation, "
+            "duration=excluded.duration, analyzed_at=excluded.analyzed_at",
+            (path, version, 1 if dna else 0, d.get("brightness"), d.get("motion"), d.get("hue"), d.get("accent_hue"),
+             d.get("accent_strength"), d.get("warmth"), d.get("saturation"), d.get("duration"), time.time()),
+        )
+        conn.commit()
+
+    def dna_rows(self, folder: Optional[str] = None) -> list:
+        """Analysed, playable (debuted) clips with their DNA."""
+        sql = ("SELECT d.* FROM clip_dna d JOIN video_weights v ON v.video_path = d.video_path WHERE d.ok = 1 AND NOT "
+               + _FRESH_CONDITION.replace("added_at", "v.added_at").replace("debuted_at", "v.debuted_at"))
+        args: tuple = ()
+        if folder is not None:
+            sql += " AND v.folder_name = ?"
+            args = (folder,)
+        return self._connect().execute(sql, args).fetchall()
+
+    def dna_for(self, path: str):
+        return self._connect().execute("SELECT * FROM clip_dna WHERE video_path=? AND ok=1", (path,)).fetchone()
+
+    def dna_counts(self) -> dict:
+        conn = self._connect()
+        total = conn.execute("SELECT COUNT(*) AS n FROM video_weights").fetchone()["n"]
+        ok = conn.execute("SELECT COUNT(*) AS n FROM clip_dna WHERE ok=1").fetchone()["n"]
+        failed = conn.execute("SELECT COUNT(*) AS n FROM clip_dna WHERE ok=0").fetchone()["n"]
+        return {"total": total, "analysed": ok, "failed": failed}
 
     # -- scenes (saved looks, shared by every device) --
     def list_scenes(self) -> list:

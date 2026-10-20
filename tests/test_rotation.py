@@ -105,3 +105,33 @@ def test_pinned_tile_keeps_its_clip(config, db):
     state.set_pinned(1, False)
     engine.rotate(side=1)
     assert state.current_paths()[1] != pinned_clip
+
+
+def test_held_tile_ignores_clip_ended_rotation(config, db):
+    import time as _t
+    make_clips(config, [f"{i}.mp4" for i in range(12)])
+    library.sync_library(db, config)
+    state = RuntimeState(config)
+    engine = RotationEngine(state, db, config)
+    engine.set_layout_and_rotate("grid2x2")
+    spare = next(p for p in library.list_all_videos(config) if p not in state.current_paths())
+    assert engine.force_screen(0, spare, hold_s=30)
+    assert state.screen_held(0) and state.snapshot()["screens"][0]["held"]
+    state.hold_screen(0, _t.time() - 1)
+    assert not state.screen_held(0)
+
+
+def test_held_tile_is_left_alone_by_automatic_changes(config, db):
+    make_clips(config, [f"{i}.mp4" for i in range(14)])
+    library.sync_library(db, config)
+    state = RuntimeState(config)
+    engine = RotationEngine(state, db, config)
+    engine.set_layout_and_rotate("grid2x2")
+    spare = [p for p in library.list_all_videos(config) if p not in state.current_paths()]
+    assert engine.force_screen(2, spare[0], hold_s=30)
+    held_clip = state.current_paths()[2]
+    engine.rotate(side="all")
+    engine.rotate(side=2)
+    assert not engine.force_screen(2, spare[1])  # e.g. a Mystery tile or Fresh Drop
+    assert engine.trigger_double_feature(2, 3) is None
+    assert state.current_paths()[2] == held_clip

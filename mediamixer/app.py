@@ -9,6 +9,7 @@ from dataclasses import replace
 from waitress import serve
 
 from . import library
+from .clip_dna import DnaWorker
 from .config import Config, load_config
 from .context import AppContext
 from .db import Database
@@ -24,12 +25,14 @@ class MediaMixerApp:
         self.config = config or load_config()
         self.db = Database(self.config)
         self.sessions = SessionManager(self.db, self.config)
-        self.ctx = AppContext(self.config, self.db, self.sessions)
+        self.dna = DnaWorker(self.db, self.config)
+        self.ctx = AppContext(self.config, self.db, self.sessions, self.dna)
         self.flask_app = create_app(self.ctx)
         self._stopped = threading.Event()
 
     def run(self):
         library.sync_library(self.db, self.config)
+        self.dna.start()
 
         # Werkzeug's dev server (Flask's default .run()) is explicitly not
         # built for this: several simultaneous video streams plus a
@@ -70,6 +73,7 @@ class MediaMixerApp:
         self._stopped.set()
         log.info("shutting down...")
         self.sessions.stop()
+        self.dna.stop()
         self.db.close()
 
 

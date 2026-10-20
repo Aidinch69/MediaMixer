@@ -29,6 +29,7 @@ class ScreenState:
     speed: float = 1.0
     hype_speed_target: float = 1.0
     pinned: bool = False  # long-pressed: keeps its clip until unpinned
+    hold_until: float = 0.0  # placed for a moment (e.g. a Gradient): loops, ignores clip-ended rotation until then
 
 
 def _find_preset(config: Config, name: str) -> LayoutPreset:
@@ -42,7 +43,9 @@ class RuntimeState:
     def __init__(self, config: Config):
         self._lock = threading.RLock()
         self._config = config
-        self.recent_shown: dict = {}  # path -> last time it went on a screen (see recent_paths)
+        self.recent_shown: dict = {}
+        self.energy = 1.0  # the dashboard's Shared Pulse energy (see /api/energy)
+        self.energy_at = 0.0  # path -> last time it went on a screen (see recent_paths)
 
         self.tone_index = 0
         self.binaural_knob = 0.30
@@ -172,12 +175,37 @@ class RuntimeState:
             return ""
 
     # -- rotation --
+    def set_energy(self, value: float):
+        with self._lock:
+            self.energy = max(0.5, min(2.0, value))
+            self.energy_at = time.time()
+
+    def get_energy(self) -> float:
+        """Neutral (1.0) if the dashboard hasn't reported in a while."""
+        with self._lock:
+            return self.energy if time.time() - self.energy_at < 60 else 1.0
+
     def set_pinned(self, index: int, pinned: bool) -> bool:
         with self._lock:
             if not (0 <= index < len(self.screens)):
                 return False
             self.screens[index].pinned = pinned
             return True
+
+    def hold_screen(self, index: int, until: float):
+        with self._lock:
+            if 0 <= index < len(self.screens):
+                self.screens[index].hold_until = until
+
+    def screen_held(self, index: int) -> bool:
+        with self._lock:
+            return 0 <= index < len(self.screens) and self.screens[index].hold_until > time.time()
+
+    def busy_indexes(self) -> set:
+        """Tiles automatic changes must leave alone: pinned, or held for a moment."""
+        now = time.time()
+        with self._lock:
+            return {i for i, s in enumerate(self.screens) if s.pinned or s.hold_until > now}
 
     def pinned_indexes(self) -> set:
         with self._lock:
@@ -296,7 +324,7 @@ class RuntimeState:
                 "layout": self.layout,
                 "folder": self.current_folder,
                 "screens": [
-                    {"path": s.current, "next_path": s.next, "tension": s.tension, "speed": s.speed, "pinned": s.pinned}
+                    {"path": s.current, "next_path": s.next, "tension": s.tension, "speed": s.speed, "pinned": s.pinned, "held": s.hold_until > time.time()}
                     for s in self.screens
                 ],
                 "played": self.videos_in_folder,

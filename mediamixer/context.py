@@ -13,3 +13,4 @@ class AppContext:
     config: Config
     db: Database
     sessions: SessionManager
+    dna: object = None  # clip_dna.DnaWorker, when running

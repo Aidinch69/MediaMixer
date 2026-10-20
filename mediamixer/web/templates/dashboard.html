@@ -300,6 +300,20 @@
       </div>
     </details>
     <details class="settings-section">
+      <summary><span class="section-title">🧬 Clip DNA</span><span class="settings-section-desc">What each clip looks like - brightness, motion, colour - used to pick and pair clips.</span></summary>
+      <div class="settings-section-body">
+        <div class="metric" id="dna-status">🧬 Checking…</div>
+        <div class="slider"><label>Gradient Moments</label><button class="badge" id="dna-gradient-toggle" onclick="toggleLiving('gradient')">ON</button></div>
+        <div class="slider"><label>Colour-Matched Double Exposure</label><button class="badge" id="dna-match-toggle" onclick="toggleLiving('doubleMatch')">ON</button></div>
+        <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+          <button class="badge" onclick="startGradient('brightness')">Dark → Light</button>
+          <button class="badge" onclick="startGradient('warmth')">Cool → Warm</button>
+          <button class="badge" onclick="startGradient('motion')">Calm → Wild</button>
+        </div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">The engine looks at every clip once, in the background (a few seconds of each, at low priority): how bright it is, how much moves, how warm or cool it is, and any accent colour beyond skin tones. Then: picks lean toward livelier clips when the session's energy is up and calmer ones when it's settled (strength in Master Controls → "Clip DNA: energy-aware picking"); double exposures pair clips that look alike; and Gradient moments fill the grid with clips arranged dark → light, cool → warm or calm → wild - with Rhythm Mode on they reveal one tile per beat. New clips get analysed automatically.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
       <summary><span class="section-title">🌊 Shared Pulse</span><span class="section-live" data-live="pulse"></span><span class="settings-section-desc">Spirals, binaural and glow flow with the session's energy.</span></summary>
       <div class="settings-section-body">
         <div class="slider">

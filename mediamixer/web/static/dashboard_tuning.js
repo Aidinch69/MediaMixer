@@ -185,6 +185,9 @@ const TUNING_DEFAULTS = {
   DOUBLE_EXPOSURE_COOLDOWN_MS: 120000,
   DOUBLE_EXPOSURE_MS: 9000,
   DOUBLE_EXPOSURE_OPACITY: 0.55,
+  GRADIENT_PROBABILITY: 0.06,
+  GRADIENT_COOLDOWN_MS: 360000,
+  GRADIENT_HOLD_MS: 20000,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -338,7 +341,7 @@ const TUNING_GROUPS = [
   { label: 'Taste Learning', desc: 'How much evidence it wants, how fast it forgets, and when it leans harder. Strength itself is in Flow -> Taste Learning.', keys: ['TASTE_PRIOR_LIKES', 'TASTE_LOAD_DECAY', 'TASTE_LOW_ENGAGEMENT'] },
   { label: 'Surges', desc: 'Random surges - odds and the rest between them (the odds boost itself is under Multipliers & XP).', keys: ['SURGE_PROBABILITY', 'SURGE_COOLDOWN_MS'] },
   { label: 'Custom Loop Point', desc: 'Which favourites replay their best section, how often, and how many times.', keys: ['LOOP_HEART_THRESHOLD', 'LOOP_TOP_FRACTION', 'LOOP_CHANCE', 'LOOP_MAX_REPEATS'] },
-  { label: 'Living Screen', desc: 'Breathing tiles, slow-motion moments and double exposures.', keys: ['BREATHE_ZOOM', 'BREATHE_DRIFT', 'BREATHE_PERIOD_MS', 'SLOWMO_PROBABILITY', 'SLOWMO_COOLDOWN_MS', 'SLOWMO_ENERGY_MIN', 'SLOWMO_SPEED', 'SLOWMO_HOLD_MS', 'DOUBLE_EXPOSURE_PROBABILITY', 'DOUBLE_EXPOSURE_COOLDOWN_MS', 'DOUBLE_EXPOSURE_MS', 'DOUBLE_EXPOSURE_OPACITY'] },
+  { label: 'Living Screen', desc: 'Breathing tiles, slow-motion moments and double exposures.', keys: ['BREATHE_ZOOM', 'BREATHE_DRIFT', 'BREATHE_PERIOD_MS', 'SLOWMO_PROBABILITY', 'SLOWMO_COOLDOWN_MS', 'SLOWMO_ENERGY_MIN', 'SLOWMO_SPEED', 'SLOWMO_HOLD_MS', 'DOUBLE_EXPOSURE_PROBABILITY', 'DOUBLE_EXPOSURE_COOLDOWN_MS', 'DOUBLE_EXPOSURE_MS', 'DOUBLE_EXPOSURE_OPACITY', 'GRADIENT_PROBABILITY', 'GRADIENT_COOLDOWN_MS', 'GRADIENT_HOLD_MS'] },
 ];
 const TUNING_META = {
   XP_PER_BONUS_CLAIM: { label: 'Bonus-tap XP', unit: 'n', min: 5, max: 50, step: 1 },
@@ -505,6 +508,9 @@ const TUNING_META = {
   DOUBLE_EXPOSURE_COOLDOWN_MS: { label: 'Rest between double exposures', unit: 's', min: 15000, max: 900000, step: 15000 },
   DOUBLE_EXPOSURE_MS: { label: 'Double exposure length', unit: 's', min: 3000, max: 30000, step: 1000 },
   DOUBLE_EXPOSURE_OPACITY: { label: 'Double exposure strength', unit: 'pct', min: 0.1, max: 1, step: 0.05 },
+  GRADIENT_PROBABILITY: { label: 'Gradient moment chance per check (every 45s)', unit: 'pct', min: 0, max: 1, step: 0.01 },
+  GRADIENT_HOLD_MS: { label: 'Gradient hold (before tiles rotate on)', unit: 's', min: 5000, max: 90000, step: 1000 },
+  GRADIENT_COOLDOWN_MS: { label: 'Rest between Gradient moments', unit: 's', min: 30000, max: 1800000, step: 30000 },
 };
 
 function formatTuningValue(key, value) {

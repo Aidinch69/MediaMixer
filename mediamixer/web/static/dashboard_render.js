@@ -222,7 +222,10 @@ function cutOnBeatActive() {
 }
 
 function flushPendingCuts(downbeat) {
-  Object.keys(pendingCuts).forEach((k) => {
+  // A Gradient reveals one tile per beat, in order, so it sweeps across.
+  const cascading = Date.now() < gradientCascadeUntil;
+  const keys = Object.keys(pendingCuts).map(Number).sort((a, b) => a - b);
+  (cascading ? keys.slice(0, 1) : keys).forEach((k) => {
     const i = +k, cut = pendingCuts[k];
     delete pendingCuts[k];
     const vid = document.getElementById('screen-' + i);
@@ -234,7 +237,8 @@ function flushPendingCuts(downbeat) {
 // Safety net: anything that has waited too long (or Rhythm Mode stopped) goes now.
 setInterval(() => {
   const now = Date.now();
-  if (Object.values(pendingCuts).some((c) => !cutOnBeatActive() || now - c.at > CUT_ON_BEAT_MAX_WAIT_MS)) flushPendingCuts(false);
+  const cascading = now < gradientCascadeUntil && cutOnBeatActive();
+  if (!cascading && Object.values(pendingCuts).some((c) => !cutOnBeatActive() || now - c.at > CUT_ON_BEAT_MAX_WAIT_MS)) flushPendingCuts(false);
   if (pendingLayoutCut && (!cutOnBeatActive() || now - pendingLayoutCut.at > CUT_ON_BEAT_MAX_WAIT_MS * 2)) flushPendingCuts(true);
 }, 100);
 
@@ -319,10 +323,11 @@ function render(d) {
     // kept separate in tileNaturalBase so its own tick can re-apply it
     // between status pushes - see dashboard_layers.js.
     tileNaturalBase[i] = s.speed * lockMult * manualSpeedMult * (tileUserSpeed[i] || 1);
-    // Pinned (long-press): loop the clip instead of asking for the next one.
+    // Pinned (long-press) or held for a moment (Gradient): loop the clip
+    // instead of asking for the next one when it ends.
     const pinned = !!s.pinned;
     if (tileElements[i] && tileElements[i].classList.contains('tile-pinned') !== pinned) tileElements[i].classList.toggle('tile-pinned', pinned);
-    if (vid.loop !== pinned) vid.loop = pinned;
+    if (vid.loop !== (pinned || !!s.held)) vid.loop = pinned || !!s.held;
     const naturalSpeed = tileNaturalBase[i] * globalSpeedMult();
     const barrageTiles = d.barrage > 0 ? (d.barrage_tiles || []) : [];
     const isSelected = barrageTiles.includes(i);

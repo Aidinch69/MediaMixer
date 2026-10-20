@@ -1,7 +1,7 @@
 // Part of the dashboard client - classic scripts sharing one global scope,
 // loaded in the order listed in dashboard.html.
-// Living Screen: breathing tiles, slow-motion moments, double exposure, and
-// spirals that react to the audio.
+// Living Screen: breathing tiles, slow-motion moments, double exposure,
+// spirals that react to the audio, and Clip DNA's Gradient moment.
 
 let livingBreathe = true;
 let livingSlowmo = true;
@@ -152,7 +152,10 @@ function startDoubleExposure(idx) {
   if (!tile || !vid || doubleExposureTileIndex >= 0) return false;
   doubleExposureTileIndex = idx;
   doubleExposureLastAt = Date.now();
-  fetchFxList('library').then((items) => {
+  const similar = livingDoubleMatch && currentPaths[idx]
+    ? fetch('/api/dna/similar?n=10&path=' + encodeURIComponent(currentPaths[idx])).then((r) => r.json()).then((d) => d.items || []).catch(() => [])
+    : Promise.resolve([]);
+  similar.then((matched) => (matched.length ? matched : fetchFxList('library'))).then((items) => {
     const onScreen = new Set(currentPaths);
     const pool = (items || []).filter((it) => !onScreen.has(it.path));
     if (!pool.length || !tile.isConnected) { doubleExposureTileIndex = -1; return; }
@@ -204,18 +207,86 @@ onAudioOnset((strength) => {
   });
 });
 
+// ---- Clip DNA: Gradient moment ----
+// The grid fills with clips spread evenly along one trait - dark -> light,
+// cool -> warm, or calm -> wild - lowest in the first tile. With Rhythm
+// Mode on, the tiles reveal one per beat so the gradient sweeps across.
+const GRADIENT_KINDS = {
+  brightness: '🎨 Gradient · dark → light',
+  warmth: '🎨 Gradient · cool → warm',
+  motion: '🎨 Gradient · calm → wild',
+};
+const GRADIENT_CHECK_MS = 45000;
+let livingGradient = true;
+let livingDoubleMatch = true;
+let gradientLastAt = 0;
+let gradientCascadeUntil = 0; // while set, Cut on the Beat reveals one tile per beat
+
+function maybeTriggerGradient() {
+  if (!livingGradient || document.hidden || !tileElements.length || tileElements.length < 4) return;
+  if (Date.now() - gradientLastAt < TUNING.GRADIENT_COOLDOWN_MS) return;
+  if (floaterBarrageActive || finaleActive || spotlightTileIndex >= 0 || lastKnownBarrage > 0 || anticipationActive) return;
+  if (Math.random() >= TUNING.GRADIENT_PROBABILITY) return;
+  const kinds = Object.keys(GRADIENT_KINDS);
+  startGradient(kinds[Math.floor(Math.random() * kinds.length)]);
+}
+setInterval(maybeTriggerGradient, GRADIENT_CHECK_MS);
+
+function startGradient(metric) {
+  gradientLastAt = Date.now();
+  // Cascade mode goes on before asking: the status push carrying the new
+  // clips can arrive ahead of this reply, and must already reveal one per beat.
+  flushPendingCuts(false); // anything already waiting goes now, not mixed into the sweep
+  if (cutOnBeatActive()) gradientCascadeUntil = Date.now() + 60000 / Math.max(40, currentRhythmBpm()) * (tileElements.length + 2) + 3000;
+  return fetch('/api/dna/gradient?metric=' + metric + '&hold=' + Math.round(TUNING.GRADIENT_HOLD_MS / 1000)).then((r) => r.json()).then((d) => {
+    if (!d.ok || !d.placed) { gradientCascadeUntil = 0; if (d.reason) toast('🎨 ' + d.reason, true); return false; }
+    toast(GRADIENT_KINDS[metric] || '🎨 Gradient');
+    const sweep = document.createElement('div');
+    sweep.className = 'gradient-sweep';
+    document.getElementById('theater-box').appendChild(sweep);
+    sweep.addEventListener('animationend', () => sweep.remove());
+    return true;
+  }).catch(() => false);
+}
+
+// ---- Clip DNA: report the session energy so picks can lean with it ----
+let dnaEnergySentAt = 0;
+let dnaEnergySent = 1;
+setInterval(() => {
+  const now = Date.now();
+  if (Math.abs(rhythmDrive - dnaEnergySent) < 0.02 && now - dnaEnergySentAt < 30000) return;
+  dnaEnergySent = rhythmDrive;
+  dnaEnergySentAt = now;
+  fetch('/api/energy?e=' + rhythmDrive.toFixed(3)).catch(() => {});
+}, 5000);
+
+function updateDnaStatus() {
+  const el = document.getElementById('dna-status');
+  if (!el) return;
+  fetch('/api/dna/status').then((r) => r.json()).then((d) => {
+    const pct = d.total ? Math.round(d.analysed / d.total * 100) : 0;
+    el.innerText = d.analysed >= d.total - d.failed
+      ? '🧬 All ' + d.analysed.toLocaleString() + ' clips analysed' + (d.failed ? ' (' + d.failed + ' couldn’t be read)' : '')
+      : '🧬 Analysing in the background: ' + d.analysed.toLocaleString() + ' / ' + d.total.toLocaleString() + ' (' + pct + '%)' + (d.running ? '' : ' - paused');
+  }).catch(() => {});
+}
+setInterval(updateDnaStatus, 10000);
+
 // ---- prefs / UI ----
 function loadLivingPrefs() {
-  const p = loadJsonPref('mm_living', { breathe: true, slowmo: true, double: true, spiralAudio: true });
+  const p = loadJsonPref('mm_living', { breathe: true, slowmo: true, double: true, spiralAudio: true, gradient: true, doubleMatch: true });
   livingBreathe = p.breathe !== false;
   livingSlowmo = p.slowmo !== false;
   livingDouble = p.double !== false;
   livingSpiralAudio = p.spiralAudio !== false;
+  livingGradient = p.gradient !== false;
+  livingDoubleMatch = p.doubleMatch !== false;
   updateLivingUi();
+  updateDnaStatus();
 }
 
 function saveLivingPrefs() {
-  saveJsonPref('mm_living', { breathe: livingBreathe, slowmo: livingSlowmo, double: livingDouble, spiralAudio: livingSpiralAudio });
+  saveJsonPref('mm_living', { breathe: livingBreathe, slowmo: livingSlowmo, double: livingDouble, spiralAudio: livingSpiralAudio, gradient: livingGradient, doubleMatch: livingDoubleMatch });
   updateLivingUi();
 }
 
@@ -224,6 +295,8 @@ function toggleLiving(which) {
   else if (which === 'slowmo') livingSlowmo = !livingSlowmo;
   else if (which === 'double') livingDouble = !livingDouble;
   else if (which === 'spiralAudio') livingSpiralAudio = !livingSpiralAudio;
+  else if (which === 'gradient') livingGradient = !livingGradient;
+  else if (which === 'doubleMatch') livingDoubleMatch = !livingDoubleMatch;
   saveLivingPrefs();
 }
 
@@ -232,4 +305,6 @@ function updateLivingUi() {
   setToggleBadge('living-slowmo-toggle', livingSlowmo);
   setToggleBadge('living-double-toggle', livingDouble);
   setToggleBadge('living-spiral-audio-toggle', livingSpiralAudio);
+  setToggleBadge('dna-gradient-toggle', livingGradient);
+  setToggleBadge('dna-match-toggle', livingDoubleMatch);
 }

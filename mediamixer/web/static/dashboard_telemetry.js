@@ -104,6 +104,7 @@ function ratingContext(i) {
     zone: autopilotZone || null,
     rhythmPattern: rhythmActive() ? rhythmPattern : null,
     tiles: tileElements.length,
+    clip: currentPaths[i] || null,
     energy: +rhythmDrive.toFixed(2),
   };
 }
@@ -167,6 +168,7 @@ function initTelemetry() {
   telemetryWrap('chooseSessionIntent', null, ([key]) => ({ k: 'session.intent', d: { intent: key, lengthMin: sessionLengthMin } }));
   telemetryWrap('startWindDown', () => !!windDown, (args, was) => (was ? undefined : { k: 'session.windDown' }));
   telemetryWrap('cancelWindDown', () => (windDown ? Math.round(windDownK() * 100) : null), (args, pct) => (pct == null ? undefined : { k: 'session.keepGoing', d: { atPct: pct } }));
+  telemetryWrap('startGradient', null, ([metric]) => ({ k: 'gradient', d: { metric } }));
   telemetryWrap('showMantra', null, ([style]) => ({ k: 'mantra', d: { style } }));
 
   // Spin / bank-or-push.

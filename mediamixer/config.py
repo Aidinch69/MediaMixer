@@ -150,6 +150,9 @@ class Config:
     # unless nothing else is left - the picker used to avoid only what was on
     # screen right now, so favourites could come straight back.
     recent_repeat_window_s: float = 600.0
+    # Clip DNA: how strongly the session's energy leans picks toward
+    # high-motion clips (energetic) or calmer ones (settled). 0 = off.
+    dna_motion_bias: float = 0.6
     exploration_bonus_c: float = 0.50  # UCB-style bonus so rarely-played clips stay in rotation - nudged up for a bit more default discovery
 
     skip_penalty: float = -0.25
