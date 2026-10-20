@@ -194,6 +194,12 @@ const TUNING_DEFAULTS = {
   SMART_FRAMING_STRENGTH: 0.8,
   SMART_FRAMING_ZOOM: 0.06,
   LIKE_THIS_MS: 60000,
+  STUTTER_CHANCE: 0.1,
+  STUTTER_COOLDOWN_MS: 20000,
+  STUTTER_REPEATS: 3,
+  CASCADE_CHANCE: 0.04,
+  CASCADE_COOLDOWN_MS: 180000,
+  CASCADE_HOLD_BEATS: 16,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -348,6 +354,7 @@ const TUNING_GROUPS = [
   { label: 'Surges', desc: 'Random surges - odds and the rest between them (the odds boost itself is under Multipliers & XP).', keys: ['SURGE_PROBABILITY', 'SURGE_COOLDOWN_MS'] },
   { label: 'Custom Loop Point', desc: 'Which favourites replay their best section, how often, and how many times.', keys: ['LOOP_HEART_THRESHOLD', 'LOOP_TOP_FRACTION', 'LOOP_CHANCE', 'LOOP_MAX_REPEATS'] },
   { label: 'Living Screen', desc: 'Breathing tiles, slow-motion moments and double exposures.', keys: ['BREATHE_ZOOM', 'BREATHE_DRIFT', 'BREATHE_PERIOD_MS', 'SLOWMO_PROBABILITY', 'SLOWMO_COOLDOWN_MS', 'SLOWMO_ENERGY_MIN', 'SLOWMO_SPEED', 'SLOWMO_HOLD_MS', 'DOUBLE_EXPOSURE_PROBABILITY', 'DOUBLE_EXPOSURE_COOLDOWN_MS', 'DOUBLE_EXPOSURE_MS', 'DOUBLE_EXPOSURE_OPACITY', 'GRADIENT_PROBABILITY', 'GRADIENT_COOLDOWN_MS', 'GRADIENT_HOLD_MS', 'BEST_START_CHANCE', 'BEST_START_LEAD_S', 'BEST_START_MIN_LEFT_S', 'SMART_FRAMING_STRENGTH', 'SMART_FRAMING_ZOOM', 'LIKE_THIS_MS'] },
+  { label: 'Rhythm FX', desc: 'Stutter edits and Cascades - how often, how long, how many repeats.', keys: ['STUTTER_CHANCE', 'STUTTER_COOLDOWN_MS', 'STUTTER_REPEATS', 'CASCADE_CHANCE', 'CASCADE_COOLDOWN_MS', 'CASCADE_HOLD_BEATS'] },
 ];
 const TUNING_META = {
   XP_PER_BONUS_CLAIM: { label: 'Bonus-tap XP', unit: 'n', min: 5, max: 50, step: 1 },
@@ -520,6 +527,12 @@ const TUNING_META = {
   BEST_START_MIN_LEFT_S: { label: 'Best-moment: always leave at least (seconds)', unit: '', min: 5, max: 60, step: 1 },
   SMART_FRAMING_STRENGTH: { label: 'Smart framing: how far it follows the action', unit: 'pct', min: 0, max: 1.5, step: 0.05 },
   SMART_FRAMING_ZOOM: { label: 'Smart framing: extra zoom for room to move', unit: 'pct', min: 0, max: 0.2, step: 0.01 },
+  STUTTER_CHANCE: { label: 'Stutter chance per bar', unit: 'pct', min: 0, max: 1, step: 0.01 },
+  STUTTER_COOLDOWN_MS: { label: 'Rest between stutters', unit: 's', min: 2000, max: 300000, step: 1000 },
+  STUTTER_REPEATS: { label: 'Stutter repeats', unit: '', min: 1, max: 6, step: 1 },
+  CASCADE_CHANCE: { label: 'Cascade chance per bar', unit: 'pct', min: 0, max: 0.5, step: 0.01 },
+  CASCADE_COOLDOWN_MS: { label: 'Rest between cascades', unit: 's', min: 15000, max: 1800000, step: 15000 },
+  CASCADE_HOLD_BEATS: { label: 'Cascade hold (beats)', unit: '', min: 4, max: 64, step: 1 },
   LIKE_THIS_MS: { label: 'More like this: how long it lasts', unit: 's', min: 15000, max: 300000, step: 15000 },
   GRADIENT_HOLD_MS: { label: 'Gradient hold (before tiles rotate on)', unit: 's', min: 5000, max: 90000, step: 1000 },
   GRADIENT_COOLDOWN_MS: { label: 'Rest between Gradient moments', unit: 's', min: 30000, max: 1800000, step: 30000 },

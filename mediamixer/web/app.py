@@ -367,6 +367,20 @@ def create_app(ctx: AppContext) -> Flask:
         session.rotation.rotate(side=index)
         return jsonify(ok=True)
 
+    @app.route("/api/hold")
+    def api_hold():
+        """Keep a tile's clip for a moment (e.g. a Cascade's source): it loops,
+        and automatic changes leave it alone until then."""
+        try:
+            index = int(request.args.get("screen", ""))
+            seconds = max(0.0, min(300.0, float(request.args.get("s", ""))))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="invalid screen or seconds"), 400
+        if not (0 <= index < len(g.session.state.current_paths())):
+            return jsonify(ok=False, error="screen index out of range"), 400
+        g.session.state.hold_screen(index, time.time() + seconds)
+        return jsonify(ok=True)
+
     @app.route("/api/pin")
     def api_pin():
         try:

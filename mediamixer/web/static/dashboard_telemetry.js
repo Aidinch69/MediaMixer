@@ -58,6 +58,7 @@ const TELEMETRY_WATCHERS = [
   ['rhythm', () => (rhythmEnabled || rhythmZoneActive ? 'on' : null)],
   ['rhythmPattern', () => (rhythmActive() ? rhythmPattern : null)],
   ['floaterBarrage', () => (floaterBarrageActive ? 'on' : null)],
+  ['cascade', () => (cascade ? cascade.mode : null)],
   ['slowmo', () => (slowmoTileIndex >= 0 ? slowmoTileIndex : null)],
   ['doubleExposure', () => (doubleExposureTileIndex >= 0 ? doubleExposureTileIndex : null)],
   ['autopilot', () => (autopilotEnabled ? 'on' : null)],
@@ -170,6 +171,7 @@ function initTelemetry() {
   telemetryWrap('startWindDown', () => !!windDown, (args, was) => (was ? undefined : { k: 'session.windDown' }));
   telemetryWrap('cancelWindDown', () => (windDown ? Math.round(windDownK() * 100) : null), (args, pct) => (pct == null ? undefined : { k: 'session.keepGoing', d: { atPct: pct } }));
   telemetryWrap('startGradient', null, ([metric]) => ({ k: 'gradient', d: { metric } }));
+  telemetryWrap('startStutter', null, ([idx], before, ok) => (ok ? { k: 'stutter', d: { tile: idx } } : undefined));
   telemetryWrap('showMantra', null, ([style]) => ({ k: 'mantra', d: { style } }));
 
   // Spin / bank-or-push.

@@ -33,6 +33,7 @@ function captureScene() {
       rhythm: {
         enabled: rhythmEnabled, pattern: rhythmPatternPref, bpm: rhythmBaseBpm, source: rhythmBpmSource,
         waves: rhythmWaves, speedSync: rhythmSpeedSync, reactive: rhythmReactive, sound: rhythmSound, cutOnBeat: rhythmCutOnBeat,
+        stutter: rhythmFxStutter, cascade: rhythmFxCascade,
       },
     },
     sound: {
@@ -119,6 +120,8 @@ function applyScene(data, fromZone) {
     if (r.reactive != null && r.reactive !== rhythmReactive) toggleRhythmReactive();
     if (r.sound != null && r.sound !== rhythmSound) toggleRhythmSound();
     if (r.cutOnBeat != null && r.cutOnBeat !== rhythmCutOnBeat) toggleRhythmCutOnBeat();
+    if (r.stutter != null && r.stutter !== rhythmFxStutter) toggleRhythmFx('stutter');
+    if (r.cascade != null && r.cascade !== rhythmFxCascade) toggleRhythmFx('cascade');
   });
 
   if (snd.binauralVolume != null) step(() => { setBinauralVolume(snd.binauralVolume); setSceneInput('binaural-vol-input', snd.binauralVolume); });

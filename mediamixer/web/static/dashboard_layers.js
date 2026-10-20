@@ -996,6 +996,7 @@ function onRhythmBeat(n) {
   flushPendingCuts(downbeat);
   if (!anticipationActive) rhythmPatternHits(n).forEach(([idx, s]) => reactPulseTile(idx, s));
   onPulseBeat(n);
+  rhythmFxBeat(n);
   if (downbeat) audioGlowKick = Math.max(audioGlowKick, 0.55); // updateAudioGlow decays it back down
   if (rhythmSound) playRhythmClick(downbeat);
   if (zoomFxTiles.size) kickAllZoomTiles(downbeat ? 0.9 : 0.5);

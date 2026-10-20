@@ -350,6 +350,12 @@
           <label>Speed Follows Tempo</label>
           <button class="badge" id="rhythm-speed-toggle" onclick="toggleRhythmSpeedSync()">ON</button>
         </div>
+        <div class="slider"><label>Stutter Edits</label><button class="badge" id="rhythmfx-stutter-toggle" onclick="toggleRhythmFx('stutter')">ON</button></div>
+        <div class="slider"><label>Cascades</label><button class="badge" id="rhythmfx-cascade-toggle" onclick="toggleRhythmFx('cascade')">ON</button></div>
+        <div class="grid">
+          <button class="badge" onclick="startStutter(pickAmbientTarget())">🔁 Preview Stutter</button>
+          <button class="badge" onclick="startCascade()">🌊 Preview Cascade</button>
+        </div>
         <div class="slider">
           <label>Cut on the Beat</label>
           <button class="badge" id="rhythm-cut-toggle" onclick="toggleRhythmCutOnBeat()">ON</button>
@@ -373,7 +379,7 @@
           <label>Beat Sound</label>
           <button class="badge" id="rhythm-sound-toggle" onclick="toggleRhythmSound()">OFF</button>
         </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Each beat lights tiles in a pattern - a snake through the grid, a ping-pong, random scatter, ripples out from the centre, or a whole-grid heartbeat (Mix rotates between them every few bars) - and every downbeat (1 of 4) kicks the screen-edge glow. Tempo Waves speed the beat up over about 70 seconds, then drop back to base - and with Speed Follows Tempo on, every tile's playback speed rides the same wave (about 0.95x at base up to 1.25x at the top), so each wave builds and releases. Follow Audio tries to lock onto a steady beat in what's playing; spoken-word tracks often don't have one, so it falls back to your manual tempo and says so above. Every unbroken minute in sync earns XP (every other minute a tile FX too), and hearting a tile right on the beat charges Overdrive double. Cut on the Beat holds each clip change until the next beat (and automatic layout changes until the next downbeat), so the grid cuts in time like a music video. Tempo Follows Energy lets the beat quicken with engagement, build-ups, jackpots, surges and Overdrive, and settle in the Vault zone or a Floater Barrage. Auto-Pilot's Rhythm Zone and a Finale's build/peak switch this on by themselves while they run.</p></details>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Each beat lights tiles in a pattern - a snake through the grid, a ping-pong, random scatter, ripples out from the centre, or a whole-grid heartbeat (Mix rotates between them every few bars) - and every downbeat (1 of 4) kicks the screen-edge glow. Tempo Waves speed the beat up over about 70 seconds, then drop back to base - and with Speed Follows Tempo on, every tile's playback speed rides the same wave (about 0.95x at base up to 1.25x at the top), so each wave builds and releases. Follow Audio tries to lock onto a steady beat in what's playing; spoken-word tracks often don't have one, so it falls back to your manual tempo and says so above. Every unbroken minute in sync earns XP (every other minute a tile FX too), and hearting a tile right on the beat charges Overdrive double. Stutter Edits: now and then on a downbeat a tile replays the same half-beat two or three times in rhythm, then snaps back (replayed from captured frames, so the clip itself never stalls). Cascades: rarely, one clip ripples across the grid a beat at a time - each tile a beat behind the last, along the beat path or outward in rings - holds a few bars, then hands back one beat at a time. Cut on the Beat holds each clip change until the next beat (and automatic layout changes until the next downbeat), so the grid cuts in time like a music video. Tempo Follows Energy lets the beat quicken with engagement, build-ups, jackpots, surges and Overdrive, and settle in the Vault zone or a Floater Barrage. Auto-Pilot's Rhythm Zone and a Finale's build/peak switch this on by themselves while they run.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -623,6 +629,7 @@
 <script src="{{ url_for('static', filename='dashboard_pulse.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_living.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_gestures.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_rhythmfx.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_session.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_scenes.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_master.js') }}"></script>
