@@ -30,6 +30,8 @@
 <div id="disco-rain"></div>
 <div id="disco-border"></div>
 <div id="tier-reveal"></div>
+<!-- Manual spiral sits under the event spiral (same z, earlier in the DOM). -->
+<video id="spiral-manual" muted loop playsinline></video>
 <video id="spiral-overlay" muted loop playsinline></video>
 <div id="mantra-layer"></div>
 <!-- RGB Split tile FX: red pulled one way, green+blue the other. The
@@ -310,6 +312,22 @@
           </div>
         </div>
         <details class="hint-details"><summary>What does this do?</summary><p class="hint">A new kind of thing to win: a few seconds of visual effect on the tile a reward landed on, which also pulls your eye to that video. They can ride along with a bonus tap, a sealed-tile open, or a chase catch (odds in Tuning → Visual FX Rewards); catch-streak milestones always get one; medium+ jackpots light up a couple of tiles; Spin has a new "FX Burst" result; and a long in-sync run in Rhythm Mode earns one too. Zoom Pulse kicks in time with the audio (or Rhythm Mode's beat) when there's something to follow.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🌀 Manual Spiral</span><span class="settings-section-desc">Keep a spiral of your choice up, at your own opacity.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider">
+          <label>Enabled</label>
+          <button class="badge" id="manual-spiral-toggle" onclick="toggleManualSpiral()">OFF</button>
+        </div>
+        <div class="metric" id="manual-spiral-name">None picked yet - tap Next</div>
+        <div class="grid" style="grid-template-columns:1fr 1fr">
+          <button class="badge" onclick="stepManualSpiral(-1)">◀ Prev</button>
+          <button class="badge" onclick="stepManualSpiral(1)">Next ▶</button>
+        </div>
+        <div class="slider"><label>Opacity: <b><span id="l-manual-spiral-opacity">25%</span></b></label><input type="range" id="manual-spiral-opacity-input" min="5" max="80" step="1" value="25" oninput="setManualSpiralOpacity(this.value)"></div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Plays one spiral from your Spirals folder over the whole screen for as long as it's on - with Auto-Pilot on or off. Prev/Next step through the folder (and switch it on if it's off), and the opacity slider sets how strong it is. When a regular spiral moment fires (a big jackpot, hearts, Overdrive), that one fades in on top of yours with a different spiral, then fades back out leaving yours where it was.</p></details>
       </div>
     </details>
     <details class="settings-section">

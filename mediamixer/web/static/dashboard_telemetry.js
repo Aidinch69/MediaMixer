@@ -47,6 +47,7 @@ const TELEMETRY_WATCHERS = [
   ['mystery', () => (mysteryTileIndex >= 0 ? mysteryTileIndex : null)],
   ['spotlight', () => (spotlightTileIndex >= 0 ? spotlightTileIndex : null)],
   ['spiral', () => (spiralActive ? 'on' : null)],
+  ['manualSpiral', () => (manualSpiralEnabled && manualSpiralName ? manualSpiralName : null)],
   ['colorRush', () => (colorRushActive ? 'on' : null)],
   ['surge', () => (Date.now() < surgeExpireAt ? 'on' : null)],
   ['spinSurge', () => (Date.now() < spinSurgeEndsAt ? 'on' : null)],
@@ -83,7 +84,7 @@ function sampleTelemetryWatchers() {
 // rates with and without each effect. Tile FX are tracked here (from the
 // fireTileFx wrapper) because the effect code only records a busy-until.
 const telemetryTileFx = {}; // tile idx -> { kind, until }
-const RATING_CONTEXT_STATES = ['barrage', 'spiral', 'surge', 'spinSurge', 'colorRush', 'overdrive', 'hiddenMult', 'rhythm', 'finale', 'floaterBarrage'];
+const RATING_CONTEXT_STATES = ['barrage', 'spiral', 'surge', 'spinSurge', 'colorRush', 'overdrive', 'hiddenMult', 'rhythm', 'finale', 'floaterBarrage', 'manualSpiral'];
 
 function ratingContext(i) {
   const now = Date.now();
@@ -183,7 +184,7 @@ function initTelemetry() {
     // can be read against the settings actually in use.
     tuning: tuningOverridesNow(),
     toggles: {
-      autopilot: autopilotEnabled, floaters: fxEnabled, floaterCount: fxCount, rhythm: rhythmEnabled,
+      autopilot: autopilotEnabled, manualSpiral: manualSpiralEnabled ? Math.round(manualSpiralOpacity * 100) + '%' : false, floaters: fxEnabled, floaterCount: fxCount, rhythm: rhythmEnabled,
       mosaicDrift: dynamicMosaicDriftMode, mosaicZone: dynamicMosaicZoneMode, mosaicRange: [dynamicMosaicMinTiles, dynamicMosaicMaxTiles],
     },
   }), 0));

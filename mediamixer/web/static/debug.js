@@ -6,7 +6,7 @@ const $ = (id) => document.getElementById(id);
 const ZONE_COLORS = { chase: 'var(--z-chase)', color: 'var(--z-color)', jackpot: 'var(--z-jackpot)', vault: 'var(--z-vault)', rhythm: 'var(--z-rhythm)' };
 // Effect lanes on the timeline, top to bottom.
 const LANES = [
-  ['barrage', 'Barrage', '#ffd23f'], ['buildup', 'Build-up', '#b08a2e'], ['spiral', 'Spiral', '#d36bff'],
+  ['barrage', 'Barrage', '#ffd23f'], ['buildup', 'Build-up', '#b08a2e'], ['spiral', 'Spiral', '#d36bff'], ['manualSpiral', 'Manual spiral', '#8f5bd6'],
   ['surge', 'Surge', '#ff8a3d'], ['spinSurge', 'Spin Surge', '#3de0ff'], ['colorRush', 'Color Rush', '#ff5fa2'],
   ['overdrive', 'Overdrive', '#ff6b6b'], ['spotlight', 'Spotlight', '#ffffff'], ['bonus', 'Bonus tap', '#ffe27a'],
   ['sealed', 'Locked tile', '#4fb3ff'], ['chase', 'Catch', '#5fd38d'], ['mystery', 'Mystery', '#9aa5ff'],
@@ -279,7 +279,7 @@ function renderTimeline(start, end, intervals, inWin) {
 const FX_DEFAULT_MS = { prism: 8000, bloom: 7000, duotone: 7500, leak: 8500, kaleido: 6500, zoom: 9000, rgb: 8000, vhs: 7500 };
 const LIKE_STATE_LABELS = {
   barrage: 'Barrage / jackpot hype', spiral: 'Spiral', surge: 'Surge', spinSurge: 'Spin Surge', colorRush: 'Color Rush',
-  overdrive: 'Overdrive', hiddenMult: 'Hidden multiplier', rhythm: 'Rhythm mode', finale: 'Finale', floaterBarrage: 'Floater Barrage',
+  overdrive: 'Overdrive', hiddenMult: 'Hidden multiplier', rhythm: 'Rhythm mode', finale: 'Finale', floaterBarrage: 'Floater Barrage', manualSpiral: 'Manual spiral',
 };
 const tilesForLayout = (name) => { if (name === 'dual') return 2; const m = /grid(\d+)x(\d+)/.exec(name || ''); return m ? +m[1] * +m[2] : 2; };
 

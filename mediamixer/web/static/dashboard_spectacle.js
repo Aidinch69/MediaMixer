@@ -1,6 +1,6 @@
 // Part of the dashboard client - classic scripts sharing one global scope,
 // loaded in the order listed in dashboard.html.
-// Spiral overlay, Color Rush, color splash pieces, mystery tile, double feature and ambient pulses.
+// Spiral overlay and manual spiral, Color Rush, color splash pieces, mystery tile, double feature and ambient pulses.
 
 // ---- Spiral overlay ----
 // A single full-screen spiral video, layered above every tile/floater/FX,
@@ -31,7 +31,9 @@ function maybeTriggerSpiralOverlay() {
     if (!items.length || spiralActive) return;
     const el = document.getElementById('spiral-overlay');
     if (!el) return;
-    const pick = items[Math.floor(Math.random() * items.length)];
+    // A different clip from the manual spiral underneath, if one is up.
+    const pool = items.length > 1 ? items.filter((it) => it.base + it.path !== manualSpiralPath()) : items;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
     spiralActive = true;
     el.muted = true;
     el.loop = true;
@@ -409,4 +411,143 @@ function showClaimRewardLabel(idx, text) {
   void label.offsetWidth; // restart the rise/fade if one's already mid-flight
   label.classList.add('show');
   setTimeout(() => label.classList.remove('show'), CLAIM_REWARD_LABEL_MS);
+}
+
+// ---- Manual spiral ----
+// A spiral you pick and keep up yourself, at your own opacity, regardless
+// of Auto-Pilot. It sits on its own layer (#spiral-manual) directly under
+// the event spiral, so when a jackpot/heart/Overdrive spiral fires it
+// blends in on top of yours instead of replacing it (the event picks a
+// different clip so the two never double up). Remembered per device.
+const MANUAL_SPIRAL_FADE_MS = 1500;
+const MANUAL_SPIRAL_SWAP_MS = 450;
+let manualSpiralEnabled = false;
+let manualSpiralOpacity = 0.25;
+let manualSpiralName = null; // stored by file name so a pick survives the folder changing
+let manualSpiralStallTimer = null;
+let manualSpiralLastTime = -1;
+let manualSpiralOffTimer = null;
+
+function manualSpiralEl() { return document.getElementById('spiral-manual'); }
+
+function manualSpiralPath() {
+  return manualSpiralEnabled && manualSpiralName ? '/spirals/' + manualSpiralName : null;
+}
+
+function loadManualSpiralPrefs() {
+  const p = loadJsonPref('mm_manual_spiral', { enabled: false, opacity: 0.25, name: null });
+  manualSpiralEnabled = !!p.enabled;
+  manualSpiralOpacity = Math.max(0.05, Math.min(0.8, Number(p.opacity) || 0.25));
+  manualSpiralName = typeof p.name === 'string' ? p.name : null;
+  updateManualSpiralUi();
+  if (manualSpiralEnabled) showManualSpiral();
+}
+
+function saveManualSpiralPrefs() {
+  saveJsonPref('mm_manual_spiral', { enabled: manualSpiralEnabled, opacity: manualSpiralOpacity, name: manualSpiralName });
+  updateManualSpiralUi();
+}
+
+// Loads `item` (or the remembered pick) into the layer and fades it up.
+function showManualSpiral(item) {
+  const el = manualSpiralEl();
+  if (!el) return;
+  clearTimeout(manualSpiralOffTimer);
+  fetchSpiralList().then((items) => {
+    if (!items.length) { toast('🌀 No spirals found in the Spirals folder', true); manualSpiralEnabled = false; saveManualSpiralPrefs(); return; }
+    if (!manualSpiralEnabled) return;
+    const pick = item || items.find((it) => it.path === manualSpiralName) || items[0];
+    manualSpiralName = pick.path;
+    saveManualSpiralPrefs();
+    const url = pick.base + pick.path;
+    el.muted = true;
+    el.loop = true;
+    el.onended = () => { el.currentTime = 0; el.play().catch(() => {}); };
+    if (el.dataset.src !== url) {
+      el.dataset.src = url;
+      // Fade in only once a frame is decodable, same as the event spiral.
+      el.addEventListener('canplay', () => fadeManualSpiral(manualSpiralOpacity, MANUAL_SPIRAL_FADE_MS), { once: true });
+      el.src = url;
+    } else {
+      fadeManualSpiral(manualSpiralOpacity, MANUAL_SPIRAL_FADE_MS);
+    }
+    el.play().catch(() => {});
+    startManualSpiralWatchdog();
+  });
+}
+
+function fadeManualSpiral(opacity, ms) {
+  const el = manualSpiralEl();
+  if (!el) return;
+  el.style.transition = 'opacity ' + (ms / 1000).toFixed(2) + 's ease-in-out';
+  void el.offsetWidth;
+  el.style.opacity = manualSpiralEnabled ? String(opacity) : '0';
+}
+
+// Same stall guard as the event spiral: a clip stuck on one frame gets
+// restarted from the top.
+function startManualSpiralWatchdog() {
+  const el = manualSpiralEl();
+  manualSpiralLastTime = -1;
+  clearInterval(manualSpiralStallTimer);
+  manualSpiralStallTimer = setInterval(() => {
+    if (!manualSpiralEnabled || el.paused) return;
+    if (el.currentTime === manualSpiralLastTime) { el.currentTime = 0; el.play().catch(() => {}); }
+    manualSpiralLastTime = el.currentTime;
+  }, SPIRAL_STALL_CHECK_MS);
+}
+
+function hideManualSpiral() {
+  const el = manualSpiralEl();
+  if (!el) return;
+  fadeManualSpiral(0, MANUAL_SPIRAL_FADE_MS);
+  clearTimeout(manualSpiralOffTimer);
+  manualSpiralOffTimer = setTimeout(() => {
+    if (manualSpiralEnabled) return;
+    el.pause();
+    clearInterval(manualSpiralStallTimer);
+  }, MANUAL_SPIRAL_FADE_MS + 100);
+}
+
+function toggleManualSpiral() {
+  manualSpiralEnabled = !manualSpiralEnabled;
+  saveManualSpiralPrefs();
+  if (manualSpiralEnabled) showManualSpiral(); else hideManualSpiral();
+}
+
+function setManualSpiralOpacity(v) {
+  manualSpiralOpacity = Math.max(0.05, Math.min(0.8, parseInt(v, 10) / 100 || 0.25));
+  saveManualSpiralPrefs();
+  if (manualSpiralEnabled) fadeManualSpiral(manualSpiralOpacity, 150);
+}
+
+// Next/previous through the folder. Turns the layer on if it's off, so the
+// buttons double as a browser. Dips out briefly between clips.
+function stepManualSpiral(dir) {
+  fetchSpiralList().then((items) => {
+    if (!items.length) { toast('🌀 No spirals found in the Spirals folder', true); return; }
+    const cur = Math.max(0, items.findIndex((it) => it.path === manualSpiralName));
+    const next = items[(cur + dir + items.length) % items.length];
+    manualSpiralName = next.path;
+    if (!manualSpiralEnabled) { manualSpiralEnabled = true; saveManualSpiralPrefs(); showManualSpiral(next); return; }
+    saveManualSpiralPrefs();
+    fadeManualSpiral(0, MANUAL_SPIRAL_SWAP_MS);
+    setTimeout(() => showManualSpiral(next), MANUAL_SPIRAL_SWAP_MS);
+  });
+}
+
+function updateManualSpiralUi() {
+  setToggleBadge('manual-spiral-toggle', manualSpiralEnabled);
+  const input = document.getElementById('manual-spiral-opacity-input');
+  if (input) input.value = Math.round(manualSpiralOpacity * 100);
+  const lbl = document.getElementById('l-manual-spiral-opacity');
+  if (lbl) lbl.innerText = Math.round(manualSpiralOpacity * 100) + '%';
+  const name = document.getElementById('manual-spiral-name');
+  if (name) {
+    const list = spiralList || [];
+    const idx = list.findIndex((it) => it.path === manualSpiralName);
+    name.innerText = manualSpiralName
+      ? (idx >= 0 ? (idx + 1) + ' / ' + list.length + ' · ' : '') + manualSpiralName.replace(/\.[^.]+$/, '')
+      : 'None picked yet - tap Next';
+  }
 }

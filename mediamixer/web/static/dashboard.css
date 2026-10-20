@@ -29,6 +29,7 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
    panel (z25) and toast (z40) so those stay usable while it's up. */
 /* transition-duration is set inline per activation (5-8.5s, randomized) by
    maybeTriggerSpiralOverlay - this is just a sane fallback. */
+#spiral-manual{position:fixed;inset:0;z-index:22;width:100%;height:100%;object-fit:cover;opacity:0;pointer-events:none;mix-blend-mode:screen}
 #spiral-overlay{position:fixed;inset:0;z-index:22;width:100%;height:100%;object-fit:cover;opacity:0;pointer-events:none;transition:opacity 5s ease-in-out;mix-blend-mode:screen}
 
 /* ---- Color Rush ---- */

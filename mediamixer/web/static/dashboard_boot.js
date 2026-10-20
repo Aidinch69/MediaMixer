@@ -34,6 +34,7 @@ window.onload = () => {
   buildTuningUi();
   loadMosaicPref();
   loadFxPrefs();
+  loadManualSpiralPrefs();
   loadAnticipationPrefs();
   loadAutopilotPrefs();
   loadVibeDialPref();
