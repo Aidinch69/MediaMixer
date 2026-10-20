@@ -507,6 +507,7 @@ function rateScreen(i, dir, btn, strength) {
       toast('❤️🔥 Highlighted tile! Bonus heart multiplier');
     }
     onEngagement('heart', i, strength);
+    if (typeof onMomentHeart === 'function') onMomentHeart(i);
     statsLifetimeHearts += strength;
     sessionStats.hearts += strength;
     saveStats();

@@ -216,6 +216,13 @@ const TUNING_DEFAULTS = {
   ECHO_MIN_ENERGY: 1.15,
   ECHO_COOLDOWN_MS: 180000,
   ECHO_MS: 4500,
+  FAVORITE_TAKEOVER_HEARTS: 3,
+  FAVORITE_TAKEOVER_MS: 9000,
+  FAVORITE_TAKEOVER_COOLDOWN_MS: 240000,
+  HEART_BURST_WINDOW_MS: 1200,
+  HEART_BURST_COOLDOWN_MS: 30000,
+  HEART_BURST_LEAN_MS: 30000,
+  HEART_BURST_LEAN_SHARE: 0.4,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -371,7 +378,7 @@ const TUNING_GROUPS = [
   { label: 'Custom Loop Point', desc: 'Which favourites replay their best section, how often, and how many times.', keys: ['LOOP_HEART_THRESHOLD', 'LOOP_TOP_FRACTION', 'LOOP_CHANCE', 'LOOP_MAX_REPEATS'] },
   { label: 'Living Screen', desc: 'Breathing tiles, slow-motion moments and double exposures.', keys: ['BREATHE_ZOOM', 'BREATHE_DRIFT', 'BREATHE_PERIOD_MS', 'SLOWMO_PROBABILITY', 'SLOWMO_COOLDOWN_MS', 'SLOWMO_ENERGY_MIN', 'SLOWMO_SPEED', 'SLOWMO_HOLD_MS', 'DOUBLE_EXPOSURE_PROBABILITY', 'DOUBLE_EXPOSURE_COOLDOWN_MS', 'DOUBLE_EXPOSURE_MS', 'DOUBLE_EXPOSURE_OPACITY', 'GRADIENT_PROBABILITY', 'GRADIENT_COOLDOWN_MS', 'GRADIENT_HOLD_MS', 'BEST_START_CHANCE', 'BEST_START_LEAD_S', 'BEST_START_MIN_LEFT_S', 'SMART_FRAMING_STRENGTH', 'SMART_FRAMING_ZOOM', 'LIKE_THIS_MS'] },
   { label: 'Rhythm FX', desc: 'Stutter edits and Cascades - how often, how long, how many repeats.', keys: ['STUTTER_CHANCE', 'STUTTER_COOLDOWN_MS', 'STUTTER_REPEATS', 'CASCADE_CHANCE', 'CASCADE_COOLDOWN_MS', 'CASCADE_HOLD_BEATS'] },
-  { label: 'Moments', desc: 'The Drop, Breath, Focus pull, Call & response and Echo trails - odds, rests and lengths.', keys: ['DROP_CHANCE', 'DROP_MIN_ENERGY', 'DROP_COOLDOWN_MS', 'BREATH_CHANCE', 'BREATH_COOLDOWN_MS', 'BREATH_MS', 'BREATH_SPEED', 'FOCUS_PULL_CHANCE', 'FOCUS_PULL_COOLDOWN_MS', 'FOCUS_PULL_BARS', 'CALL_RESPONSE_CHANCE', 'CALL_RESPONSE_COOLDOWN_MS', 'ECHO_CHANCE', 'ECHO_MIN_ENERGY', 'ECHO_COOLDOWN_MS', 'ECHO_MS'] },
+  { label: 'Moments', desc: 'The Drop, Breath, Focus pull, Call & response, Echo trails, Favourite takeover and Heart burst - odds, rests and lengths.', keys: ['DROP_CHANCE', 'DROP_MIN_ENERGY', 'DROP_COOLDOWN_MS', 'BREATH_CHANCE', 'BREATH_COOLDOWN_MS', 'BREATH_MS', 'BREATH_SPEED', 'FOCUS_PULL_CHANCE', 'FOCUS_PULL_COOLDOWN_MS', 'FOCUS_PULL_BARS', 'CALL_RESPONSE_CHANCE', 'CALL_RESPONSE_COOLDOWN_MS', 'ECHO_CHANCE', 'ECHO_MIN_ENERGY', 'ECHO_COOLDOWN_MS', 'ECHO_MS', 'FAVORITE_TAKEOVER_HEARTS', 'FAVORITE_TAKEOVER_MS', 'FAVORITE_TAKEOVER_COOLDOWN_MS', 'HEART_BURST_WINDOW_MS', 'HEART_BURST_COOLDOWN_MS', 'HEART_BURST_LEAN_MS', 'HEART_BURST_LEAN_SHARE'] },
 ];
 const TUNING_META = {
   XP_PER_BONUS_CLAIM: { label: 'Bonus-tap XP', unit: 'n', min: 5, max: 50, step: 1 },
@@ -560,6 +567,13 @@ const TUNING_META = {
   ECHO_MIN_ENERGY: { label: 'Echo trails: needs energy above', unit: 'x', min: 0.85, max: 1.3, step: 0.01 },
   ECHO_COOLDOWN_MS: { label: 'Rest between echo trails', unit: 's', min: 30000, max: 1800000, step: 15000 },
   ECHO_MS: { label: 'Echo trails length', unit: 's', min: 1500, max: 15000, step: 500 },
+  FAVORITE_TAKEOVER_HEARTS: { label: 'Favourite takeover: hearts on one clip this session', unit: '', min: 2, max: 10, step: 1 },
+  FAVORITE_TAKEOVER_MS: { label: 'Favourite takeover length', unit: 's', min: 4000, max: 30000, step: 1000 },
+  FAVORITE_TAKEOVER_COOLDOWN_MS: { label: 'Rest between favourite takeovers', unit: 's', min: 30000, max: 1800000, step: 15000 },
+  HEART_BURST_WINDOW_MS: { label: 'Heart burst: two hearts within', unit: 's', min: 400, max: 3000, step: 100 },
+  HEART_BURST_COOLDOWN_MS: { label: 'Rest between heart bursts', unit: 's', min: 5000, max: 300000, step: 5000 },
+  HEART_BURST_LEAN_MS: { label: 'Heart burst: picks lean toward that look for', unit: 's', min: 0, max: 120000, step: 5000 },
+  HEART_BURST_LEAN_SHARE: { label: 'Heart burst: how much of the picking leans', unit: 'pct', min: 0, max: 1, step: 0.05 },
   STUTTER_CHANCE: { label: 'Stutter chance per bar', unit: 'pct', min: 0, max: 1, step: 0.01 },
   STUTTER_COOLDOWN_MS: { label: 'Rest between stutters', unit: 's', min: 2000, max: 300000, step: 1000 },
   STUTTER_REPEATS: { label: 'Stutter repeats', unit: '', min: 1, max: 6, step: 1 },

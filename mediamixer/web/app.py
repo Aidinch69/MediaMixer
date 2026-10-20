@@ -620,7 +620,8 @@ def create_app(ctx: AppContext) -> Flask:
     @app.route("/api/dna/like_this")
     def api_dna_like_this():
         """More like this: look-alike clips onto the tapped tile's neighbours
-        now, and lean picks toward the same look for a while."""
+        now, and lean picks toward the same look for a while. place=0 only
+        leans (Heart burst); share sets how much of the picking it takes."""
         session = g.session
         try:
             index = int(request.args.get("screen", ""))
@@ -634,7 +635,10 @@ def create_app(ctx: AppContext) -> Flask:
         pool = library.similar_clips(db, current[index], limit=40, exclude=set(current) | recent)
         if not pool:
             return jsonify(ok=True, placed=0, reason="this clip hasn't been analysed yet")
-        session.state.set_like_this(current[index], pool, seconds)
+        share = request.args.get("share", type=float)
+        session.state.set_like_this(current[index], pool, seconds, None if share is None else max(0.0, min(1.0, share)))
+        if request.args.get("place", 1, type=int) == 0:
+            return jsonify(ok=True, placed=0, tiles=[], seconds=seconds, lean=True)
         cols = max(1, _layout_columns(config, session.state.snapshot()["layout"]))
         row, col = divmod(index, cols)
         neighbours = [r * cols + c for r, c in ((row, col - 1), (row, col + 1), (row - 1, col), (row + 1, col))

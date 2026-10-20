@@ -187,9 +187,14 @@ class RuntimeState:
         with self._lock:
             return self.energy if time.time() - self.energy_at < 60 else 1.0
 
-    def set_like_this(self, path: str, pool: list, seconds: float):
+    def set_like_this(self, path: str, pool: list, seconds: float, share: float = None):
         with self._lock:
-            self.like_this = {"path": path, "pool": list(pool), "until": time.time() + seconds}
+            self.like_this = {"path": path, "pool": list(pool), "until": time.time() + seconds, "share": share}
+
+    def like_this_share(self, default: float) -> float:
+        with self._lock:
+            share = self.like_this and self.like_this.get("share")
+            return default if share is None else share
 
     def like_this_pool(self) -> list:
         with self._lock:

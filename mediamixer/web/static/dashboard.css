@@ -641,6 +641,7 @@ button:hover{background:#251538;border-color:#b84dff;box-shadow:0 0 10px rgba(18
 .fx-stutter-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;opacity:0}
 .fx-cascade{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1;pointer-events:none;opacity:0;transition:opacity .18s ease;background:#020105}
 #moment-dim{position:fixed;inset:0;z-index:13;background:#04010a;opacity:0;pointer-events:none}
+.heart-burst-piece{position:fixed;z-index:30;font-size:26px;pointer-events:none;filter:drop-shadow(0 0 6px rgba(255,80,140,.8));will-change:transform,opacity}
 .countdown-veil{position:absolute;inset:0;z-index:4;background:rgba(2,1,6,.92);display:flex;align-items:center;justify-content:center;font-size:clamp(2rem,9vw,7rem);font-weight:900;color:transparent;pointer-events:none;transition:opacity .4s ease}
 .countdown-veil.lit{color:#fff;text-shadow:0 0 30px rgba(var(--theme-flash,255,220,120),.9);animation:countdown-pop .35s ease-out}
 .countdown-veil.gone{opacity:0}

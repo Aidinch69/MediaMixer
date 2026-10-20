@@ -1,9 +1,10 @@
 // Part of the dashboard client - classic scripts sharing one global scope,
 // loaded in the order listed in dashboard.html.
 // Moments: The Drop, Breath, Countdown reveal, Focus pull, Call & response
-// and Echo trails - structured, beat-aware moments that never overlap.
+// and Echo trails - structured, beat-aware moments that never overlap -
+// plus the love moments: Favourite takeover and Heart burst.
 
-const momentsOn = { drop: true, breath: true, countdown: true, focus: true, callResponse: true, echo: true };
+const momentsOn = { drop: true, breath: true, countdown: true, focus: true, callResponse: true, echo: true, favorite: true, heartBurst: true };
 let activeMoment = null; // name of the moment running now
 let momentEnergyShift = 0; // added to the energy target while a moment wants it
 let momentEnergyUntil = 0;
@@ -273,6 +274,88 @@ function startEchoTrails(ms) {
   });
   toast('〰️ Echo');
   setTimeout(() => { activeMoment = null; }, ms);
+  return true;
+}
+
+// ---- Favourite takeover & Heart burst ----
+// Called from rateScreen on every heart.
+const sessionHeartsByPath = {};
+const favoriteTakenOver = new Set(); // once per clip per session
+const lastHeartAtByTile = {};
+
+function onMomentHeart(idx) {
+  const path = currentPaths[idx];
+  if (!path) return;
+  const now = Date.now();
+  const n = (sessionHeartsByPath[path] || 0) + 1;
+  sessionHeartsByPath[path] = n;
+  const quick = now - (lastHeartAtByTile[idx] || 0) <= TUNING.HEART_BURST_WINDOW_MS;
+  lastHeartAtByTile[idx] = quick ? 0 : now; // a third quick heart starts a new pair
+  if (n >= TUNING.FAVORITE_TAKEOVER_HEARTS && !favoriteTakenOver.has(path) && momentReady('favorite', 'FAVORITE_TAKEOVER_COOLDOWN_MS') && tileElements.length >= 3) {
+    startFavoriteTakeover(idx);
+  } else if (quick && momentsOn.heartBurst && now - (momentLastAt.heartBurst || 0) > TUNING.HEART_BURST_COOLDOWN_MS) {
+    heartBurst(idx);
+  }
+}
+
+// A clip hearted again and again this session gets the screen to itself
+// for a few seconds - held so it can't rotate away mid-takeover.
+function startFavoriteTakeover(idx) {
+  const path = currentPaths[idx];
+  const ms = TUNING.FAVORITE_TAKEOVER_MS;
+  if (!startSpotlight(idx, ms)) return false;
+  fetch('/api/hold?screen=' + idx + '&s=' + Math.ceil(ms / 1000 + 2)).catch(() => {});
+  favoriteTakenOver.add(path);
+  activeMoment = 'favorite';
+  momentLastAt.favorite = Date.now();
+  setTimeout(() => showClaimRewardLabel(idx, '👑 Tonight\'s favourite'), TUNING.SPOTLIGHT_GROW_MS + 60);
+  burstConfetti(14);
+  toast('👑 Favourite takeover');
+  setTimeout(() => { if (activeMoment === 'favorite') activeMoment = null; }, ms);
+  return true;
+}
+
+// Two quick hearts: hearts fly out into the neighbouring tiles, and picks
+// lean toward this clip's look for a while (lean only - nothing is swapped).
+function heartBurst(idx) {
+  const tile = tileElements[idx];
+  if (!tile) return false;
+  momentLastAt.heartBurst = Date.now();
+  const r = tile.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const reach = Math.max(r.width, r.height) * 1.6;
+  const targets = [];
+  tileElements.forEach((t, j) => {
+    if (j === idx) return;
+    const q = t.getBoundingClientRect();
+    const tx = q.left + q.width / 2, ty = q.top + q.height / 2;
+    if (Math.hypot(tx - cx, ty - cy) <= reach) targets.push({ j, tx, ty });
+  });
+  const hearts = ['❤️', '💖', '💗', '💕'];
+  const flights = targets.length ? targets : [{ j: -1, tx: cx, ty: cy - r.height }];
+  flights.forEach((tg, k) => {
+    for (let m = 0; m < 2; m++) {
+      const el = document.createElement('div');
+      el.className = 'heart-burst-piece';
+      el.textContent = hearts[(k + m) % hearts.length];
+      el.style.left = cx + 'px';
+      el.style.top = cy + 'px';
+      document.body.appendChild(el);
+      const jx = (Math.random() - 0.5) * 40, jy = (Math.random() - 0.5) * 40;
+      const anim = el.animate([
+        { transform: 'translate(-50%,-50%) scale(.4)', opacity: 0 },
+        { transform: 'translate(-50%,-50%) scale(1.3)', opacity: 1, offset: 0.15 },
+        { transform: 'translate(calc(-50% + ' + (tg.tx - cx + jx) + 'px), calc(-50% + ' + (tg.ty - cy + jy) + 'px)) scale(.8)', opacity: 0 },
+      ], { duration: 750 + m * 120, delay: k * 40, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'both' });
+      anim.onfinish = () => el.remove();
+    }
+    if (tg.j >= 0) setTimeout(() => { if (tileElements[tg.j]) pulseWarmGlow(tg.j, 2); }, 650 + k * 40);
+  });
+  pulseWarmGlow(idx, 3);
+  if (TUNING.HEART_BURST_LEAN_MS > 0) {
+    fetch('/api/dna/like_this?screen=' + idx + '&place=0&s=' + Math.round(TUNING.HEART_BURST_LEAN_MS / 1000) + '&share=' + TUNING.HEART_BURST_LEAN_SHARE).catch(() => {});
+  }
+  try { if (navigator.vibrate) navigator.vibrate([10, 30, 10]); } catch (err) {}
   return true;
 }
 

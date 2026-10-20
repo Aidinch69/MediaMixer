@@ -178,7 +178,7 @@ class RotationEngine:
         """While More like this is running, most picks come from its pool of
         look-alike clips (the rest stay normal, for variety)."""
         pool = self._state.like_this_pool()
-        if not pool or random.random() >= LIKE_THIS_SHARE:
+        if not pool or random.random() >= self._state.like_this_share(LIKE_THIS_SHARE):
             return None
         excluded = {os.path.normpath(p).lower() for p in exclude if p}
         free = [p for p in pool if os.path.normpath(p).lower() not in excluded]

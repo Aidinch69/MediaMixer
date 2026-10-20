@@ -147,6 +147,7 @@ function initTelemetry() {
   telemetryWrap('applyPayoffEffects', null, ([tier, streak, milestones, wasAtRisk, chainDepth]) => ({
     k: 'payoff', d: { tier: tier && tier.name, shake: !!(tier && tier.shake), streak, chainDepth },
   }));
+  telemetryWrap('heartBurst', null, ([idx]) => ({ k: 'moment.heartBurst', d: { tile: idx } }));
   telemetryWrap('triggerMiniPayoff', null, ([idx]) => ({ k: 'payoff.mini', d: { tile: idx } }));
   telemetryWrap('runAnticipationBuildUp', null, ([durationS, isReal, tiles, tier]) => ({
     k: isReal ? 'buildup.real' : 'buildup.fake', d: { s: Math.round(durationS * 10) / 10, tier: tier || null },

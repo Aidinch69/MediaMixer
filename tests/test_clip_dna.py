@@ -122,3 +122,26 @@ def test_more_like_this_fills_neighbours_and_leans_picks(config, db):
         picks.append(look(sess.state.current_paths()[0]))
     assert sum(1 for v in picks if v == centre_look) >= 14  # ~70% from the look-alike pool, vs ~50% by chance
     sessions.stop()
+
+
+def test_heart_burst_lean_only_swaps_nothing_and_uses_its_share(config, db):
+    from mediamixer.context import AppContext
+    from mediamixer.session import SessionManager
+    from mediamixer.web.app import create_app
+    library._dna_taste_cache.update(at=0, value=None)
+    paths = make_clips(config, [f"{i:03}.mp4" for i in range(160)])
+    library.sync_library(db, config)
+    for i, p in enumerate(paths):
+        v = 0.1 if i % 2 == 0 else 0.8
+        db.save_dna(p, {"brightness": v, "warmth": v, "motion": 0.05, "saturation": 0.3, "accent_hue": None}, clip_dna.DNA_VERSION)
+    sessions = SessionManager(db, config)
+    client = create_app(AppContext(config, db, sessions)).test_client()
+    client.get("/")
+    client.get("/api/layout?mode=grid3x3")
+    sess = next(iter(sessions._sessions.values()))
+    before = sess.state.current_paths()
+    r = client.get("/api/dna/like_this?screen=4&place=0&s=30&share=0.4").get_json()
+    assert r["placed"] == 0 and r["lean"]
+    assert sess.state.current_paths() == before
+    assert sess.state.like_this_share(0.7) == 0.4 and sess.state.like_this_pool()
+    sessions.stop()
