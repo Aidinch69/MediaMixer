@@ -273,7 +273,9 @@ function floaterBarrageSlots(n) {
   for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
   const cw = vw / cols, ch = vh / rows;
   return cells.slice(0, n).map(([c, r]) => {
-    const w = cw * (1.15 + Math.random() * 0.45); // overlap neighbours a little so the dark fills in
+    // Overlap neighbours so the dark fills in; FLOATER_BARRAGE_SIZE_MULT
+    // scales them all (1.4 = 40% bigger, per first-look feedback).
+    const w = cw * (1.15 + Math.random() * 0.45) * TUNING.FLOATER_BARRAGE_SIZE_MULT;
     const h = w * 9 / 16;
     const cx = (c + 0.5 + (Math.random() - 0.5) * 0.5) * cw;
     const cy = (r + 0.5 + (Math.random() - 0.5) * 0.5) * ch;

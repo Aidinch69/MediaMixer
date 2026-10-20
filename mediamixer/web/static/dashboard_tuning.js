@@ -74,6 +74,7 @@ const TUNING_DEFAULTS = {
   FLOATER_BARRAGE_MIN_MS: 10000,
   FLOATER_BARRAGE_RANGE_MS: 5000,
   FLOATER_BARRAGE_DIM: 0.85,
+  FLOATER_BARRAGE_SIZE_MULT: 1.4,
   SURGE_COOLDOWN_MS: 120000, // rest after any surge ends before a random one can start
   SPIN_COOLDOWN_MS: 45000,
   PATIENCE_CHECK_MS: 15000,
@@ -281,7 +282,7 @@ const TUNING_GROUPS = [
   { label: 'Audio-Reactive', desc: 'Minimum gap between audio-triggered tile pulses.', keys: ['AUDIO_REACT_PULSE_GAP_MS'] },
   { label: 'Clip Transitions', desc: 'How often clip changes get a transition, how long, and the mix of styles.', keys: ['TRANSITION_PROBABILITY', 'TRANSITION_DURATION_MS', 'TRANSITION_WEIGHT_CROSSFADE', 'TRANSITION_WEIGHT_ZOOM', 'TRANSITION_WEIGHT_GLITCH'] },
   { label: 'Spotlight Takeover', desc: 'The rare one-tile takeover - odds, minimum gap, length, and size.', keys: ['SPOTLIGHT_CHECK_MS', 'SPOTLIGHT_PROBABILITY', 'SPOTLIGHT_MIN_GAP_MS', 'SPOTLIGHT_DURATION_MIN_MS', 'SPOTLIGHT_DURATION_RANGE_MS', 'SPOTLIGHT_SCALE', 'SPOTLIGHT_GROW_MS', 'SPOTLIGHT_DIM_OPACITY'] },
-  { label: 'Floater Barrage', desc: 'The rare dim-the-grid, fill-the-screen-with-floaters moment - odds, rest, count, length and dim.', keys: ['FLOATER_BARRAGE_PROBABILITY', 'FLOATER_BARRAGE_CHECK_MS', 'FLOATER_BARRAGE_COOLDOWN_MS', 'FLOATER_BARRAGE_COUNT', 'FLOATER_BARRAGE_MIN_MS', 'FLOATER_BARRAGE_RANGE_MS', 'FLOATER_BARRAGE_DIM'] },
+  { label: 'Floater Barrage', desc: 'The rare dim-the-grid, fill-the-screen-with-floaters moment - odds, rest, count, length and dim.', keys: ['FLOATER_BARRAGE_PROBABILITY', 'FLOATER_BARRAGE_CHECK_MS', 'FLOATER_BARRAGE_COOLDOWN_MS', 'FLOATER_BARRAGE_COUNT', 'FLOATER_BARRAGE_MIN_MS', 'FLOATER_BARRAGE_RANGE_MS', 'FLOATER_BARRAGE_DIM', 'FLOATER_BARRAGE_SIZE_MULT'] },
   { label: 'Overdrive', desc: 'How fast the meter charges and what a release does.', keys: ['OVERDRIVE_PER_HEART', 'OVERDRIVE_PER_CATCH', 'OVERDRIVE_PER_BONUS', 'OVERDRIVE_PER_UNLOCK', 'OVERDRIVE_ON_BEAT_MULT', 'OVERDRIVE_BURST_MS', 'OVERDRIVE_SPEED_MULT', 'OVERDRIVE_BARRAGE_P', 'OVERDRIVE_JACKPOT_P', 'OVERDRIVE_SPOTLIGHT_CHANCE'] },
 ];
 const TUNING_META = {
@@ -366,6 +367,7 @@ const TUNING_META = {
   FLOATER_BARRAGE_MIN_MS: { label: 'Floater Barrage length (min)', unit: 's', min: 4000, max: 30000, step: 1000 },
   FLOATER_BARRAGE_RANGE_MS: { label: 'Floater Barrage length (random extra)', unit: 's', min: 0, max: 20000, step: 1000 },
   FLOATER_BARRAGE_DIM: { label: 'Grid dim during Floater Barrage', unit: 'pct', min: 0.3, max: 1, step: 0.05 },
+  FLOATER_BARRAGE_SIZE_MULT: { label: 'Floater Barrage floater size', unit: 'x', min: 0.6, max: 2.5, step: 0.05 },
   SURGE_COOLDOWN_MS: { label: 'Rest between random surges', unit: 's', min: 0, max: 600000, step: 15000 },
   RATE_XP_BASE: { label: 'Rate (👍/👎) base XP', unit: 'n', min: 1, max: 20, step: 1 },
   FX_REWARD_BONUS_CHANCE: { label: 'FX with a bonus tap', unit: 'pct', min: 0, max: 1, step: 0.05 },
