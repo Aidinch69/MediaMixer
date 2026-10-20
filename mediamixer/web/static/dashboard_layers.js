@@ -831,6 +831,7 @@ let rhythmRunMinutesPaid = 0;
 let rhythmPayoffGlow = 0;
 let rhythmPayoffSeenAt = 0;
 let rhythmReactive = true;
+let rhythmCutOnBeat = true;
 let rhythmDrive = 1;
 let rhythmDriveTargetValue = 1;
 let rhythmDriveUpdatedAt = Date.now();
@@ -991,6 +992,7 @@ function onRhythmBeat(n) {
     if (rhythmPatternPref !== 'mix') rhythmPattern = rhythmPatternPref;
     else if (Math.random() < TUNING.RHYTHM_PATTERN_SWITCH_CHANCE) rhythmPattern = pickRhythmPattern();
   }
+  flushPendingCuts(downbeat);
   if (!anticipationActive) rhythmPatternHits(n).forEach(([idx, s]) => reactPulseTile(idx, s));
   onPulseBeat(n);
   if (downbeat) audioGlowKick = Math.max(audioGlowKick, 0.55); // updateAudioGlow decays it back down
@@ -1120,6 +1122,7 @@ function updateRhythmUi() {
   setToggleBadge('rhythm-sound-toggle', rhythmSound);
   setToggleBadge('rhythm-speed-toggle', rhythmSpeedSync);
   setToggleBadge('rhythm-reactive-toggle', rhythmReactive);
+  setToggleBadge('rhythm-cut-toggle', rhythmCutOnBeat);
   ['mix'].concat(RHYTHM_PATTERN_NAMES).forEach((p) => {
     const b = document.getElementById('rhythm-pattern-' + p);
     if (b) b.classList.toggle('active', rhythmPatternPref === p);
@@ -1149,7 +1152,7 @@ function formatRunSeconds(ms) {
 setInterval(() => { if (rhythmActive()) updateRhythmUi(); }, 1000);
 
 function loadRhythmPrefs() {
-  const prefs = loadJsonPref('mm_rhythm', { enabled: false, bpm: 90, source: 'manual', waves: true, sound: false, speedSync: true, reactive: true, pattern: 'mix' });
+  const prefs = loadJsonPref('mm_rhythm', { enabled: false, bpm: 90, source: 'manual', waves: true, sound: false, speedSync: true, reactive: true, pattern: 'mix', cutOnBeat: true });
   rhythmEnabled = !!prefs.enabled;
   rhythmBaseBpm = Math.max(50, Math.min(160, Number(prefs.bpm) || 90));
   rhythmBpmSource = prefs.source === 'audio' ? 'audio' : 'manual';
@@ -1157,12 +1160,13 @@ function loadRhythmPrefs() {
   rhythmSound = !!prefs.sound;
   rhythmSpeedSync = !!prefs.speedSync;
   rhythmReactive = prefs.reactive !== false;
+  rhythmCutOnBeat = prefs.cutOnBeat !== false;
   rhythmPatternPref = prefs.pattern === 'mix' || RHYTHM_PATTERNS[prefs.pattern] ? prefs.pattern : 'mix';
   updateRhythmUi();
 }
 
 function saveRhythmPrefs() {
-  saveJsonPref('mm_rhythm', { enabled: rhythmEnabled, bpm: rhythmBaseBpm, source: rhythmBpmSource, waves: rhythmWaves, sound: rhythmSound, speedSync: rhythmSpeedSync, reactive: rhythmReactive, pattern: rhythmPatternPref });
+  saveJsonPref('mm_rhythm', { enabled: rhythmEnabled, bpm: rhythmBaseBpm, source: rhythmBpmSource, waves: rhythmWaves, sound: rhythmSound, speedSync: rhythmSpeedSync, reactive: rhythmReactive, pattern: rhythmPatternPref, cutOnBeat: rhythmCutOnBeat });
   updateRhythmUi();
 }
 
@@ -1171,6 +1175,7 @@ function toggleRhythmWaves() { rhythmWaves = !rhythmWaves; saveRhythmPrefs(); }
 function toggleRhythmSound() { rhythmSound = !rhythmSound; saveRhythmPrefs(); }
 function toggleRhythmSpeedSync() { rhythmSpeedSync = !rhythmSpeedSync; saveRhythmPrefs(); }
 function toggleRhythmReactive() { rhythmReactive = !rhythmReactive; saveRhythmPrefs(); }
+function toggleRhythmCutOnBeat() { rhythmCutOnBeat = !rhythmCutOnBeat; saveRhythmPrefs(); }
 function setRhythmPattern(p) {
   rhythmPatternPref = p === 'mix' || RHYTHM_PATTERNS[p] ? p : 'mix';
   if (rhythmPatternPref !== 'mix') rhythmPattern = rhythmPatternPref;

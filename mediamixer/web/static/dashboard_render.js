@@ -186,6 +186,57 @@ function applyRandomStart(vid, idx) {
   vid.addEventListener('loadedmetadata', onMeta);
 }
 
+function swapTileClip(i, vid, path, name) {
+  if (currentPaths[i]) beginClipTransition(i, vid);
+  currentPaths[i] = path;
+  tileLoopBounds[i] = null; // the old tile's bounds don't apply to whatever's loading now
+  tileLoopCount[i] = 0;
+  const oldTile = tileElements[i];
+  if (oldTile) oldTile.classList.remove('tile-featured'); // ditto for Featured Tile's highlight
+  fetchVideoMetaFor(i, path);
+  // Tells the server how many tiles are active, so dense layouts
+  // (4x4/5x5) get a cached low-res proxy instead of the full-size
+  // source - matches PRELOAD_MAX_TILES: same grids that skip preload
+  // also get the lighter file.
+  // &cors=1 keeps CORS-mode requests (see crossOrigin in
+  // createTileElement) off any cached copy fetched before the server
+  // started sending the CORS header, which would otherwise fail.
+  vid.src = mediaOrigin(i) + '/media/' + path + '?tiles=' + tileElements.length + '&cors=1';
+  applyRandomStart(vid, i);
+  const label = document.getElementById('label-' + i);
+  if (label) label.innerText = name || '';
+}
+
+// ---- Cut on the Beat ----
+// With Rhythm Mode running, clip changes wait for the next beat and
+// automatic layout changes for the next downbeat, so the grid cuts like a
+// music video instead of at random moments. Nothing waits longer than
+// CUT_ON_BEAT_MAX_WAIT_MS (the beat clock can stall in a background tab).
+const CUT_ON_BEAT_MAX_WAIT_MS = 1500;
+const pendingCuts = {}; // tile idx -> { path, name, at }
+let pendingLayoutCut = null; // { mode, at }
+
+function cutOnBeatActive() {
+  return rhythmCutOnBeat && rhythmActive();
+}
+
+function flushPendingCuts(downbeat) {
+  Object.keys(pendingCuts).forEach((k) => {
+    const i = +k, cut = pendingCuts[k];
+    delete pendingCuts[k];
+    const vid = document.getElementById('screen-' + i);
+    if (vid && cut.path !== currentPaths[i]) swapTileClip(i, vid, cut.path, cut.name);
+  });
+  if (downbeat && pendingLayoutCut) { const mode = pendingLayoutCut.mode; pendingLayoutCut = null; setLayout(mode, true, true); }
+}
+
+// Safety net: anything that has waited too long (or Rhythm Mode stopped) goes now.
+setInterval(() => {
+  const now = Date.now();
+  if (Object.values(pendingCuts).some((c) => !cutOnBeatActive() || now - c.at > CUT_ON_BEAT_MAX_WAIT_MS)) flushPendingCuts(false);
+  if (pendingLayoutCut && (!cutOnBeatActive() || now - pendingLayoutCut.at > CUT_ON_BEAT_MAX_WAIT_MS * 2)) flushPendingCuts(true);
+}, 100);
+
 let lastStatusData = null; // the latest status push (Scenes reads pace/tone/beat from it)
 
 function render(d) {
@@ -234,25 +285,11 @@ function render(d) {
     const vid = document.getElementById('screen-' + i);
     if (!vid) return;
     if (s.path && s.path !== currentPaths[i]) {
-      if (currentPaths[i]) beginClipTransition(i, vid);
-      currentPaths[i] = s.path;
-      tileLoopBounds[i] = null; // the old tile's bounds don't apply to whatever's loading now
-      tileLoopCount[i] = 0;
-      const oldTile = tileElements[i];
-      if (oldTile) oldTile.classList.remove('tile-featured'); // ditto for Featured Tile's highlight
-      fetchVideoMetaFor(i, s.path);
-      // Tells the server how many tiles are active, so dense layouts
-      // (4x4/5x5) get a cached low-res proxy instead of the full-size
-      // source - matches PRELOAD_MAX_TILES: same grids that skip preload
-      // also get the lighter file.
-      // &cors=1 keeps CORS-mode requests (see crossOrigin in
-      // createTileElement) off any cached copy fetched before the server
-      // started sending the CORS header, which would otherwise fail.
-      vid.src = mediaOrigin(i) + '/media/' + s.path + '?tiles=' + d.screens.length + '&cors=1';
-      applyRandomStart(vid, i);
+      // Cut on the Beat: a tile that already has a clip waits for the next
+      // beat to change (see flushPendingCuts); a first load never waits.
+      if (currentPaths[i] && cutOnBeatActive()) pendingCuts[i] = { path: s.path, name: s.name, at: Date.now() };
+      else { delete pendingCuts[i]; swapTileClip(i, vid, s.path, s.name); }
     }
-    const label = document.getElementById('label-' + i);
-    if (label) label.innerText = s.name || '';
 
     // Preload doubles the number of simultaneous <video> elements (one
     // playing + one buffering per tile), and decode/network load scales
@@ -357,8 +394,13 @@ let lastLayoutChangeAt = 0;
 // the actual reported problem (several tile-count changes landing back
 // to back - zone-driven and drift can both fire independently) only
 // ever came from that side, not from someone manually clicking fast.
-function setLayout(mode, quiet) {
+function setLayout(mode, quiet, onBeat) {
   const now = Date.now();
+  // Automatic changes hold for the next downbeat while cutting on the beat.
+  if (quiet && !onBeat && cutOnBeatActive() && !(now - lastLayoutChangeAt < TUNING.LAYOUT_CHANGE_COOLDOWN_MS || anticipationActive)) {
+    pendingLayoutCut = { mode, at: now };
+    return;
+  }
   // An automatic (quiet) layout change used to fire mid-barrage without
   // any awareness of it - Dynamic Mosaic's own drift timer doesn't know
   // or care what else is going on, so a build-up/hype window could get

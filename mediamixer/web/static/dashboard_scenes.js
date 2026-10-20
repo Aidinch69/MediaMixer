@@ -31,7 +31,7 @@ function captureScene() {
       pulse: sharedPulseEnabled,
       rhythm: {
         enabled: rhythmEnabled, pattern: rhythmPatternPref, bpm: rhythmBaseBpm, source: rhythmBpmSource,
-        waves: rhythmWaves, speedSync: rhythmSpeedSync, reactive: rhythmReactive, sound: rhythmSound,
+        waves: rhythmWaves, speedSync: rhythmSpeedSync, reactive: rhythmReactive, sound: rhythmSound, cutOnBeat: rhythmCutOnBeat,
       },
     },
     sound: {
@@ -106,6 +106,7 @@ function applyScene(data, fromZone) {
     if (r.speedSync != null && r.speedSync !== rhythmSpeedSync) toggleRhythmSpeedSync();
     if (r.reactive != null && r.reactive !== rhythmReactive) toggleRhythmReactive();
     if (r.sound != null && r.sound !== rhythmSound) toggleRhythmSound();
+    if (r.cutOnBeat != null && r.cutOnBeat !== rhythmCutOnBeat) toggleRhythmCutOnBeat();
   });
 
   if (snd.binauralVolume != null) step(() => { setBinauralVolume(snd.binauralVolume); setSceneInput('binaural-vol-input', snd.binauralVolume); });
