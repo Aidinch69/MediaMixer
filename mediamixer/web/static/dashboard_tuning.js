@@ -67,6 +67,13 @@ const TUNING_DEFAULTS = {
   HEART_MULT_DECAY_PER_TICK: 0.1,
   GOLDEN_HOUR_MULTIPLIER: 2.5,
   SURGE_MULTIPLIER: 2.0,
+  FLOATER_BARRAGE_CHECK_MS: 30000,
+  FLOATER_BARRAGE_PROBABILITY: 0.06,
+  FLOATER_BARRAGE_COOLDOWN_MS: 240000,
+  FLOATER_BARRAGE_COUNT: 20,
+  FLOATER_BARRAGE_MIN_MS: 10000,
+  FLOATER_BARRAGE_RANGE_MS: 5000,
+  FLOATER_BARRAGE_DIM: 0.85,
   SURGE_COOLDOWN_MS: 120000, // rest after any surge ends before a random one can start
   SPIN_COOLDOWN_MS: 45000,
   PATIENCE_CHECK_MS: 15000,
@@ -210,9 +217,10 @@ function restartAllTunableIntervals() {
   startTunableInterval('MYSTERY_TILE_CHECK_MS', maybeTriggerMysteryTile);
   startTunableInterval('FRESH_DROP_CHECK_MS', maybeTriggerFreshDrop);
   startTunableInterval('SPOTLIGHT_CHECK_MS', maybeTriggerSpotlight);
+  startTunableInterval('FLOATER_BARRAGE_CHECK_MS', maybeTriggerFloaterBarrage);
 }
 
-const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS', 'MYSTERY_TILE_CHECK_MS', 'PATIENCE_CHECK_MS', 'CHOICE_MOMENT_CHECK_MS', 'DOUBLE_FEATURE_CHECK_MS', 'FRESH_DROP_CHECK_MS', 'SPOTLIGHT_CHECK_MS'];
+const TUNING_INTERVAL_KEYS = ['BONUS_WINDOW_CHECK_MS', 'SEALED_CHECK_MS', 'CHASE_CHECK_MS', 'COLOR_RUSH_CHECK_MS', 'COLOR_SPLASH_CHECK_MS', 'MYSTERY_TILE_CHECK_MS', 'PATIENCE_CHECK_MS', 'CHOICE_MOMENT_CHECK_MS', 'DOUBLE_FEATURE_CHECK_MS', 'FRESH_DROP_CHECK_MS', 'SPOTLIGHT_CHECK_MS', 'FLOATER_BARRAGE_CHECK_MS'];
 
 function setTuning(key, value) {
   TUNING[key] = value;
@@ -273,6 +281,7 @@ const TUNING_GROUPS = [
   { label: 'Audio-Reactive', desc: 'Minimum gap between audio-triggered tile pulses.', keys: ['AUDIO_REACT_PULSE_GAP_MS'] },
   { label: 'Clip Transitions', desc: 'How often clip changes get a transition, how long, and the mix of styles.', keys: ['TRANSITION_PROBABILITY', 'TRANSITION_DURATION_MS', 'TRANSITION_WEIGHT_CROSSFADE', 'TRANSITION_WEIGHT_ZOOM', 'TRANSITION_WEIGHT_GLITCH'] },
   { label: 'Spotlight Takeover', desc: 'The rare one-tile takeover - odds, minimum gap, length, and size.', keys: ['SPOTLIGHT_CHECK_MS', 'SPOTLIGHT_PROBABILITY', 'SPOTLIGHT_MIN_GAP_MS', 'SPOTLIGHT_DURATION_MIN_MS', 'SPOTLIGHT_DURATION_RANGE_MS', 'SPOTLIGHT_SCALE', 'SPOTLIGHT_GROW_MS', 'SPOTLIGHT_DIM_OPACITY'] },
+  { label: 'Floater Barrage', desc: 'The rare dim-the-grid, fill-the-screen-with-floaters moment - odds, rest, count, length and dim.', keys: ['FLOATER_BARRAGE_PROBABILITY', 'FLOATER_BARRAGE_CHECK_MS', 'FLOATER_BARRAGE_COOLDOWN_MS', 'FLOATER_BARRAGE_COUNT', 'FLOATER_BARRAGE_MIN_MS', 'FLOATER_BARRAGE_RANGE_MS', 'FLOATER_BARRAGE_DIM'] },
   { label: 'Overdrive', desc: 'How fast the meter charges and what a release does.', keys: ['OVERDRIVE_PER_HEART', 'OVERDRIVE_PER_CATCH', 'OVERDRIVE_PER_BONUS', 'OVERDRIVE_PER_UNLOCK', 'OVERDRIVE_ON_BEAT_MULT', 'OVERDRIVE_BURST_MS', 'OVERDRIVE_SPEED_MULT', 'OVERDRIVE_BARRAGE_P', 'OVERDRIVE_JACKPOT_P', 'OVERDRIVE_SPOTLIGHT_CHANCE'] },
 ];
 const TUNING_META = {
@@ -350,6 +359,13 @@ const TUNING_META = {
   HEART_MULT_DECAY_PER_TICK: { label: 'Heart-multiplier decay (per 6s tick)', unit: 'n', min: 0, max: 0.5, step: 0.01 },
   GOLDEN_HOUR_MULTIPLIER: { label: 'Golden Hour odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
   SURGE_MULTIPLIER: { label: 'Surge odds multiplier', unit: 'x', min: 1, max: 5, step: 0.1 },
+  FLOATER_BARRAGE_PROBABILITY: { label: 'Floater Barrage chance per check', unit: 'pct', min: 0, max: 1, step: 0.01 },
+  FLOATER_BARRAGE_CHECK_MS: { label: 'Floater Barrage check interval', unit: 's', min: 5000, max: 180000, step: 5000 },
+  FLOATER_BARRAGE_COOLDOWN_MS: { label: 'Rest between Floater Barrages', unit: 's', min: 0, max: 900000, step: 15000 },
+  FLOATER_BARRAGE_COUNT: { label: 'Floaters in a barrage', unit: '', min: 6, max: 36, step: 1 },
+  FLOATER_BARRAGE_MIN_MS: { label: 'Floater Barrage length (min)', unit: 's', min: 4000, max: 30000, step: 1000 },
+  FLOATER_BARRAGE_RANGE_MS: { label: 'Floater Barrage length (random extra)', unit: 's', min: 0, max: 20000, step: 1000 },
+  FLOATER_BARRAGE_DIM: { label: 'Grid dim during Floater Barrage', unit: 'pct', min: 0.3, max: 1, step: 0.05 },
   SURGE_COOLDOWN_MS: { label: 'Rest between random surges', unit: 's', min: 0, max: 600000, step: 15000 },
   RATE_XP_BASE: { label: 'Rate (👍/👎) base XP', unit: 'n', min: 1, max: 20, step: 1 },
   FX_REWARD_BONUS_CHANCE: { label: 'FX with a bonus tap', unit: 'pct', min: 0, max: 1, step: 0.05 },

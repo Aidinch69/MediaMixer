@@ -821,6 +821,116 @@ let rhythmWasActive = false;
 let detectedBpm = null;
 let rhythmRunMinutesPaid = 0;
 
+// Tempo follows the session's energy: engagement, a barrage build-up or
+// fresh payoff, surges, Overdrive and the Auto-Pilot zone push a target
+// multiplier that the actual tempo glides toward over a few seconds - so
+// the beat quickens into a hype moment and settles after it, instead of
+// jumping. A Floater Barrage slows it into a dreamier pace.
+const RHYTHM_DRIVE_MIN = 0.85;
+const RHYTHM_DRIVE_MAX = 1.3;
+const RHYTHM_DRIVE_GLIDE_MS = 4000;
+const RHYTHM_MAX_BPM = 180;
+let rhythmReactive = true;
+let rhythmDrive = 1;
+let rhythmDriveTargetValue = 1;
+let rhythmDriveUpdatedAt = Date.now();
+let rhythmDriveTargetAt = 0;
+
+function rhythmDriveTarget() {
+  if (!rhythmReactive) return 1;
+  let d = 1 + Math.max(-0.08, Math.min(0.08, (readEngagement() - 1.6) * 0.16));
+  if (lastKnownBarrage > 0 || anticipationActive) d += 0.12;
+  else if (Date.now() - lastAnyPayoffAt < 5000) d += 0.08;
+  if (isSurgeActive()) d += 0.05;
+  if (overdriveActive) d += 0.1;
+  if (floaterBarrageActive) d -= 0.12;
+  if (autopilotZone === 'vault') d -= 0.06;
+  else if (autopilotZone === 'jackpot') d += 0.04;
+  return Math.max(RHYTHM_DRIVE_MIN, Math.min(RHYTHM_DRIVE_MAX, d));
+}
+
+function updateRhythmDrive() {
+  const now = Date.now();
+  if (now - rhythmDriveTargetAt > 250) { rhythmDriveTargetValue = rhythmDriveTarget(); rhythmDriveTargetAt = now; }
+  const dt = now - rhythmDriveUpdatedAt;
+  rhythmDriveUpdatedAt = now;
+  rhythmDrive += (rhythmDriveTargetValue - rhythmDrive) * (1 - Math.exp(-dt / RHYTHM_DRIVE_GLIDE_MS));
+}
+
+// Beat patterns - how the beat moves across the grid. 'mix' rotates
+// between them every few bars, leaning toward the punchier ones when the
+// tempo is driven up and the flowing ones when it's settled.
+const RHYTHM_PATTERNS = {
+  snake: { label: '🐍 Snake', energy: 'calm' },
+  pingpong: { label: '↔️ Ping-pong', energy: 'calm' },
+  ripple: { label: '🌊 Ripple', energy: 'calm' },
+  scatter: { label: '✨ Scatter', energy: 'hype' },
+  heartbeat: { label: '💓 Heartbeat', energy: 'hype' },
+};
+const RHYTHM_PATTERN_NAMES = Object.keys(RHYTHM_PATTERNS);
+const RHYTHM_PATTERN_SWITCH_BEATS = 16; // every 4 bars
+const RHYTHM_PATTERN_SWITCH_CHANCE = 0.6;
+let rhythmPatternPref = 'mix';
+let rhythmPattern = 'snake';
+let rhythmLastScatter = -1;
+
+function pickRhythmPattern() {
+  const hype = rhythmDrive > 1.1;
+  const options = RHYTHM_PATTERN_NAMES.filter((p) => p !== rhythmPattern);
+  const weights = options.map((p) => ((RHYTHM_PATTERNS[p].energy === 'hype') === hype ? 2 : 1));
+  let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < options.length; i++) { roll -= weights[i]; if (roll <= 0) return options[i]; }
+  return options[options.length - 1];
+}
+
+// Tiles grouped into rings around the grid's centre, innermost first.
+function rhythmRings() {
+  const n = tileElements.length;
+  const cols = Math.max(1, currentColumns || 1);
+  const rows = Math.ceil(n / cols);
+  const byRing = new Map();
+  for (let i = 0; i < n; i++) {
+    // Straight-line distance in half-tile steps: a 3x3 gets centre ->
+    // edges -> corners rather than centre -> all eight at once.
+    const ring = Math.round(Math.hypot((i % cols) - (cols - 1) / 2, Math.floor(i / cols) - (rows - 1) / 2) * 2);
+    if (!byRing.has(ring)) byRing.set(ring, []);
+    byRing.get(ring).push(i);
+  }
+  return [...byRing.keys()].sort((a, b) => a - b).map((k) => byRing.get(k));
+}
+
+// [tileIndex, strength] pairs to light on beat n.
+function rhythmPatternHits(n) {
+  const downbeat = n % 4 === 0;
+  const strength = downbeat ? 0.9 : 0.55;
+  const order = rhythmWalkOrder();
+  const len = order.length;
+  if (!len) return [];
+  if (rhythmPattern === 'pingpong') {
+    const period = Math.max(1, 2 * (len - 1));
+    const k = n % period;
+    return [[order[k < len ? k : period - k], strength]];
+  }
+  if (rhythmPattern === 'scatter') {
+    let idx = Math.floor(Math.random() * len);
+    if (len > 1 && idx === rhythmLastScatter) idx = (idx + 1 + Math.floor(Math.random() * (len - 1))) % len;
+    rhythmLastScatter = idx;
+    return [[idx, strength]];
+  }
+  if (rhythmPattern === 'ripple') {
+    const rings = rhythmRings();
+    if (rings.length < 2) return [[order[n % len], strength]]; // e.g. dual: no centre to ripple from
+    const ring = n % rings.length;
+    return rings[ring].map((i) => [i, Math.max(0.35, strength - ring * 0.12)]);
+  }
+  if (rhythmPattern === 'heartbeat') {
+    const step = n % 4; // lub, dub, rest, rest
+    if (step > 1) return [];
+    return tileElements.map((t, i) => [i, step === 0 ? 0.8 : 0.45]);
+  }
+  return [[order[n % len], strength]]; // snake
+}
+
 function rhythmActive() {
   return rhythmEnabled || rhythmZoneActive || finaleWantsRhythm() || Date.now() < spinRhythmUntil;
 }
@@ -841,12 +951,13 @@ function rhythmEffectiveBaseBpm() {
 }
 
 function currentRhythmBpm() {
-  return rhythmEffectiveBaseBpm() * (1 + RHYTHM_WAVE_DEPTH * rhythmWaveFrac()) * finaleTempoMult();
+  return Math.min(RHYTHM_MAX_BPM, rhythmEffectiveBaseBpm() * (1 + RHYTHM_WAVE_DEPTH * rhythmWaveFrac()) * finaleTempoMult() * rhythmDrive);
 }
 
 function rhythmSpeedMult() {
   if (!rhythmActive() || !rhythmSpeedSync) return 1;
-  return 0.95 + 0.3 * rhythmWaveFrac();
+  // Tile speed rides half of the energy drive, on top of the wave.
+  return (0.95 + 0.3 * rhythmWaveFrac()) * (1 + (rhythmDrive - 1) * 0.5);
 }
 
 // Snake order through the grid (left-to-right, then right-to-left on the
@@ -867,8 +978,11 @@ function rhythmWalkOrder() {
 
 function onRhythmBeat(n) {
   const downbeat = n % 4 === 0;
-  const order = rhythmWalkOrder();
-  if (order.length && !anticipationActive) reactPulseTile(order[n % order.length], downbeat ? 0.9 : 0.55);
+  if (n > 0 && n % RHYTHM_PATTERN_SWITCH_BEATS === 0) {
+    if (rhythmPatternPref !== 'mix') rhythmPattern = rhythmPatternPref;
+    else if (Math.random() < RHYTHM_PATTERN_SWITCH_CHANCE) rhythmPattern = pickRhythmPattern();
+  }
+  if (!anticipationActive) rhythmPatternHits(n).forEach(([idx, s]) => reactPulseTile(idx, s));
   if (downbeat) audioGlowKick = Math.max(audioGlowKick, 0.55); // updateAudioGlow decays it back down
   if (rhythmSound) playRhythmClick(downbeat);
   if (zoomFxTiles.size) kickAllZoomTiles(downbeat ? 0.9 : 0.5);
@@ -896,6 +1010,7 @@ setInterval(() => {
   if (active !== rhythmWasActive) {
     rhythmWasActive = active;
     if (active) {
+      rhythmPattern = rhythmPatternPref === 'mix' ? RHYTHM_PATTERN_NAMES[Math.floor(Math.random() * RHYTHM_PATTERN_NAMES.length)] : rhythmPatternPref;
       rhythmStartedAt = Date.now();
       rhythmNextBeatAt = performance.now();
       rhythmBeatCount = 0;
@@ -904,6 +1019,7 @@ setInterval(() => {
     updateRhythmUi();
   }
   if (!active) return;
+  updateRhythmDrive();
   const runMs = rhythmRunMs();
   sessionStats.rhythmBest = Math.max(sessionStats.rhythmBest, runMs);
   const runMinutes = Math.floor(runMs / 60000);
@@ -993,6 +1109,11 @@ function updateRhythmUi() {
   setToggleBadge('rhythm-waves-toggle', rhythmWaves);
   setToggleBadge('rhythm-sound-toggle', rhythmSound);
   setToggleBadge('rhythm-speed-toggle', rhythmSpeedSync);
+  setToggleBadge('rhythm-reactive-toggle', rhythmReactive);
+  ['mix'].concat(RHYTHM_PATTERN_NAMES).forEach((p) => {
+    const b = document.getElementById('rhythm-pattern-' + p);
+    if (b) b.classList.toggle('active', rhythmPatternPref === p);
+  });
   ['manual', 'audio'].forEach((s) => {
     const b = document.getElementById('rhythm-src-' + s);
     if (b) b.classList.toggle('active', rhythmBpmSource === s);
@@ -1006,7 +1127,8 @@ function updateRhythmUi() {
     const why = rhythmEnabled ? 'on' : rhythmZoneActive ? 'on (Rhythm Zone)' : finaleWantsRhythm() ? 'on (Finale)'
       : Date.now() < spinRhythmUntil ? 'on (Spin, ' + Math.ceil((spinRhythmUntil - Date.now()) / 1000) + 's left)' : 'off';
     const src = rhythmBpmSource === 'audio' ? (detectedBpm ? 'detected ~' + detectedBpm + ' BPM' : 'no steady beat in the audio - using ' + rhythmBaseBpm) : rhythmBaseBpm + ' BPM base';
-    status.innerText = 'Rhythm ' + why + ' · ' + src + (rhythmActive() ? ' · now ' + Math.round(currentRhythmBpm()) + ' BPM · in sync ' + formatRunSeconds(rhythmRunMs()) : '');
+    const energy = rhythmReactive && Math.abs(rhythmDrive - 1) >= 0.02 ? ' (energy ×' + rhythmDrive.toFixed(2) + ')' : '';
+    status.innerText = 'Rhythm ' + why + ' · ' + src + (rhythmActive() ? ' · now ' + Math.round(currentRhythmBpm()) + ' BPM' + energy + ' · ' + RHYTHM_PATTERNS[rhythmPattern].label + ' · in sync ' + formatRunSeconds(rhythmRunMs()) : '');
   }
 }
 
@@ -1017,18 +1139,20 @@ function formatRunSeconds(ms) {
 setInterval(() => { if (rhythmActive()) updateRhythmUi(); }, 1000);
 
 function loadRhythmPrefs() {
-  const prefs = loadJsonPref('mm_rhythm', { enabled: false, bpm: 90, source: 'manual', waves: true, sound: false, speedSync: true });
+  const prefs = loadJsonPref('mm_rhythm', { enabled: false, bpm: 90, source: 'manual', waves: true, sound: false, speedSync: true, reactive: true, pattern: 'mix' });
   rhythmEnabled = !!prefs.enabled;
   rhythmBaseBpm = Math.max(50, Math.min(160, Number(prefs.bpm) || 90));
   rhythmBpmSource = prefs.source === 'audio' ? 'audio' : 'manual';
   rhythmWaves = !!prefs.waves;
   rhythmSound = !!prefs.sound;
   rhythmSpeedSync = !!prefs.speedSync;
+  rhythmReactive = prefs.reactive !== false;
+  rhythmPatternPref = prefs.pattern === 'mix' || RHYTHM_PATTERNS[prefs.pattern] ? prefs.pattern : 'mix';
   updateRhythmUi();
 }
 
 function saveRhythmPrefs() {
-  saveJsonPref('mm_rhythm', { enabled: rhythmEnabled, bpm: rhythmBaseBpm, source: rhythmBpmSource, waves: rhythmWaves, sound: rhythmSound, speedSync: rhythmSpeedSync });
+  saveJsonPref('mm_rhythm', { enabled: rhythmEnabled, bpm: rhythmBaseBpm, source: rhythmBpmSource, waves: rhythmWaves, sound: rhythmSound, speedSync: rhythmSpeedSync, reactive: rhythmReactive, pattern: rhythmPatternPref });
   updateRhythmUi();
 }
 
@@ -1036,6 +1160,12 @@ function toggleRhythm() { rhythmEnabled = !rhythmEnabled; saveRhythmPrefs(); }
 function toggleRhythmWaves() { rhythmWaves = !rhythmWaves; saveRhythmPrefs(); }
 function toggleRhythmSound() { rhythmSound = !rhythmSound; saveRhythmPrefs(); }
 function toggleRhythmSpeedSync() { rhythmSpeedSync = !rhythmSpeedSync; saveRhythmPrefs(); }
+function toggleRhythmReactive() { rhythmReactive = !rhythmReactive; saveRhythmPrefs(); }
+function setRhythmPattern(p) {
+  rhythmPatternPref = p === 'mix' || RHYTHM_PATTERNS[p] ? p : 'mix';
+  if (rhythmPatternPref !== 'mix') rhythmPattern = rhythmPatternPref;
+  saveRhythmPrefs();
+}
 function setRhythmBpm(v) { rhythmBaseBpm = parseInt(v, 10) || 90; saveRhythmPrefs(); }
 function setRhythmSource(s) { rhythmBpmSource = s; if (s === 'audio') detectedBpm = detectBpmFromOnsets(); saveRhythmPrefs(); }
 

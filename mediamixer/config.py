@@ -103,7 +103,7 @@ class Config:
     # Auto-Pilot's peak odds (up to ~0.7 per 3s check) chained barrages back
     # to back: a real 36-minute session spent 38% of its time in barrage
     # hype, median 25s between starts.
-    barrage_cooldown_s: float = 60.0
+    barrage_cooldown_s: float = 90.0  # 60 -> 90 after the next session still felt barrage-heavy at 12% of the time
 
     # Each barrage rolls one of these tiers, weighted - the tier isn't just
     # a bigger flash on the same effect, it changes what actually happens:

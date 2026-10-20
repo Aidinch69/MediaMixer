@@ -10,9 +10,9 @@ const LANES = [
   ['surge', 'Surge', '#ff8a3d'], ['spinSurge', 'Spin Surge', '#3de0ff'], ['colorRush', 'Color Rush', '#ff5fa2'],
   ['overdrive', 'Overdrive', '#ff6b6b'], ['spotlight', 'Spotlight', '#ffffff'], ['bonus', 'Bonus tap', '#ffe27a'],
   ['sealed', 'Locked tile', '#4fb3ff'], ['chase', 'Catch', '#5fd38d'], ['mystery', 'Mystery', '#9aa5ff'],
-  ['finale', 'Finale', '#ff9df0'], ['rhythm', 'Rhythm', '#7fe0a6'],
+  ['finale', 'Finale', '#ff9df0'], ['floaterBarrage', 'Floater Barrage', '#b48cff'], ['rhythm', 'Rhythm', '#7fe0a6'],
 ];
-const OVERLAP_KEYS = ['barrage', 'buildup', 'spiral', 'surge', 'spinSurge', 'colorRush', 'overdrive', 'spotlight', 'finale', 'bonus', 'sealed', 'chase', 'mystery'];
+const OVERLAP_KEYS = ['barrage', 'buildup', 'spiral', 'surge', 'spinSurge', 'colorRush', 'overdrive', 'spotlight', 'finale', 'floaterBarrage', 'bonus', 'sealed', 'chase', 'mystery'];
 const MARKERS = {
   'chase.catch': ['#5fd38d', 4], 'chase.miss': ['#ff6b6b', 4], 'bonus.claim': ['#ffe27a', 4],
   'sealed.open': ['#4fb3ff', 4], 'sealed.miss': ['#ff6b6b', 3], 'rate': ['#ff7ab6', 3], 'nearmiss.fake': ['#8a94a7', 3],
@@ -271,7 +271,7 @@ function renderTimeline(start, end, intervals, inWin) {
 const FX_DEFAULT_MS = { prism: 8000, bloom: 7000, duotone: 7500, leak: 8500, kaleido: 6500, zoom: 9000, rgb: 8000, vhs: 7500 };
 const LIKE_STATE_LABELS = {
   barrage: 'Barrage / jackpot hype', spiral: 'Spiral', surge: 'Surge', spinSurge: 'Spin Surge', colorRush: 'Color Rush',
-  overdrive: 'Overdrive', hiddenMult: 'Hidden multiplier', rhythm: 'Rhythm mode', finale: 'Finale',
+  overdrive: 'Overdrive', hiddenMult: 'Hidden multiplier', rhythm: 'Rhythm mode', finale: 'Finale', floaterBarrage: 'Floater Barrage',
 };
 const tilesForLayout = (name) => { if (name === 'dual') return 2; const m = /grid(\d+)x(\d+)/.exec(name || ''); return m ? +m[1] * +m[2] : 2; };
 
@@ -319,6 +319,15 @@ function renderLikes(start, end, intervals, inWin) {
     if (zoneExp[z] <= 0) return;
     const n = likes.filter((e) => e.d.zone === z).length;
     row(z[0].toUpperCase() + z.slice(1) + ' zone', zoneExp[z], n, dislikes.filter((e) => e.d.zone === z).length, likes.length - n, totalTileS - zoneExp[z], 'Auto-Pilot zone');
+  });
+
+  // Rhythm beat patterns, from the rhythmPattern watcher's intervals.
+  const patExp = {};
+  (intervals.rhythmPattern || []).forEach((iv) => { if (iv.v) patExp[iv.v] = (patExp[iv.v] || 0) + clip(iv.start, iv.end) * tilesAt(iv.start); });
+  Object.keys(patExp).sort().forEach((p) => {
+    if (patExp[p] <= 0) return;
+    const n = likes.filter((e) => e.d.rhythmPattern === p).length;
+    row(p[0].toUpperCase() + p.slice(1), patExp[p], n, dislikes.filter((e) => e.d.rhythmPattern === p).length, likes.length - n, totalTileS - patExp[p], 'Rhythm beat pattern');
   });
 
   // Speed has no exposure record, so just show where likes landed.

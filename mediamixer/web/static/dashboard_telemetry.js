@@ -54,6 +54,8 @@ const TELEMETRY_WATCHERS = [
   ['overdrive', () => (overdriveActive ? 'on' : null)],
   ['finale', () => (finaleActive ? 'on' : null)],
   ['rhythm', () => (rhythmEnabled || rhythmZoneActive ? 'on' : null)],
+  ['rhythmPattern', () => (rhythmActive() ? rhythmPattern : null)],
+  ['floaterBarrage', () => (floaterBarrageActive ? 'on' : null)],
   ['autopilot', () => (autopilotEnabled ? 'on' : null)],
   ['zone', () => autopilotZone || null],
   ['layout', () => currentLayout || null],
@@ -81,7 +83,7 @@ function sampleTelemetryWatchers() {
 // rates with and without each effect. Tile FX are tracked here (from the
 // fireTileFx wrapper) because the effect code only records a busy-until.
 const telemetryTileFx = {}; // tile idx -> { kind, until }
-const RATING_CONTEXT_STATES = ['barrage', 'spiral', 'surge', 'spinSurge', 'colorRush', 'overdrive', 'hiddenMult', 'rhythm', 'finale'];
+const RATING_CONTEXT_STATES = ['barrage', 'spiral', 'surge', 'spinSurge', 'colorRush', 'overdrive', 'hiddenMult', 'rhythm', 'finale', 'floaterBarrage'];
 
 function ratingContext(i) {
   const now = Date.now();
@@ -94,6 +96,7 @@ function ratingContext(i) {
     fx, states,
     speed: vid ? +vid.playbackRate.toFixed(2) : null,
     zone: autopilotZone || null,
+    rhythmPattern: rhythmActive() ? rhythmPattern : null,
     tiles: tileElements.length,
   };
 }

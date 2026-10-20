@@ -25,6 +25,7 @@
   <div id="layout-fade-overlay"></div>
 </div>
 <div id="audio-glow"></div>
+<div id="floater-barrage-dim"></div>
 <div id="fx-layer"></div>
 <div id="disco-rain"></div>
 <div id="disco-border"></div>
@@ -301,6 +302,7 @@
             <button class="badge" onclick="previewTileFx('bloom')">✨ Bloom</button>
             <button class="badge" onclick="previewTileFx('duotone')">🎨 Duotone</button>
             <button class="badge" onclick="previewTileFx('leak')">🌅 Light Leak</button>
+            <button class="badge" onclick="startFloaterBarrage()">🌌 Floater Barrage</button>
             <button class="badge" onclick="previewTileFx('zoom')">💓 Zoom</button>
             <button class="badge" onclick="previewTileFx('rgb')">🎞 RGB Split</button>
             <button class="badge" onclick="previewTileFx('vhs')">📼 VHS</button>
@@ -335,10 +337,25 @@
           <button class="badge" id="rhythm-speed-toggle" onclick="toggleRhythmSpeedSync()">ON</button>
         </div>
         <div class="slider">
+          <label>Tempo Follows Energy</label>
+          <button class="badge" id="rhythm-reactive-toggle" onclick="toggleRhythmReactive()">ON</button>
+        </div>
+        <div class="slider">
+          <label>Beat Pattern</label>
+          <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+            <button class="badge" id="rhythm-pattern-mix" onclick="setRhythmPattern('mix')">🔀 Mix</button>
+            <button class="badge" id="rhythm-pattern-snake" onclick="setRhythmPattern('snake')">🐍 Snake</button>
+            <button class="badge" id="rhythm-pattern-pingpong" onclick="setRhythmPattern('pingpong')">↔️ Ping-pong</button>
+            <button class="badge" id="rhythm-pattern-scatter" onclick="setRhythmPattern('scatter')">✨ Scatter</button>
+            <button class="badge" id="rhythm-pattern-ripple" onclick="setRhythmPattern('ripple')">🌊 Ripple</button>
+            <button class="badge" id="rhythm-pattern-heartbeat" onclick="setRhythmPattern('heartbeat')">💓 Heartbeat</button>
+          </div>
+        </div>
+        <div class="slider">
           <label>Beat Sound</label>
           <button class="badge" id="rhythm-sound-toggle" onclick="toggleRhythmSound()">OFF</button>
         </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Each beat lights the next tile in a snake through the grid, and every downbeat (1 of 4) kicks the screen-edge glow. Tempo Waves speed the beat up over about 70 seconds, then drop back to base - and with Speed Follows Tempo on, every tile's playback speed rides the same wave (about 0.95x at base up to 1.25x at the top), so each wave builds and releases. Follow Audio tries to lock onto a steady beat in what's playing; spoken-word tracks often don't have one, so it falls back to your manual tempo and says so above. Every unbroken minute in sync earns XP (every other minute a tile FX too), and hearting a tile right on the beat charges Overdrive double. Auto-Pilot's new Rhythm Zone and a Finale's build/peak switch this on by themselves while they run.</p></details>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Each beat lights tiles in a pattern - a snake through the grid, a ping-pong, random scatter, ripples out from the centre, or a whole-grid heartbeat (Mix rotates between them every few bars) - and every downbeat (1 of 4) kicks the screen-edge glow. Tempo Waves speed the beat up over about 70 seconds, then drop back to base - and with Speed Follows Tempo on, every tile's playback speed rides the same wave (about 0.95x at base up to 1.25x at the top), so each wave builds and releases. Follow Audio tries to lock onto a steady beat in what's playing; spoken-word tracks often don't have one, so it falls back to your manual tempo and says so above. Every unbroken minute in sync earns XP (every other minute a tile FX too), and hearting a tile right on the beat charges Overdrive double. Tempo Follows Energy lets the beat quicken with engagement, build-ups, jackpots, surges and Overdrive, and settle in the Vault zone or a Floater Barrage. Auto-Pilot's Rhythm Zone and a Finale's build/peak switch this on by themselves while they run.</p></details>
       </div>
     </details>
     <details class="settings-section">

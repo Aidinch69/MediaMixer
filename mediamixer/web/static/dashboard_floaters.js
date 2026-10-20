@@ -1,6 +1,6 @@
 // Part of the dashboard client - classic scripts sharing one global scope,
 // loaded in the order listed in dashboard.html.
-// Floating overlay FX (floaters).
+// Floating overlay FX (floaters) and the Floater Barrage.
 
 // ---- Floating Overlay FX (experimental) ----
 // A handful of video clips drift across the screen above the main grid,
@@ -239,4 +239,123 @@ function burstExtraFloaters(scale) {
     fxSprites.push(sprite);
     activateFxSprite(sprite);
   }
+}
+
+// ---- Floater Barrage ----
+// A rare whole-screen moment: the grid dims nearly to black and ~20
+// floaters bloom across it at 80-100% opacity, laid out on a jittered grid
+// so they fill the dark space evenly instead of clumping, drifting a little
+// while they're up, then everything fades back. Works whether or not the
+// regular floaters are on, and leaves the barrage tile-dim alone - it has
+// its own full-screen dim layer (#floater-barrage-dim) under #fx-layer.
+const FLOATER_BARRAGE_FADE_MS = 1600;
+const FLOATER_BARRAGE_STAGGER_MS = 1200; // floaters arrive/leave spread over this
+let floaterBarrageActive = false;
+let floaterBarrageEndsAt = 0;
+let floaterBarrageEls = [];
+
+function maybeTriggerFloaterBarrage() {
+  if (floaterBarrageActive || document.hidden || !tileElements.length) return;
+  if (Date.now() < floaterBarrageEndsAt + TUNING.FLOATER_BARRAGE_COOLDOWN_MS) return;
+  // Never on top of another full-screen moment.
+  if (lastKnownBarrage > 0 || anticipationActive || finaleActive || overdriveActive || colorRushActive || spotlightTileIndex >= 0) return;
+  if (Math.random() < TUNING.FLOATER_BARRAGE_PROBABILITY * autopilotZoneMultiplier('colorRush')) startFloaterBarrage();
+}
+startTunableInterval('FLOATER_BARRAGE_CHECK_MS', maybeTriggerFloaterBarrage);
+
+function floaterBarrageSlots(n) {
+  // Jittered grid sized to the screen's aspect, n cells picked at random.
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const cols = Math.max(1, Math.round(Math.sqrt(n * vw / vh)));
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const cells = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) cells.push([c, r]);
+  for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
+  const cw = vw / cols, ch = vh / rows;
+  return cells.slice(0, n).map(([c, r]) => {
+    const w = cw * (1.15 + Math.random() * 0.45); // overlap neighbours a little so the dark fills in
+    const h = w * 9 / 16;
+    const cx = (c + 0.5 + (Math.random() - 0.5) * 0.5) * cw;
+    const cy = (r + 0.5 + (Math.random() - 0.5) * 0.5) * ch;
+    const x = Math.max(-w * 0.1, Math.min(vw - w * 0.9, cx - w / 2));
+    const y = Math.max(-h * 0.1, Math.min(vh - h * 0.9, cy - h / 2));
+    const drift = vw * (0.015 + Math.random() * 0.03), angle = Math.random() * Math.PI * 2;
+    return { x, y, w, h, dx: Math.cos(angle) * drift, dy: Math.sin(angle) * drift };
+  });
+}
+
+function startFloaterBarrage(durationMs) {
+  if (floaterBarrageActive || !tileElements.length) return false;
+  const ms = durationMs || TUNING.FLOATER_BARRAGE_MIN_MS + Math.random() * TUNING.FLOATER_BARRAGE_RANGE_MS;
+  floaterBarrageActive = true;
+  floaterBarrageEndsAt = Date.now() + ms;
+  const dim = document.getElementById('floater-barrage-dim');
+  dim.style.transition = 'opacity ' + FLOATER_BARRAGE_FADE_MS + 'ms ease';
+  dim.style.opacity = String(TUNING.FLOATER_BARRAGE_DIM);
+  toast('🌌 Floater Barrage');
+
+  const source = fxSource === 'dedicated' ? pickFxSourceList() : fetchFxList('library');
+  source.then((items) => (items && items.length ? items : fetchFxList('library'))).then((items) => {
+    if (!floaterBarrageActive || !items || !items.length) return;
+    const layer = document.getElementById('fx-layer');
+    const pool = items.slice();
+    floaterBarrageSlots(Math.round(TUNING.FLOATER_BARRAGE_COUNT)).forEach((slot, i) => {
+      if (!pool.length) pool.push(...items);
+      const item = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+      const el = document.createElement('div');
+      el.className = 'fx-sprite fx-barrage-sprite';
+      el.innerHTML = '<video muted loop playsinline></video>';
+      el.style.width = slot.w + 'px';
+      el.style.height = slot.h + 'px';
+      el.style.transform = `translate(${slot.x}px, ${slot.y}px)`;
+      el.style.opacity = '0';
+      layer.appendChild(el);
+      floaterBarrageEls.push(el);
+      const vid = el.querySelector('video');
+      vid.onloadedmetadata = () => {
+        if (vid.duration && isFinite(vid.duration)) vid.currentTime = Math.random() * vid.duration * 0.6;
+      };
+      // Only fade in once real frames are playing - 20 clips can't all load
+      // instantly, and one revealed early is just a black box on the dark
+      // screen. A floater that isn't ready before the fade-out stays hidden.
+      const startedAt = Date.now();
+      const outAt = ms - FLOATER_BARRAGE_FADE_MS - Math.random() * FLOATER_BARRAGE_STAGGER_MS;
+      let revealed = false;
+      vid.addEventListener('playing', () => {
+        if (revealed || !el.isConnected) return;
+        const elapsed = Date.now() - startedAt;
+        if (elapsed > outAt - 1500) return; // too late to be worth a flash
+        revealed = true;
+        setTimeout(() => {
+          if (!el.isConnected) return;
+          el.style.transition = `transform ${(ms - elapsed) / 1000}s linear, opacity ${FLOATER_BARRAGE_FADE_MS}ms ease`;
+          el.style.transform = `translate(${slot.x + slot.dx}px, ${slot.y + slot.dy}px)`;
+          el.style.opacity = (0.8 + Math.random() * 0.2).toFixed(2);
+        }, Math.random() * Math.max(0, FLOATER_BARRAGE_STAGGER_MS - elapsed));
+      });
+      vid.src = mediaOrigin(FX_SHARD_OFFSET + 200 + i) + item.base + item.path;
+      vid.play().catch(() => {});
+      setTimeout(() => { if (el.isConnected) el.style.opacity = '0'; }, outAt);
+    });
+  });
+
+  setTimeout(endFloaterBarrage, ms);
+  return true;
+}
+
+function endFloaterBarrage() {
+  if (!floaterBarrageActive) return;
+  const dim = document.getElementById('floater-barrage-dim');
+  dim.style.opacity = '0';
+  const els = floaterBarrageEls;
+  floaterBarrageEls = [];
+  els.forEach((el) => { el.style.opacity = '0'; });
+  setTimeout(() => {
+    els.forEach((el) => {
+      const vid = el.querySelector('video');
+      if (vid) { vid.pause(); vid.removeAttribute('src'); vid.load(); } // release the decoder
+      el.remove();
+    });
+    floaterBarrageActive = false;
+  }, FLOATER_BARRAGE_FADE_MS + 100);
 }
