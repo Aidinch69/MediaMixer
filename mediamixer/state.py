@@ -28,6 +28,7 @@ class ScreenState:
     tension: float = 1.0
     speed: float = 1.0
     hype_speed_target: float = 1.0
+    pinned: bool = False  # long-pressed: keeps its clip until unpinned
 
 
 def _find_preset(config: Config, name: str) -> LayoutPreset:
@@ -171,6 +172,17 @@ class RuntimeState:
             return ""
 
     # -- rotation --
+    def set_pinned(self, index: int, pinned: bool) -> bool:
+        with self._lock:
+            if not (0 <= index < len(self.screens)):
+                return False
+            self.screens[index].pinned = pinned
+            return True
+
+    def pinned_indexes(self) -> set:
+        with self._lock:
+            return {i for i, s in enumerate(self.screens) if s.pinned}
+
     def recent_paths(self, window_s: float) -> set:
         """Clips shown within the last `window_s` seconds (pruning older ones)."""
         cutoff = time.time() - window_s
@@ -284,7 +296,7 @@ class RuntimeState:
                 "layout": self.layout,
                 "folder": self.current_folder,
                 "screens": [
-                    {"path": s.current, "next_path": s.next, "tension": s.tension, "speed": s.speed}
+                    {"path": s.current, "next_path": s.next, "tension": s.tension, "speed": s.speed, "pinned": s.pinned}
                     for s in self.screens
                 ],
                 "played": self.videos_in_folder,

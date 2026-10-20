@@ -83,3 +83,25 @@ def test_repeat_window_zero_disables_memory(config, db):
     library.sync_library(db, cfg)
     state = RuntimeState(cfg)
     assert state.recent_paths(0) == set()
+
+
+def test_pinned_tile_keeps_its_clip(config, db):
+    make_clips(config, [f"{i}.mp4" for i in range(20)])
+    library.sync_library(db, config)
+    state = RuntimeState(config)
+    engine = RotationEngine(state, db, config)
+    engine.set_layout_and_rotate("grid2x2")
+    pinned_clip = state.current_paths()[1]
+    state.set_pinned(1, True)
+    for _ in range(3):
+        engine.rotate(side="all")  # e.g. Skip All / folder change
+        engine.rotate(side=1)  # e.g. the clip ending on its own
+    with state._lock:
+        for s in state.screens:
+            s.expires_at = 0  # every timer due
+    engine.tick()
+    assert state.current_paths()[1] == pinned_clip
+    assert all(p != pinned_clip for i, p in enumerate(state.current_paths()) if i != 1)
+    state.set_pinned(1, False)
+    engine.rotate(side=1)
+    assert state.current_paths()[1] != pinned_clip

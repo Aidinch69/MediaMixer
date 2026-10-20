@@ -191,6 +191,7 @@ function swapTileClip(i, vid, path, name) {
   currentPaths[i] = path;
   tileLoopBounds[i] = null; // the old tile's bounds don't apply to whatever's loading now
   tileLoopCount[i] = 0;
+  tileUserSpeed[i] = 1; // a wheel speed change belongs to the clip it was made on
   const oldTile = tileElements[i];
   if (oldTile) oldTile.classList.remove('tile-featured'); // ditto for Featured Tile's highlight
   fetchVideoMetaFor(i, path);
@@ -287,7 +288,8 @@ function render(d) {
     if (s.path && s.path !== currentPaths[i]) {
       // Cut on the Beat: a tile that already has a clip waits for the next
       // beat to change (see flushPendingCuts); a first load never waits.
-      if (currentPaths[i] && cutOnBeatActive()) pendingCuts[i] = { path: s.path, name: s.name, at: Date.now() };
+      const justSwiped = Date.now() - (tileSwipeAt[i] || 0) < 4000; // you asked for it - no waiting
+      if (currentPaths[i] && cutOnBeatActive() && !justSwiped) pendingCuts[i] = { path: s.path, name: s.name, at: Date.now() };
       else { delete pendingCuts[i]; swapTileClip(i, vid, s.path, s.name); }
     }
 
@@ -316,7 +318,11 @@ function render(d) {
     // globalSpeedMult (Rhythm Mode's tempo waves, Finale's speed arc) is
     // kept separate in tileNaturalBase so its own tick can re-apply it
     // between status pushes - see dashboard_layers.js.
-    tileNaturalBase[i] = s.speed * lockMult * manualSpeedMult;
+    tileNaturalBase[i] = s.speed * lockMult * manualSpeedMult * (tileUserSpeed[i] || 1);
+    // Pinned (long-press): loop the clip instead of asking for the next one.
+    const pinned = !!s.pinned;
+    if (tileElements[i] && tileElements[i].classList.contains('tile-pinned') !== pinned) tileElements[i].classList.toggle('tile-pinned', pinned);
+    if (vid.loop !== pinned) vid.loop = pinned;
     const naturalSpeed = tileNaturalBase[i] * globalSpeedMult();
     const barrageTiles = d.barrage > 0 ? (d.barrage_tiles || []) : [];
     const isSelected = barrageTiles.includes(i);

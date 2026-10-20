@@ -161,6 +161,8 @@ function initTelemetry() {
     (started ? { k: 'floaterBarrage.trigger', d: { source: source === 'auto' ? 'auto' : 'preview' } } : undefined));
   telemetryWrap('applySceneByName', null, ([name, source], before, ok) =>
     (ok ? { k: 'scene.apply', d: { name, source: source === 'zone' ? 'zone' : 'manual' } } : undefined));
+  telemetryWrap('swipeTile', null, ([idx, dir]) => ({ k: 'gesture.swipe', d: { tile: idx, dir } }));
+  telemetryWrap('toggleTilePin', () => null, ([idx]) => ({ k: 'gesture.pin', d: { tile: idx, on: !!(tileElements[idx] && tileElements[idx].classList.contains('tile-pinned')) } }));
   telemetryWrap('showMantra', null, ([style]) => ({ k: 'mantra', d: { style } }));
 
   // Spin / bank-or-push.

@@ -321,7 +321,7 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .screen-grid.mosaic{display:flex;flex-direction:column;gap:0}
 .mosaic-row{display:flex;flex-direction:row;width:100%;flex-shrink:0}
 .mosaic-row .tile{flex-grow:0;flex-shrink:0;height:100%}
-.tile{position:relative;background:#020105;border-radius:8px;border:1px solid #140a1a;overflow:hidden;transition:transform .4s ease,box-shadow .4s ease}
+.tile{touch-action:none;position:relative;background:#020105;border-radius:8px;border:1px solid #140a1a;overflow:hidden;transition:transform .4s ease,box-shadow .4s ease}
 /* Dip-to-dim layout transition: a brief fade to black bridges a tile-
    count change (manual or Dynamic Mosaic) instead of the grid cutting
    straight to the new arrangement. Deliberately a single full-screen
@@ -613,6 +613,13 @@ button:hover{background:#251538;border-color:#b84dff;box-shadow:0 0 10px rgba(18
 .fx-slowmo-trail{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;opacity:0;mix-blend-mode:screen;filter:blur(1px) saturate(1.2)}
 .tile.fx-slowmo::after{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;background:radial-gradient(ellipse at center,transparent 45%,rgba(10,0,30,.75) 100%);box-shadow:inset 0 0 40px rgba(140,190,255,calc(.45 * var(--slowmo-k,0)));opacity:var(--slowmo-k,0)}
 .fx-double-exposure{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1;pointer-events:none;opacity:0;mix-blend-mode:screen}
+.tile.swiping{transform:translateX(var(--swipe-x,0)) !important;transition:none !important}
+.tile.swiped-left{animation:tile-swipe-left .42s ease}
+.tile.swiped-right{animation:tile-swipe-right .42s ease}
+@keyframes tile-swipe-left{40%{transform:translateX(-18%);opacity:.35}100%{transform:none;opacity:1}}
+@keyframes tile-swipe-right{40%{transform:translateX(18%);opacity:.35}100%{transform:none;opacity:1}}
+.tile.tile-pinned{box-shadow:inset 0 0 0 2px rgba(255,214,120,.75),0 0 14px rgba(255,200,90,.35)}
+.tile.tile-pinned .src-label::before{content:'📌 '}
 .fx-bloom-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;opacity:0;filter:blur(10px) brightness(1.35) saturate(1.5);mix-blend-mode:screen;transform-origin:center}
 .fx-shock-ring{position:absolute;left:50%;top:50%;width:35%;aspect-ratio:1;border-radius:50%;border:4px solid rgba(var(--theme-flash,255,220,120),.95);box-shadow:0 0 24px rgba(var(--theme-glow,255,70,30),.8),inset 0 0 18px rgba(var(--theme-glow,255,70,30),.6);transform:translate(-50%,-50%) scale(.1);z-index:1;pointer-events:none;animation:fx-shock .9s ease-out forwards}
 @keyframes fx-shock{0%{opacity:1}100%{transform:translate(-50%,-50%) scale(3.2);opacity:0}}

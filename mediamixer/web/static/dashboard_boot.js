@@ -38,6 +38,7 @@ window.onload = () => {
   loadPulsePrefs();
   loadTastePrefs();
   loadLivingPrefs();
+  loadGesturePrefs();
   loadScenes();
   loadAnticipationPrefs();
   loadAutopilotPrefs();

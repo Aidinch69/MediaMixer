@@ -167,6 +167,7 @@ def create_app(ctx: AppContext) -> Flask:
                 "next_path": _relative_media_path(config, s["next_path"]),
                 "tension": s["tension"],
                 "speed": s["speed"],
+                "pinned": s["pinned"],
             }
             for s in snap["screens"]
         ]
@@ -356,8 +357,21 @@ def create_app(ctx: AppContext) -> Flask:
             return jsonify(ok=False, error="invalid screen index"), 400
         if not (0 <= index < len(session.state.current_paths())):
             return jsonify(ok=False, error="screen index out of range"), 400
+        if request.args.get("swap"):  # a deliberate swipe: unpin and change it
+            session.state.set_pinned(index, False)
         session.rotation.rotate(side=index)
         return jsonify(ok=True)
+
+    @app.route("/api/pin")
+    def api_pin():
+        try:
+            index = int(request.args.get("screen", ""))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="invalid screen index"), 400
+        on = request.args.get("on") == "1"
+        if not g.session.state.set_pinned(index, on):
+            return jsonify(ok=False, error="screen index out of range"), 400
+        return jsonify(ok=True, pinned=on)
 
     @app.route("/api/folder")
     def api_folder():

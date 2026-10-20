@@ -87,7 +87,11 @@ class RotationEngine:
             return
 
         is_jackpot, event_expires_in = self._roll_event(pace_idx)
+        # Pinned tiles keep their clip through everything except their own
+        # swipe (which unpins first) and filling an empty slot.
+        pinned = self._state.pinned_indexes()
         indexes = range(len(current_paths)) if side == "all" else [side]
+        indexes = [i for i in indexes if i not in pinned or not current_paths[i]]
 
         # Every video currently visible on any screen is off-limits for a new pick,
         # so the same clip never ends up playing in two tiles at once - and so is
@@ -231,8 +235,9 @@ class RotationEngine:
             return
 
         lefts, _locked, _barrage = self._state.screen_timers(now)
+        pinned = self._state.pinned_indexes()
         for index, time_left in enumerate(lefts):
-            if time_left <= 0.5:
+            if time_left <= 0.5 and index not in pinned:
                 self.rotate(side=index, force=False)
 
     def run(self):
@@ -293,7 +298,12 @@ class RotationEngine:
             count = min(random.randint(*tier.tile_count), len(current_paths))
             if count <= 0:
                 return
-            indexes = random.sample(range(len(current_paths)), count)
+            pinned = self._state.pinned_indexes()
+            free = [i for i in range(len(current_paths)) if i not in pinned]
+            count = min(count, len(free))
+            if count <= 0:
+                return
+            indexes = random.sample(free, count)
             # Bigger tiers don't just look bigger - more of the screens
             # they touch land a genuine top-ranked favorite instead of a
             # normal explore pick, so a mega jackpot is a different grid,
