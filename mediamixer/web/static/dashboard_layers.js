@@ -808,7 +808,8 @@ let rhythmZoneActive = false;
 let rhythmBaseBpm = 90;
 let rhythmBpmSource = 'manual'; // 'manual' | 'audio' | 'content' (the lead clip's own rhythm)
 let rhythmWaves = true;
-let rhythmSound = false;
+let rhythmVoice = 'off'; // the beat's sound: 'off' | 'kick' | 'tick' | 'heart' | 'tone'
+let rhythmVolume = 70;
 let rhythmSpeedSync = true;
 let rhythmStartedAt = 0;
 let rhythmNextBeatAt = 0;
@@ -1003,25 +1004,110 @@ function onRhythmBeat(n) {
   onPulseBeat(n);
   rhythmFxBeat(n);
   if (downbeat) audioGlowKick = Math.max(audioGlowKick, 0.55); // updateAudioGlow decays it back down
-  if (rhythmSound) playRhythmClick(downbeat);
+  if (rhythmVoice !== 'off') playRhythmVoice(downbeat);
   if (zoomFxTiles.size) kickAllZoomTiles(downbeat ? 0.9 : 0.5);
   if (n % 8 === 0) maybeMantraOnBeat(0.8);
 }
 
-function playRhythmClick(downbeat) {
-  const bus = ensureSfxBus();
-  if (!bus) return;
-  const now = audioCtx.currentTime;
+// ---- Beat sound ----
+// Its own bus and volume, separate from the sound effects. Levels sit a
+// little above the binaural tone (~0.12) at the default 70%. Kick: a soft
+// pitched-down thump with a click on top (the click is what makes it
+// audible on laptop speakers - the old 70-95 Hz sine alone often wasn't).
+// Tick: a short bright noise tick. Heartbeat: lub-dub. Tone: no new sound -
+// the binaural tone itself swells on each beat.
+let rhythmBus = null;
+let rhythmNoise = null;
+
+function ensureRhythmBus() {
+  if (!audioCtx) return null;
+  if (!rhythmBus) {
+    rhythmBus = audioCtx.createGain();
+    rhythmBus.connect(audioCtx.destination);
+  }
+  rhythmBus.gain.value = rhythmVolume / 100;
+  return rhythmBus;
+}
+
+function rhythmNoiseBuffer() {
+  if (rhythmNoise) return rhythmNoise;
+  const len = Math.floor(audioCtx.sampleRate * 0.2);
+  rhythmNoise = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+  const d = rhythmNoise.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  return rhythmNoise;
+}
+
+function rhythmThump(at, f0, f1, peak, dur) {
   const osc = audioCtx.createOscillator();
-  osc.type = 'sine';
   const g = audioCtx.createGain();
-  osc.connect(g); g.connect(bus);
-  osc.frequency.setValueAtTime(downbeat ? 95 : 70, now);
-  g.gain.setValueAtTime(0.0001, now);
-  g.gain.exponentialRampToValueAtTime(downbeat ? 0.14 : 0.08, now + 0.012);
-  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
-  osc.start(now);
-  osc.stop(now + 0.13);
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(f0, at);
+  osc.frequency.exponentialRampToValueAtTime(f1, at + dur * 0.6);
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.exponentialRampToValueAtTime(peak, at + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  osc.connect(g); g.connect(rhythmBus);
+  osc.start(at); osc.stop(at + dur + 0.02);
+}
+
+function rhythmTick(at, freq, peak, dur) {
+  const src = audioCtx.createBufferSource();
+  src.buffer = rhythmNoiseBuffer();
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = 1.4;
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.exponentialRampToValueAtTime(peak, at + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  src.connect(bp); bp.connect(g); g.connect(rhythmBus);
+  src.start(at); src.stop(at + dur + 0.02);
+}
+
+function playRhythmVoice(downbeat, voice) {
+  voice = voice || rhythmVoice;
+  if (voice === 'tone') { pulseBinauralOnBeat(downbeat); return; }
+  if (!ensureRhythmBus()) return;
+  const now = audioCtx.currentTime + 0.005;
+  if (voice === 'kick') {
+    rhythmThump(now, downbeat ? 160 : 130, 52, downbeat ? 0.36 : 0.24, 0.22);
+    rhythmTick(now, 3200, downbeat ? 0.06 : 0.035, 0.025);
+  } else if (voice === 'tick') {
+    rhythmTick(now, downbeat ? 5200 : 3800, downbeat ? 0.16 : 0.09, 0.05);
+  } else if (voice === 'heart') {
+    rhythmThump(now, 110, 48, downbeat ? 0.34 : 0.26, 0.18);
+    rhythmTick(now, 900, 0.025, 0.03);
+    rhythmThump(now + 0.17, 95, 45, downbeat ? 0.22 : 0.16, 0.16);
+  }
+}
+
+// Tone: the binaural tone swells on the beat and eases back - its depth set
+// by Beat Volume (synthNodes.beatGain sits after the binaural master gain).
+function pulseBinauralOnBeat(downbeat) {
+  if (!synthNodes || !synthNodes.beatGain || !audioCtx) return;
+  const g = synthNodes.beatGain.gain;
+  const now = audioCtx.currentTime;
+  const depth = (rhythmVolume / 100) * (downbeat ? 0.9 : 0.6);
+  const beatS = Math.min(1, 60 / Math.max(30, currentRhythmBpm()));
+  g.cancelScheduledValues(now);
+  g.setValueAtTime(g.value, now);
+  g.linearRampToValueAtTime(1 + depth, now + 0.04);
+  g.setTargetAtTime(1, now + 0.06, beatS * 0.3);
+}
+
+function setRhythmVoice(v) {
+  rhythmVoice = v;
+  saveRhythmPrefs();
+  updateRhythmUi();
+  if (v !== 'off' && audioCtx) playRhythmVoice(true, v); // a sample right away
+}
+
+function setRhythmVolume(v) {
+  rhythmVolume = Math.max(0, Math.min(100, parseInt(v, 10) || 0));
+  if (rhythmBus) rhythmBus.gain.value = rhythmVolume / 100;
+  saveRhythmPrefs();
+  const lbl = document.getElementById('l-rhythm-volume');
+  if (lbl) lbl.innerText = rhythmVolume + '%';
 }
 
 setInterval(() => {
@@ -1126,7 +1212,14 @@ function rhythmOnBeatNow() {
 function updateRhythmUi() {
   setToggleBadge('rhythm-toggle', rhythmEnabled);
   setToggleBadge('rhythm-waves-toggle', rhythmWaves);
-  setToggleBadge('rhythm-sound-toggle', rhythmSound);
+  ['off', 'kick', 'tick', 'heart', 'tone'].forEach((v) => {
+    const b = document.getElementById('rhythm-voice-' + v);
+    if (b) b.classList.toggle('active', rhythmVoice === v);
+  });
+  const vol = document.getElementById('rhythm-volume-input');
+  if (vol) vol.value = rhythmVolume;
+  const volLbl = document.getElementById('l-rhythm-volume');
+  if (volLbl) volLbl.innerText = rhythmVolume + '%';
   setToggleBadge('rhythm-speed-toggle', rhythmSpeedSync);
   setToggleBadge('rhythm-reactive-toggle', rhythmReactive);
   setToggleBadge('rhythm-cut-toggle', rhythmCutOnBeat);
@@ -1164,7 +1257,8 @@ function loadRhythmPrefs() {
   rhythmBaseBpm = Math.max(50, Math.min(160, Number(prefs.bpm) || 90));
   rhythmBpmSource = prefs.source === 'audio' || prefs.source === 'content' ? prefs.source : 'manual';
   rhythmWaves = !!prefs.waves;
-  rhythmSound = !!prefs.sound;
+  rhythmVoice = ['off', 'kick', 'tick', 'heart', 'tone'].includes(prefs.voice) ? prefs.voice : prefs.sound ? 'kick' : 'off';
+  if (prefs.volume != null) rhythmVolume = prefs.volume;
   rhythmSpeedSync = !!prefs.speedSync;
   rhythmReactive = prefs.reactive !== false;
   rhythmCutOnBeat = prefs.cutOnBeat !== false;
@@ -1173,13 +1267,12 @@ function loadRhythmPrefs() {
 }
 
 function saveRhythmPrefs() {
-  saveJsonPref('mm_rhythm', { enabled: rhythmEnabled, bpm: rhythmBaseBpm, source: rhythmBpmSource, waves: rhythmWaves, sound: rhythmSound, speedSync: rhythmSpeedSync, reactive: rhythmReactive, pattern: rhythmPatternPref, cutOnBeat: rhythmCutOnBeat });
+  saveJsonPref('mm_rhythm', { enabled: rhythmEnabled, bpm: rhythmBaseBpm, source: rhythmBpmSource, waves: rhythmWaves, voice: rhythmVoice, volume: rhythmVolume, speedSync: rhythmSpeedSync, reactive: rhythmReactive, pattern: rhythmPatternPref, cutOnBeat: rhythmCutOnBeat });
   updateRhythmUi();
 }
 
 function toggleRhythm() { rhythmEnabled = !rhythmEnabled; saveRhythmPrefs(); }
 function toggleRhythmWaves() { rhythmWaves = !rhythmWaves; saveRhythmPrefs(); }
-function toggleRhythmSound() { rhythmSound = !rhythmSound; saveRhythmPrefs(); }
 function toggleRhythmSpeedSync() { rhythmSpeedSync = !rhythmSpeedSync; saveRhythmPrefs(); }
 function toggleRhythmReactive() { rhythmReactive = !rhythmReactive; saveRhythmPrefs(); }
 function toggleRhythmCutOnBeat() { rhythmCutOnBeat = !rhythmCutOnBeat; saveRhythmPrefs(); }

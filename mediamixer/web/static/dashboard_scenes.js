@@ -32,7 +32,7 @@ function captureScene() {
       pulse: sharedPulseEnabled,
       rhythm: {
         enabled: rhythmEnabled, pattern: rhythmPatternPref, bpm: rhythmBaseBpm, source: rhythmBpmSource,
-        waves: rhythmWaves, speedSync: rhythmSpeedSync, reactive: rhythmReactive, sound: rhythmSound, cutOnBeat: rhythmCutOnBeat,
+        waves: rhythmWaves, speedSync: rhythmSpeedSync, reactive: rhythmReactive, voice: rhythmVoice, volume: rhythmVolume, cutOnBeat: rhythmCutOnBeat,
         stutter: rhythmFxStutter, cascade: rhythmFxCascade,
       },
     },
@@ -118,7 +118,9 @@ function applyScene(data, fromZone) {
     if (r.waves != null && r.waves !== rhythmWaves) toggleRhythmWaves();
     if (r.speedSync != null && r.speedSync !== rhythmSpeedSync) toggleRhythmSpeedSync();
     if (r.reactive != null && r.reactive !== rhythmReactive) toggleRhythmReactive();
-    if (r.sound != null && r.sound !== rhythmSound) toggleRhythmSound();
+    if (r.voice) { if (r.voice !== rhythmVoice) setRhythmVoice(r.voice); }
+    else if (r.sound != null) setRhythmVoice(r.sound ? 'kick' : 'off'); // scenes saved before beat voices
+    if (r.volume != null) setRhythmVolume(r.volume);
     if (r.cutOnBeat != null && r.cutOnBeat !== rhythmCutOnBeat) toggleRhythmCutOnBeat();
     if (r.stutter != null && r.stutter !== rhythmFxStutter) toggleRhythmFx('stutter');
     if (r.cascade != null && r.cascade !== rhythmFxCascade) toggleRhythmFx('cascade');

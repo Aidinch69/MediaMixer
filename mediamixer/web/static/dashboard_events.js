@@ -97,12 +97,28 @@ function maybeTriggerSpotlight() {
   if (Math.random() < TUNING.SPOTLIGHT_PROBABILITY) startSpotlight(pickSpotlightTarget());
 }
 
+// An element's box relative to `ancestor`, from offsets (which ignore CSS
+// transforms) rather than getBoundingClientRect (which includes them).
+function layoutBox(el, ancestor) {
+  let left = 0, top = 0, node = el;
+  const stop = ancestor.offsetParent;
+  while (node && node !== stop) {
+    left += node.offsetLeft;
+    top += node.offsetTop;
+    node = node.offsetParent;
+  }
+  return { left: left - ancestor.offsetLeft, top: top - ancestor.offsetTop, width: el.offsetWidth, height: el.offsetHeight };
+}
+
 function startSpotlight(idx, durationMs) {
   const tile = tileElements[idx];
   const grid = document.getElementById('screen-grid');
   if (!tile || !grid || spotlightTileIndex >= 0) return false;
-  const tr = tile.getBoundingClientRect();
-  const gr = grid.getBoundingClientRect();
+  // Where the tile sits in the layout, ignoring any transform it has right
+  // now (still shrinking from a previous spotlight, swiped, swelled...) -
+  // measuring the transformed box is what used to throw it off-screen.
+  const tr = layoutBox(tile, grid);
+  const gr = { left: 0, top: 0, width: grid.clientWidth, height: grid.clientHeight };
   if (!tr.width || !tr.height) return false;
   const scale = Math.max(1, Math.min(gr.width * TUNING.SPOTLIGHT_SCALE / tr.width, gr.height * TUNING.SPOTLIGHT_SCALE / tr.height));
   const dx = (gr.left + gr.width / 2) - (tr.left + tr.width / 2);

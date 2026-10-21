@@ -13,7 +13,7 @@
 // tiles doesn't shuffle anything. One tile at a time, and it holds for a
 // while before another can take over.
 
-const gravityOn = { cropFocus: true, gravity: true };
+const gravityOn = { cropFocus: true, gravity: false }; // Gravity: off by default after a real session - opt in
 const cropPos = []; // tile -> { x, y } in 0..100 (object-position %)
 const gravityLevel = []; // tile -> smoothed movement
 const gravityNudge = []; // tile -> heart nudge, decaying

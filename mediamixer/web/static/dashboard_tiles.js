@@ -500,6 +500,9 @@ function buildMosaicNode(node) {
 }
 
 function layoutMosaic() {
+  // Never move tiles under a Spotlight - its offset to the centre was worked
+  // out from where the tile was; the periodic reflow catches up after.
+  if (typeof spotlightTileIndex !== 'undefined' && spotlightTileIndex >= 0) return;
   const grid = document.getElementById('screen-grid');
   const rect = grid.getBoundingClientRect();
   if (rect.width < 10 || rect.height < 10 || tileElements.length === 0) return;

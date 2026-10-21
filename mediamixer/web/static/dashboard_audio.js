@@ -83,10 +83,14 @@ function buildSynthGraph() {
 
   leftOsc.connect(gateLeft); gateLeft.connect(pannerLeft); pannerLeft.connect(masterGain);
   rightOsc.connect(gateRight); gateRight.connect(pannerRight); pannerRight.connect(masterGain);
-  masterGain.connect(ctx.destination);
+  // Rhythm Mode's "Tone" beat voice swells this on each beat (1 = untouched).
+  const beatGain = ctx.createGain();
+  beatGain.gain.value = 1;
+  masterGain.connect(beatGain);
+  beatGain.connect(ctx.destination);
 
   leftOsc.start(); rightOsc.start(); lfo.start(); offset.start();
-  synthNodes = { leftOsc, rightOsc, lfo, lfoGain, offset, masterGain };
+  synthNodes = { leftOsc, rightOsc, lfo, lfoGain, offset, masterGain, beatGain };
 }
 
 function updateSynthParams(synth) {

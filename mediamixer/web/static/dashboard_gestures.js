@@ -97,6 +97,11 @@ document.addEventListener('wheel', (e) => {
 // neighbours now, and picks lean toward the same look for a minute.
 let likeThisTile = -1;
 let likeThisTimer = null;
+// A stray click-drag on a tile used to select it (a blue highlight that
+// stayed until the clip changed) or start dragging the video out.
+document.addEventListener('dragstart', (e) => { if (e.target.closest && e.target.closest('#screen-grid')) e.preventDefault(); }, true);
+document.addEventListener('selectstart', (e) => { if (e.target.closest && e.target.closest('#screen-grid')) e.preventDefault(); }, true);
+
 document.addEventListener('dblclick', (e) => {
   if (!tileGesturesEnabled) return;
   const hit = gestureTile(e);
