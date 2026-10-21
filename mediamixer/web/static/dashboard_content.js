@@ -154,23 +154,14 @@ function checkContentPeak(i) {
 // ---- Follow Clips tempo ----
 // The hero clip's own rhythm (its DNA tempo at this point in the clip),
 // folded into a playable range and glided so it never jumps.
-// A clip's own rhythm at its current position: the most confident DNA
-// tempo window covering it, else its overall tempo (null = no steady rhythm).
-function clipTempoAt(i) {
-  const dna = contentDna(i);
-  const vid = getTileVideo(i);
-  if (!dna || !vid) return null;
-  if (dna.tempo_track) {
-    const t = vid.currentTime;
-    const w = dna.tempo_track.filter((x) => x[1] && x[0] <= t && t <= x[0] + 8).sort((a, b) => b[2] - a[2])[0];
-    if (w) return w[1];
-  }
-  return dna.tempo || null;
-}
-
 function contentHeroBpm() {
+  // A clip the beat has locked onto leads, at its live (measured) tempo.
+  const lead = typeof rhythmLead !== 'undefined' && rhythmLead >= 0 ? beatLocks[rhythmLead] : null;
+  if (lead && lead.locked && lead.liveBpm) return foldBpm(lead.liveBpm);
   if (contentHero < 0) return null;
-  let bpm = clipTempoAt(contentHero);
+  // Whole-clip tempo - the 8s windows made the beat wander with the clip.
+  const dna = contentDna(contentHero);
+  let bpm = dna && dna.tempo;
   if (!bpm) return null;
   while (bpm < 70) bpm *= 2;
   while (bpm > 140) bpm /= 2;
@@ -220,46 +211,290 @@ function checkPeakCuts() {
   });
 }
 
-// ---- Beat-matching ----
-// While Rhythm Mode runs, clips with a steady rhythm of their own are nudged
-// a few percent faster or slower so their movement falls in time with the
-// beat (or twice / half as fast - whichever is nearest). Only when it's a
-// small nudge (TUNING.BEAT_MATCH_MAX); a clip far off the beat is left
-// alone rather than visibly sped up. Glided, so it's never a jump.
-const beatMatch = []; // tile -> { path, m }
+// ---- Beat-matching (phase-locked, live) ----
+// Two lessons from real clips: matching speed alone left clips hitting
+// between beats and drifting, and the tempo from Clip DNA is often too
+// unsure to steer by. So each candidate tile's movement is read live, one
+// sample per decoded video frame (a tiny frame difference), kept for the
+// last few seconds:
+//  1. every second its own current tempo is measured (autocorrelation) with
+//     a confidence - in each of six regions of the frame as well as the whole
+//     (the rhythmic action is usually in one part of it, and camera moves
+//     and other people smear a whole-frame reading). A tile only locks after
+//     three steady readings in a row; its tempo is then frozen (re-reading
+//     it while locked made it steer away), and the lock is only let go
+//     after its rhythm has stayed weak for a while (no flicker);
+//  2. a locked tile's timing is compared with the beat (quadrature
+//     demodulation: angle = how early/late its bursts land, magnitude = how
+//     rhythmic) and a gentle PI controller nudges its speed so its bursts
+//     land on the beat, at half / same / double time, whichever is nearest.
+// With Follow Clips the beat follows the most clearly rhythmic clip on
+// screen (the rhythm lead): it takes that clip's live tempo and slides its
+// timing onto that clip's bursts - the clip itself is never sped up - and
+// the lead tile glows softly on each beat so you can see what it follows.
+// Tiles under another speed effect (slow-mo, Breath...) are skipped - their
+// rhythm is distorted while it runs.
+const BEAT_LOCK_MAX_TILES = 6; // tiles listened to at once, biggest first
+const BEAT_LOCK_W = 24, BEAT_LOCK_H = 14;
+const BEAT_LOCK_FS = 30; // resampled rate for the tempo search
+const BEAT_LOCK_WINDOW_S = 8;
+const BEAT_LOCK_CELLS = [[0, 0, 24, 14]].concat([0, 1, 2].flatMap((cx) => [0, 1].map((cy) => [cx * 8, cy * 7, cx * 8 + 8, cy * 7 + 7]))); // whole frame + 3x2 regions
+const beatLocks = []; // tile -> lock state
+let rhythmLead = -1; // Follow Clips: the locked tile the beat follows
+let rhythmLeadSince = 0;
+const beatLockSampler = document.createElement('canvas');
+beatLockSampler.width = BEAT_LOCK_W;
+beatLockSampler.height = BEAT_LOCK_H;
 
-function beatMatchMult(i) {
-  const b = beatMatch[i];
-  return b && b.path === currentPaths[i] ? b.m : 1;
+// Where the beat clock is, in beats (continuous: 12.25 = a quarter past beat 12).
+function beatPhaseNow(now) {
+  const interval = 60000 / Math.max(30, currentRhythmBpm());
+  return rhythmBeatCount - (rhythmNextBeatAt - now) / interval;
 }
 
-function beatMatchTarget(i) {
-  if (!contentOn.beatMatch || !rhythmActive()) return 1;
-  const clipBpm = clipTempoAt(i);
-  if (!clipBpm) return 1;
-  // How fast its rhythm plays right now, before any beat-match nudge.
-  const playing = clipBpm * (tileNaturalBase[i] || 1) * globalSpeedMult();
+function newBeatLock(path) {
+  return {
+    path, c: 0, locked: false, weakSince: 0, hist: [], tempos: [], liveBpm: null, conf: 0, cell: 0, steady: 0,
+    I: 0, Q: 0, A: 0, eSlow: null, prev: null, lastAt: 0, integ: 0, m: 1, coh: 0, err: 0, vfc: null,
+  };
+}
+
+function beatLockFrameEnergy(vid, lock) {
+  try {
+    const g = beatLockSampler.getContext('2d', { willReadFrequently: true });
+    g.drawImage(vid, 0, 0, BEAT_LOCK_W, BEAT_LOCK_H);
+    const d = g.getImageData(0, 0, BEAT_LOCK_W, BEAT_LOCK_H).data;
+    const luma = new Float32Array(BEAT_LOCK_W * BEAT_LOCK_H);
+    for (let p = 0, q = 0; p < d.length; p += 4, q++) luma[q] = 0.2126 * d[p] + 0.7152 * d[p + 1] + 0.0722 * d[p + 2];
+    const prev = lock.prev;
+    lock.prev = luma;
+    if (!prev) return null;
+    // Movement in the whole frame and in each region.
+    return BEAT_LOCK_CELLS.map(([x0, y0, x1, y1]) => {
+      let e = 0;
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const q = y * BEAT_LOCK_W + x; e += Math.abs(luma[q] - prev[q]); }
+      return e / ((x1 - x0) * (y1 - y0));
+    });
+  } catch (err) {
+    return null;
+  }
+}
+
+// One callback per frame the video actually presents - no repeated frames.
+function beatLockListen(i, lock) {
+  const vid = getTileVideo(i);
+  if (!vid || typeof vid.requestVideoFrameCallback !== 'function') return;
+  const onFrame = (now, meta) => {
+    if (beatLocks[i] !== lock || getTileVideo(i) !== vid) return;
+    lock.vfc = vid.requestVideoFrameCallback(onFrame);
+    if (!rhythmActive() || !contentOn.beatMatch || document.hidden) return;
+    const fx = tileSpeedEffects[i];
+    if (fx && fx.size) { lock.hist = []; lock.prev = null; lock.lastAt = 0; return; } // slow-mo etc. distort its rhythm
+    const cells = beatLockFrameEnergy(vid, lock);
+    if (cells == null) return;
+    // A repeated frame (footage shot at a lower rate, padded to 30 fps) reads
+    // as no movement at all, on a regular pattern - which looked like a
+    // rhythm. Skip them; the gap is filled from the frames either side.
+    lock.eMean = lock.eMean == null ? cells[0] : lock.eMean + (cells[0] - lock.eMean) * 0.05;
+    if (cells[0] < lock.eMean * 0.08) return;
+    const t = performance.now();
+    lock.hist.push([t, cells]);
+    while (lock.hist.length && t - lock.hist[0][0] > BEAT_LOCK_WINDOW_S * 1000) lock.hist.shift();
+    if (lock.locked) {
+      const dt = lock.lastAt ? Math.min(200, t - lock.lastAt) : 33;
+      beatLockDemod(lock, cells[lock.cell], beatPhaseNow(t), dt);
+    }
+    lock.lastAt = t;
+  };
+  lock.vfc = vid.requestVideoFrameCallback(onFrame);
+}
+
+// The tile's own tempo right now (wall-clock BPM, as it plays) + confidence,
+// from the most rhythmic region (or `onlyCell` while locked).
+function beatLockMeasure(lock, onlyCell) {
+  const h = lock.hist;
+  if (h.length < 20 || h[h.length - 1][0] - h[0][0] < BEAT_LOCK_WINDOW_S * 700) return null;
+  let best = null;
+  const cells = onlyCell != null ? [onlyCell] : BEAT_LOCK_CELLS.map((c, i) => i);
+  for (const cell of cells) {
+    const m = beatLockMeasureSeries(h, cell);
+    if (m && (!best || m.conf > best.conf)) best = Object.assign(m, { cell });
+  }
+  return best;
+}
+
+function beatLockMeasureSeries(h, cell) {
+  const xs = [];
+  let k = 0;
+  for (let t = h[0][0]; t <= h[h.length - 1][0]; t += 1000 / BEAT_LOCK_FS) {
+    while (k < h.length - 1 && h[k + 1][0] <= t) k++;
+    xs.push(h[k][1][cell]);
+  }
+  const w = BEAT_LOCK_FS; // remove a 2s moving average - only repetition stays
+  const d = xs.map((x, j) => {
+    const lo = Math.max(0, j - w), hi = Math.min(xs.length, j + w + 1);
+    let s = 0;
+    for (let q = lo; q < hi; q++) s += xs[q];
+    return x - s / (hi - lo);
+  });
+  let r0 = 0;
+  for (const v of d) r0 += v * v;
+  if (r0 <= 1e-9) return null;
+  const lo = Math.floor(BEAT_LOCK_FS * 60 / 160), hi = Math.ceil(BEAT_LOCK_FS * 60 / 40);
+  const r = {};
+  for (let lag = lo - 1; lag <= hi + 1; lag++) {
+    let s = 0;
+    for (let j = 0; j + lag < d.length; j++) s += d[j] * d[j + lag];
+    r[lag] = s / r0;
+  }
+  let best = lo;
+  for (let lag = lo; lag <= hi; lag++) if (r[lag] > r[best]) best = lag;
+  if (!(r[best] > r[best - 1] && r[best] >= r[best + 1])) return { bpm: null, conf: Math.max(0, r[best]) };
+  const a = r[best - 1], b = r[best], c = r[best + 1];
+  const den = a - 2 * b + c;
+  const lag = best + (den ? Math.max(-0.5, Math.min(0.5, 0.5 * (a - c) / den)) : 0);
+  return { bpm: 60 * BEAT_LOCK_FS / lag, conf: b };
+}
+
+// Pure maths on the lock state (unit-testable): one movement sample `e` at
+// beat phase `p` (beats), `dtMs` after the last.
+function beatLockDemod(lock, e, p, dtMs) {
+  const beatMs = 60000 / Math.max(30, currentRhythmBpm());
+  lock.eSlow = lock.eSlow == null ? e : lock.eSlow + (e - lock.eSlow) * (1 - Math.exp(-dtMs / 1200));
+  const x = e - lock.eSlow;
+  const decay = Math.exp(-dtMs / (beatMs * TUNING.BEAT_LOCK_MEMORY_BEATS));
+  const ang = 2 * Math.PI * lock.c * p;
+  lock.I = lock.I * decay + x * Math.cos(ang);
+  lock.Q = lock.Q * decay + x * Math.sin(ang);
+  lock.A = lock.A * decay + Math.abs(x);
+  lock.coh = lock.A > 1e-9 ? Math.hypot(lock.I, lock.Q) / lock.A : 0; // ~0.64 for a pure rhythm, ~0 for noise
+  let err = Math.atan2(lock.Q, lock.I) / (2 * Math.PI) - TUNING.BEAT_MATCH_PHASE;
+  err -= Math.round(err);
+  lock.err = err; // how late its bursts land, in cycles of its own rhythm
+}
+
+function beatLockControl(lock, freqMult, dtMs) {
+  const lockedness = Math.max(0, Math.min(1, (lock.coh - 0.12) / 0.2));
+  lock.integ = Math.max(-0.04, Math.min(0.04, lock.integ * Math.exp(-dtMs / 20000) + lockedness * lock.err * TUNING.BEAT_LOCK_KI * dtMs / 1000));
+  const target = freqMult * (1 + lockedness * (TUNING.BEAT_LOCK_KP * lock.err + lock.integ));
+  const max = TUNING.BEAT_MATCH_MAX;
+  const clamped = Math.max(1 - max, Math.min(1 + max, target));
+  lock.m += (clamped - lock.m) * (1 - Math.exp(-dtMs / 400));
+  return lock.m;
+}
+
+function beatMatchMult(i) {
+  const lock = beatLocks[i];
+  return lock && lock.path === currentPaths[i] && lock.locked && !lock.isHero ? lock.m : 1;
+}
+
+// Once a second: who to listen to, and lock / unlock from the live tempo.
+function beatLockReview() {
+  const on = contentOn.beatMatch && rhythmActive() && !document.hidden;
+  // Clips Clip DNA thinks are rhythmic first, then the biggest tiles.
+  const order = tileElements.map((t, i) => i).sort((x, y) => {
+    const dx = contentDna(x), dy = contentDna(y);
+    const rx = dx && dx.tempo ? 1 : 0, ry = dy && dy.tempo ? 1 : 0;
+    return ry - rx || tileArea(y) - tileArea(x);
+  });
+  const listen = new Set(on ? order.slice(0, BEAT_LOCK_MAX_TILES) : []);
+  const now = Date.now();
+  tileElements.forEach((t, i) => {
+    let lock = beatLocks[i];
+    if (lock && (lock.path !== currentPaths[i] || !listen.has(i))) lock = beatLocks[i] = null;
+    if (!listen.has(i) || !currentPaths[i]) return;
+    if (!lock) { lock = beatLocks[i] = newBeatLock(currentPaths[i]); beatLockListen(i, lock); return; }
+    const meas = beatLockMeasure(lock, lock.locked ? lock.cell : null);
+    if (!meas) return;
+    lock.conf = meas.conf;
+    const strong = meas.bpm && meas.conf >= TUNING.BEAT_LOCK_MIN_CONF;
+    if (!lock.locked) {
+      // Three steady readings in a row (same region, tempo within 6%) before locking.
+      const bpm = strong ? meas.bpm : null;
+      const same = bpm && lock.tempos.length && meas.cell === lock.cell && Math.abs(bpm / lock.tempos[lock.tempos.length - 1] - 1) < 0.06;
+      lock.tempos = bpm ? (same ? lock.tempos.concat(bpm).slice(-3) : [bpm]) : [];
+      lock.cell = meas.cell;
+      if (lock.tempos.length < 3) return;
+      lock.liveBpm = [...lock.tempos].sort((a, b) => a - b)[1]; // frozen while locked
+      const following = rhythmBpmSource === 'content';
+      // Following the clips, the beat will come to it: cycles per beat from
+      // folding its tempo into 70-140. Otherwise the nearest of half / same /
+      // double the current beat, if close enough.
+      const beat = following ? foldBpm(lock.liveBpm) : currentRhythmBpm();
+      let bestC = 0, bestOff = Infinity;
+      for (const c of [0.25, 0.5, 1, 2]) {
+        const off = Math.abs((c * beat) / lock.liveBpm - 1);
+        if (off < bestOff) { bestC = c; bestOff = off; }
+      }
+      if (bestOff <= (following ? 0.02 : TUNING.BEAT_MATCH_MAX)) {
+        Object.assign(lock, { locked: true, c: bestC, I: 0, Q: 0, A: 0, integ: 0, weakSince: 0, eSlow: null });
+      }
+    } else {
+      if (strong) lock.weakSince = 0;
+      else if (!lock.weakSince) lock.weakSince = now;
+      else if (now - lock.weakSince > TUNING.BEAT_LOCK_RELEASE_MS) Object.assign(lock, { locked: false, tempos: [], liveBpm: null }); // its rhythm has faded - let it go
+    }
+  });
+  beatLocks.length = tileElements.length;
+  pickRhythmLead();
+}
+setInterval(beatLockReview, 1000);
+
+function foldBpm(bpm) {
+  while (bpm < 70) bpm *= 2;
+  while (bpm >= 140) bpm /= 2;
+  return bpm;
+}
+
+// Follow Clips: the most clearly rhythmic locked tile leads the beat. Kept
+// while it stays locked (at least CONTENT_HERO_HOLD_MS before another can
+// take over, and only if clearly more rhythmic). Real footage rarely holds
+// a rhythm for long, so the beat is the steady anchor: a new lead has to be
+// within reach of the current beat, unless there's been no lead for a while
+// and a clip is clearly rhythmic - only then does the beat retune.
+let rhythmLeadLostAt = 0;
+function pickRhythmLead() {
+  if (rhythmBpmSource !== 'content' || !rhythmActive()) { rhythmLead = -1; return; }
   const beat = currentRhythmBpm();
-  // The nudge to the nearest of half / same / double the beat, if it's small.
-  const m = [0.5, 1, 2].map((k) => (beat * k) / playing).sort((a, b) => Math.abs(a - 1) - Math.abs(b - 1))[0];
-  return Math.abs(m - 1) <= TUNING.BEAT_MATCH_MAX ? m : 1;
+  const free = rhythmLead < 0 && Date.now() - rhythmLeadLostAt > TUNING.CONTENT_HERO_HOLD_MS;
+  const score = (i) => {
+    const l = beatLocks[i];
+    if (!(l && l.locked && l.path === currentPaths[i] && l.liveBpm)) return -1;
+    if (i === rhythmLead) return l.conf;
+    const near = Math.abs(foldBpm(l.liveBpm) / beat - 1) <= TUNING.BEAT_MATCH_MAX;
+    return near || (free && l.conf >= 0.4) ? l.conf : -1;
+  };
+  let best = -1;
+  beatLocks.forEach((l, i) => { if (score(i) > 0 && (best < 0 || score(i) > score(best))) best = i; });
+  const cur = rhythmLead >= 0 && score(rhythmLead) > 0 ? rhythmLead : -1;
+  if (cur < 0) {
+    if (rhythmLead >= 0) rhythmLeadLostAt = Date.now();
+    rhythmLead = best;
+    rhythmLeadSince = Date.now();
+  }
+  else if (best !== cur && best >= 0 && Date.now() - rhythmLeadSince > TUNING.CONTENT_HERO_HOLD_MS && score(best) > score(cur) * 1.3) { rhythmLead = best; rhythmLeadSince = Date.now(); }
+  beatLocks.forEach((l, i) => { if (l) l.isHero = i === rhythmLead; });
 }
 
 function beatMatchTick(dt) {
-  tileElements.forEach((t, i) => {
-    const path = currentPaths[i];
-    let b = beatMatch[i];
-    if (!b || b.path !== path) b = beatMatch[i] = { path, m: 1 };
-    const target = beatMatchTarget(i);
-    b.m += (target - b.m) * (1 - Math.exp(-dt / 1500));
-    if (Math.abs(b.m - 1) < 0.001 && target === 1) b.m = 1;
+  beatLocks.forEach((lock, i) => {
+    if (!lock || !lock.locked || !lock.liveBpm) { if (lock) lock.m += (1 - lock.m) * (1 - Math.exp(-dt / 600)); return; }
+    if (lock.isHero) {
+      // Follow Clips: slide the beat clock toward the lead clip's bursts
+      // instead of changing the clip - a few ms per tick at most.
+      const lockedness = Math.max(0, Math.min(1, (lock.coh - 0.12) / 0.2));
+      const interval = 60000 / Math.max(30, currentRhythmBpm());
+      rhythmNextBeatAt += Math.max(-12, Math.min(12, lockedness * (lock.err / lock.c) * interval * 0.08));
+      lock.m = 1;
+      return;
+    }
+    beatLockControl(lock, (lock.c * currentRhythmBpm()) / lock.liveBpm, dt);
   });
-  beatMatch.length = tileElements.length;
 }
 
-// How many tiles are locked to the beat right now (for the menu / log).
+// Tiles whose movement is on the beat right now (for the menu / log).
 function beatMatchedCount() {
-  return beatMatch.filter((b, i) => b && b.path === currentPaths[i] && Math.abs(b.m - 1) > 0.002).length;
+  return beatLocks.filter((l, i) => l && l.locked && l.path === currentPaths[i] && l.coh > 0.25 && Math.abs(l.err) < 0.12).length;
 }
 
 // ---- Visual Tone ----
@@ -268,7 +503,19 @@ function beatMatchedCount() {
 // (quick rise, easing back over a third of the beat), downbeats a bit more.
 let beatVeil = null;
 
+// Follow Clips: the tile the beat follows glows softly on each beat.
+function rhythmLeadBeat(downbeat) {
+  if (rhythmBpmSource !== 'content' || rhythmLead < 0) return;
+  const tile = tileElements[rhythmLead];
+  if (!tile) return;
+  let glow = tile.querySelector('.content-peak-glow');
+  if (!glow) { glow = document.createElement('div'); glow.className = 'content-peak-glow'; tile.appendChild(glow); }
+  glow.animate([{ opacity: 0 }, { opacity: downbeat ? 0.9 : 0.55, offset: 0.12 }, { opacity: 0 }],
+    { duration: Math.min(900, 60000 / Math.max(30, currentRhythmBpm()) * 0.9), easing: 'ease-out' });
+}
+
 function visualToneBeat(downbeat) {
+  rhythmLeadBeat(downbeat);
   if (!contentOn.visualTone || document.hidden) return;
   if (!beatVeil) {
     const theater = document.getElementById('theater-box');

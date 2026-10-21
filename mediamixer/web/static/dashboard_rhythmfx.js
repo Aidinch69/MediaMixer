@@ -84,7 +84,8 @@ function startStutter(idx) {
     function step(ts) {
       const elapsed = ts - t0;
       const loop = Math.floor(elapsed / segMs);
-      if (!canvas.isConnected || loop >= repeats) { canvas.remove(); stutterTile.delete(idx); return; }
+      // No frames captured (the clip changed first) - nothing to replay.
+      if (!canvas.isConnected || loop >= repeats || !frames.length) { canvas.remove(); stutterTile.delete(idx); return; }
       if (loop !== lastLoop) {
         lastLoop = loop;
         if (canvas.animate) canvas.animate([{ transform: 'scale(1.045)', filter: 'brightness(1.25)' }, { transform: 'scale(1)', filter: 'brightness(1)' }], { duration: Math.min(220, segMs), easing: 'ease-out' });

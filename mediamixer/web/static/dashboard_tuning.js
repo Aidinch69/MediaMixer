@@ -233,7 +233,7 @@ const TUNING_DEFAULTS = {
   CONTENT_ENERGY_GAIN: 1.0,
   CONTENT_ENERGY_MAX: 0.12,
   CONTENT_PEAK_GLOW: 0.45,
-  CONTENT_HERO_HOLD_MS: 8000,
+  CONTENT_HERO_HOLD_MS: 20000,
   PEAK_CUT_CHANCE: 0.65,
   PEAK_CUT_MAX_WAIT_S: 6,
   PEAK_CUT_AFTER_S: 0.8,
@@ -249,6 +249,12 @@ const TUNING_DEFAULTS = {
   GRAVITY_MIN_HOLD_MS: 6000,
   GRAVITY_HEART_NUDGE: 0.08,
   BEAT_MATCH_MAX: 0.12,
+  BEAT_MATCH_PHASE: 0,
+  BEAT_LOCK_KP: 0.3,
+  BEAT_LOCK_KI: 0.02,
+  BEAT_LOCK_MEMORY_BEATS: 3,
+  BEAT_LOCK_MIN_CONF: 0.3,
+  BEAT_LOCK_RELEASE_MS: 6000,
   VISUAL_TONE_STRENGTH: 0.22,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
@@ -264,6 +270,7 @@ const TUNING_BACKUP_KEY = 'mm_tuning_backup';
 // untouched and dropped; anything else is a genuine override.
 // When changing a default in TUNING_DEFAULTS, add its old value here.
 const TUNING_PREVIOUS_DEFAULTS = {
+  CONTENT_HERO_HOLD_MS: [8000],
   CALL_RESPONSE_CHANCE: [0.06],
   CALL_RESPONSE_COOLDOWN_MS: [60000],
   PEAK_CUT_CHANCE: [0.5],
@@ -408,7 +415,7 @@ const TUNING_GROUPS = [
   { label: 'Custom Loop Point', desc: 'Which favourites replay their best section, how often, and how many times.', keys: ['LOOP_HEART_THRESHOLD', 'LOOP_TOP_FRACTION', 'LOOP_CHANCE', 'LOOP_MAX_REPEATS'] },
   { label: 'Living Screen', desc: 'Breathing tiles, slow-motion moments and double exposures.', keys: ['BREATHE_ZOOM', 'BREATHE_DRIFT', 'BREATHE_PERIOD_MS', 'SLOWMO_PROBABILITY', 'SLOWMO_COOLDOWN_MS', 'SLOWMO_ENERGY_MIN', 'SLOWMO_SPEED', 'SLOWMO_HOLD_MS', 'DOUBLE_EXPOSURE_PROBABILITY', 'DOUBLE_EXPOSURE_COOLDOWN_MS', 'DOUBLE_EXPOSURE_MS', 'DOUBLE_EXPOSURE_OPACITY', 'GRADIENT_PROBABILITY', 'GRADIENT_COOLDOWN_MS', 'GRADIENT_HOLD_MS', 'BEST_START_CHANCE', 'BEST_START_LEAD_S', 'BEST_START_MIN_LEFT_S', 'SMART_FRAMING_STRENGTH', 'SMART_FRAMING_ZOOM', 'LIKE_THIS_MS'] },
   { label: 'Rhythm FX', desc: 'Stutter edits and Cascades - how often, how long, how many repeats.', keys: ['STUTTER_CHANCE', 'STUTTER_COOLDOWN_MS', 'STUTTER_REPEATS', 'CASCADE_CHANCE', 'CASCADE_COOLDOWN_MS', 'CASCADE_HOLD_BEATS'] },
-  { label: 'Content Pulse', desc: 'How much the movement in the clips on screen leads the energy, peak glow and Follow Clips tempo.', keys: ['CONTENT_ENERGY_GAIN', 'CONTENT_ENERGY_MAX', 'CONTENT_PEAK_GLOW', 'CONTENT_HERO_HOLD_MS', 'PEAK_CUT_CHANCE', 'PEAK_CUT_MAX_WAIT_S', 'PEAK_CUT_AFTER_S', 'BEAT_MATCH_MAX', 'VISUAL_TONE_STRENGTH'] },
+  { label: 'Content Pulse', desc: 'How much the movement in the clips on screen leads the energy, peak glow and Follow Clips tempo.', keys: ['CONTENT_ENERGY_GAIN', 'CONTENT_ENERGY_MAX', 'CONTENT_PEAK_GLOW', 'CONTENT_HERO_HOLD_MS', 'PEAK_CUT_CHANCE', 'PEAK_CUT_MAX_WAIT_S', 'PEAK_CUT_AFTER_S', 'BEAT_MATCH_MAX', 'BEAT_MATCH_PHASE', 'BEAT_LOCK_KP', 'BEAT_LOCK_KI', 'BEAT_LOCK_MEMORY_BEATS', 'BEAT_LOCK_MIN_CONF', 'BEAT_LOCK_RELEASE_MS', 'VISUAL_TONE_STRENGTH'] },
   { label: 'Hooks & Tease', desc: 'How often a clip repeats its best bit, and how often a new clip arrives pushed in close.', keys: ['HOOK_CHANCE', 'HOOK_COOLDOWN_MS', 'HOOK_SECONDS', 'HOOK_REPEATS', 'TEASE_CHANCE', 'TEASE_COOLDOWN_MS', 'TEASE_ZOOM', 'TEASE_MS'] },
   { label: 'Gravity', desc: 'How much the liveliest tile swells, how long it holds the lead, and how little a heart moves it.', keys: ['GRAVITY_SCALE', 'GRAVITY_MIN_HOLD_MS', 'GRAVITY_HEART_NUDGE'] },
   { label: 'Visual Textures', desc: 'Split frames, film grain & dust, and edge bleed - odds, strength and how much calm moments add.', keys: ['SPLIT_CHANCE', 'SPLIT_COOLDOWN_MS', 'SPLIT_MS', 'GRAIN_OPACITY', 'GRAIN_CALM_BOOST', 'DUST_RATE', 'EDGE_BLEED_OPACITY'] },
@@ -626,6 +633,12 @@ const TUNING_META = {
   GRAVITY_MIN_HOLD_MS: { label: 'Gravity: least time one tile holds the lead', unit: 's', min: 2000, max: 60000, step: 1000 },
   GRAVITY_HEART_NUDGE: { label: 'Gravity: nudge from a heart (fades in seconds)', unit: '', min: 0, max: 0.4, step: 0.01 },
   BEAT_MATCH_MAX: { label: 'Beat-matching: most a clip is sped up or slowed', unit: 'pct', min: 0, max: 0.2, step: 0.01 },
+  BEAT_MATCH_PHASE: { label: 'Beat-matching: where the beat lands in the clip’s motion (0 = on the bursts, 0.5 = between)', unit: '', min: -0.5, max: 0.5, step: 0.05 },
+  BEAT_LOCK_KP: { label: 'Beat-matching: how firmly timing is pulled onto the beat', unit: '', min: 0, max: 0.4, step: 0.01 },
+  BEAT_LOCK_KI: { label: 'Beat-matching: how it corrects a steady drift', unit: '', min: 0, max: 0.1, step: 0.005 },
+  BEAT_LOCK_MEMORY_BEATS: { label: 'Beat-matching: beats of movement it listens to', unit: '', min: 2, max: 16, step: 1 },
+  BEAT_LOCK_MIN_CONF: { label: 'Beat-matching: how clearly rhythmic a clip must be to lock', unit: 'pct', min: 0.1, max: 0.8, step: 0.05 },
+  BEAT_LOCK_RELEASE_MS: { label: 'Beat-matching: let go after its rhythm fades for', unit: 's', min: 1000, max: 15000, step: 500 },
   VISUAL_TONE_STRENGTH: { label: 'Visual Tone: how much the screen swells on each beat', unit: 'pct', min: 0, max: 0.6, step: 0.01 },
   SPLIT_CHANCE: { label: 'Split frames: chance per check (every 15s)', unit: 'pct', min: 0, max: 1, step: 0.01 },
   SPLIT_COOLDOWN_MS: { label: 'Rest between split frames', unit: 's', min: 15000, max: 1800000, step: 15000 },
