@@ -16,8 +16,8 @@ const FX_MIN_SIZE_VW = 6;
 const FX_MAX_SIZE_VW = 32;
 const FX_SHARD_OFFSET = 100; // keep fx sprites on their own loopback shards, separate from the main grid
 
-let fxEnabled = false;
-let fxCount = 3;
+let fxEnabled = true;
+let fxCount = 2;
 let fxOpacity = 60;
 let fxSource = 'library';
 let fxSourceLists = { dedicated: null, library: null };

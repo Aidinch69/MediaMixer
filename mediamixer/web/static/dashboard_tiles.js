@@ -180,7 +180,7 @@ function fetchVideoMetaFor(i, path) {
 // shortly after a tile's *first* real aspect ratio arrives).
 const MOSAIC_REFLOW_INTERVAL_MS = 8000;
 const DEFAULT_ASPECT = 16 / 9;
-let mosaicEnabled = false;
+let mosaicEnabled = true;
 let aspectRatios = [];
 let aspectKnown = [];
 let mosaicSettleTimer = null;
@@ -331,7 +331,7 @@ setInterval(() => {
 }, 100);
 
 function loadMosaicPref() {
-  try { mosaicEnabled = localStorage.getItem('mm_mosaic_enabled') === '1'; } catch (e) {}
+  try { const v = localStorage.getItem('mm_mosaic_enabled'); if (v !== null) mosaicEnabled = v === '1'; } catch (e) {}
   const btn = document.getElementById('mosaic-toggle');
   btn.innerText = mosaicEnabled ? 'ON' : 'OFF';
   btn.classList.toggle('active', mosaicEnabled);

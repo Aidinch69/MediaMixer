@@ -851,13 +851,13 @@ function awardChaseMilestone(idx, chain) {
 // Engaged manually, or automatically for as long as Auto-Pilot's Rhythm
 // Zone runs (rhythmZoneActive) and during a Finale's build/peak.
 const RHYTHM_WAVE_RISE_FRAC = 0.85; // rises over 85% of the period, drops back over the last 15%
-let rhythmEnabled = false;
+let rhythmEnabled = true;
 let rhythmZoneActive = false;
 let rhythmBaseBpm = 90;
-let rhythmBpmSource = 'manual'; // 'manual' | 'audio' | 'content' (the lead clip's own rhythm)
+let rhythmBpmSource = 'content'; // 'manual' | 'audio' | 'content' (the lead clip's own rhythm)
 let rhythmWaves = true;
-let rhythmVoice = 'off'; // the beat's sound: 'off' | 'kick' | 'tick' | 'heart' | 'tone'
-let rhythmVolume = 70;
+let rhythmVoice = 'tick'; // the beat's sound: 'off' | 'kick' | 'tick' | 'heart' | 'tone'
+let rhythmVolume = 40;
 let rhythmSpeedSync = true;
 let rhythmStartedAt = 0;
 let rhythmNextBeatAt = 0;
@@ -1308,7 +1308,7 @@ function formatRunSeconds(ms) {
 setInterval(() => { if (rhythmActive()) updateRhythmUi(); }, 1000);
 
 function loadRhythmPrefs() {
-  const prefs = loadJsonPref('mm_rhythm', { enabled: false, bpm: 90, source: 'manual', waves: true, sound: false, speedSync: true, reactive: true, pattern: 'mix', cutOnBeat: true });
+  const prefs = loadJsonPref('mm_rhythm', { enabled: true, bpm: 90, source: 'content', voice: 'tick', volume: 40, waves: true, sound: false, speedSync: true, reactive: true, pattern: 'mix', cutOnBeat: true });
   rhythmEnabled = !!prefs.enabled;
   rhythmBaseBpm = Math.max(50, Math.min(160, Number(prefs.bpm) || 90));
   rhythmBpmSource = prefs.source === 'audio' || prefs.source === 'content' ? prefs.source : 'manual';

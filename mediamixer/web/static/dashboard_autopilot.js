@@ -726,10 +726,10 @@ setInterval(updateAutopilotDebugUi, 1000);
 // ambient drift works with or without it and takes over whenever zone-
 // driven isn't actively steering (so the two don't fight over the same
 // layout moments apart).
-let dynamicMosaicZoneMode = false;
-let dynamicMosaicDriftMode = false;
+let dynamicMosaicZoneMode = true;
+let dynamicMosaicDriftMode = true;
 let dynamicMosaicMinTiles = 2;
-let dynamicMosaicMaxTiles = 16;
+let dynamicMosaicMaxTiles = 12;
 
 function layoutsInRange(min, max) {
   return (window.LAYOUT_PRESETS || []).filter((p) => p.tile_count >= min && p.tile_count <= max);
@@ -797,10 +797,10 @@ function saveDynamicMosaicPrefs() {
 function loadDynamicMosaicPrefs() {
   try {
     const saved = JSON.parse(localStorage.getItem('mm_dynamic_mosaic') || '{}');
-    dynamicMosaicZoneMode = !!saved.zoneMode;
-    dynamicMosaicDriftMode = !!saved.driftMode;
+    dynamicMosaicZoneMode = saved.zoneMode === undefined ? true : !!saved.zoneMode;
+    dynamicMosaicDriftMode = saved.driftMode === undefined ? true : !!saved.driftMode;
     dynamicMosaicMinTiles = Number.isFinite(saved.min) ? saved.min : 2;
-    dynamicMosaicMaxTiles = Number.isFinite(saved.max) ? saved.max : 16;
+    dynamicMosaicMaxTiles = Number.isFinite(saved.max) ? saved.max : 12;
   } catch (e) {}
   const zoneBtn = document.getElementById('dynamic-mosaic-zone-toggle');
   if (zoneBtn) { zoneBtn.innerText = dynamicMosaicZoneMode ? 'ON' : 'OFF'; zoneBtn.classList.toggle('active', dynamicMosaicZoneMode); }

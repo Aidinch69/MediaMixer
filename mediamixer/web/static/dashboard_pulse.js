@@ -120,7 +120,7 @@ const BRAINWAVE_BANDS = {
 };
 const BRAINWAVE_MOOD_HOLD_MS = 15000;
 const BRAINWAVE_GLIDE_TAU_S = 2.5; // ~7s to settle on a new band
-let brainwaveMode = 'free'; // 'free' | 'mood' | a band key
+let brainwaveMode = 'theta'; // 'free' | 'mood' | a band key
 let brainwaveMoodBand = 'alpha';
 let brainwaveMoodCandidate = null;
 let brainwaveMoodCandidateAt = 0;
@@ -160,7 +160,7 @@ function setBrainwaveMode(mode) {
 }
 
 function loadBrainwavePrefs() {
-  const p = loadJsonPref('mm_brainwave', { mode: 'free' });
+  const p = loadJsonPref('mm_brainwave', { mode: 'theta' });
   brainwaveMode = p.mode === 'mood' || BRAINWAVE_BANDS[p.mode] ? p.mode : 'free';
   if (brainwaveMode === 'mood') brainwaveMoodBand = brainwaveMoodTarget();
   updateBrainwaveUi();
