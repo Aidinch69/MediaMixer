@@ -311,3 +311,7 @@ tools/                    cdp.py (headless Chrome driver), smoke.py
 ```
 
 The front end is plain JavaScript with no build step. The `dashboard_*.js` files share one global scope and are loaded in order by `web/templates/dashboard.html`. Template edits need an engine restart; JS and CSS edits only need a browser refresh.
+
+## License
+
+MIT - see [LICENSE](LICENSE).
