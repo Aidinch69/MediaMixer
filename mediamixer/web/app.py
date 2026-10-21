@@ -663,6 +663,25 @@ def create_app(ctx: AppContext) -> Flask:
                     break
         return jsonify(ok=True, placed=len(placed), tiles=placed, seconds=seconds)
 
+    @app.route("/api/place")
+    def api_place():
+        """Put one specific clip on a tile for `s` seconds (Callbacks: a clip
+        hearted earlier this session comes back)."""
+        try:
+            index = int(request.args.get("screen", ""))
+            seconds = max(3.0, min(120.0, float(request.args.get("s", "12"))))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="invalid screen or seconds"), 400
+        session = g.session
+        if not (0 <= index < len(session.state.current_paths())):
+            return jsonify(ok=False, error="screen index out of range"), 400
+        if index in session.state.busy_indexes():
+            return jsonify(ok=True, placed=False, reason="tile busy")
+        abs_path = _absolute_media_path(config, request.args.get("path", ""))
+        if not abs_path or not os.path.isfile(abs_path):
+            return jsonify(ok=False, error="unknown clip"), 404
+        return jsonify(ok=True, placed=bool(session.rotation.force_screen(index, abs_path, hold_s=seconds)))
+
     @app.route("/api/dna/similar")
     def api_dna_similar():
         abs_path = _absolute_media_path(config, request.args.get("path", ""))

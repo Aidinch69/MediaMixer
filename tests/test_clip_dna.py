@@ -195,3 +195,22 @@ def test_match_cut_leans_toward_continuing_the_outgoing_clip(config, db):
     rising = avg_index(library.match_target(db, outgoing, 0.12))
     assert plain > 40 and steady < plain - 10  # pulled toward clip 20's look
     assert rising > steady + 3  # energy rising: livelier than a straight match
+
+
+def test_place_puts_a_specific_clip_on_a_tile_and_holds_it(config, db):
+    from mediamixer.context import AppContext
+    from mediamixer.session import SessionManager
+    from mediamixer.web.app import create_app, _relative_media_path
+    paths = make_clips(config, [f"{i:03}.mp4" for i in range(30)])
+    library.sync_library(db, config)
+    sessions = SessionManager(db, config)
+    client = create_app(AppContext(config, db, sessions)).test_client()
+    client.get("/")
+    client.get("/api/layout?mode=grid2x2")
+    sess = next(iter(sessions._sessions.values()))
+    target = next(p for p in paths if p not in sess.state.current_paths())
+    r = client.get("/api/place?screen=1&s=12&path=" + _relative_media_path(config, target)).get_json()
+    assert r["ok"] and r["placed"]
+    assert sess.state.current_paths()[1] == target and sess.state.screen_held(1)
+    assert client.get("/api/place?screen=2&path=nope.mp4").status_code == 404
+    sessions.stop()

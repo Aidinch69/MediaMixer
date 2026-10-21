@@ -27,7 +27,7 @@ MIN_SESSION_LIKES = 10
 MOMENT_LABELS = {
     "drop": "The Drop", "breath": "a Breath", "focus": "a Focus pull", "callResponse": "Call & response",
     "echo": "Echo trails", "favorite": "a Favourite takeover", "split": "Split frames",
-    "hook": "a Hook", "tease": "a Tease reveal",
+    "hook": "a Hook", "tease": "a Tease reveal", "replay": "a Heart replay", "callback": "a Callback",
 }
 TIME_BUCKETS = (("late night", range(0, 5)), ("morning", range(5, 12)), ("afternoon", range(12, 17)), ("evening", range(17, 22)), ("late night", range(22, 24)))
 
@@ -107,6 +107,8 @@ def _moment_starts(evs):
             out.append((t, "hook"))
         elif k == "tease":
             out.append((t, "tease"))
+        elif k in ("replay", "callback"):
+            out.append((t, k))
     return out
 
 

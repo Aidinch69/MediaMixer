@@ -495,6 +495,18 @@
       </div>
     </details>
     <details class="settings-section">
+      <summary><span class="section-title">↺ Replays &amp; Callbacks</span><span class="settings-section-desc">Your hearts brought back: instant replays and earlier favourites returning.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider"><label>Heart Replay</label><button class="badge" id="replay-replay-toggle" onclick="toggleReplayPref('replay')">ON</button></div>
+        <div class="slider"><label>Callbacks</label><button class="badge" id="replay-callbacks-toggle" onclick="toggleReplayPref('callbacks')">ON</button></div>
+        <div class="grid">
+          <button class="badge" onclick="previewReplay() || toast('↺ No tile free for a replay right now', true)">↺ Preview Replay</button>
+          <button class="badge" onclick="previewCallback()">↩ Preview Callback</button>
+        </div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Heart Replay: now and then, a moment after you heart a tile, the three seconds you just hearted play again once, slightly slowed, with a small REPLAY tag - like an instant replay - then it's back to live. It's lined up out of sight first, so it never looks like buffering, and rests at least 30s between replays. Callbacks: a clip you hearted earlier this session (at least 3 minutes ago) comes back for about 12 seconds on another tile, starting just before the spot you hearted, marked "Callback" - at most every couple of minutes, and no clip more than twice. Fine-tune in Master Controls → Replays &amp; Callbacks.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
       <summary><span class="section-title">🎆 Moments</span><span class="settings-section-desc">Structured moments: The Drop, Breath, Countdown, Focus pull, Call &amp; response, Echo trails - and the love moments.</span></summary>
       <div class="settings-section-body">
         <div class="slider"><label>💥 The Drop</label><button class="badge" id="moment-drop-toggle" onclick="toggleMoment('drop')">ON</button></div>
@@ -723,6 +735,7 @@
 <script src="{{ url_for('static', filename='dashboard_content.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_hooks.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_gravity.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_replay.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_session.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_scenes.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_master.js') }}"></script>

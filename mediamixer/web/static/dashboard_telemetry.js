@@ -62,6 +62,7 @@ const TELEMETRY_WATCHERS = [
   ['beatVoice', () => (rhythmActive() ? rhythmVoice : null)],
   ['tempoSource', () => (rhythmActive() ? rhythmBpmSource : null)],
   ['beatMatched', () => (rhythmActive() && contentOn.beatMatch ? beatMatchedCount() : null)],
+  ['replay', () => (replay && replay.shown ? replay.idx : null)],
   ['hook', () => (hook && hook.phase === 'running' ? hook.idx : null)],
   ['gravityHero', () => (gravityHero >= 0 ? gravityHero : null)],
   ['contentHero', () => (contentHero >= 0 ? contentHero : null)],

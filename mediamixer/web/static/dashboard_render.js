@@ -172,6 +172,12 @@ function ensureTiles(count) {
 // first half. Only the start moves: the lead-in keeps the build-up (and
 // anything you liked late), and the clip plays on past the moment as usual.
 function chooseStartTime(path, duration) {
+  // A Callback asked for a particular spot (just before where it was hearted).
+  if (typeof pendingStartAt !== 'undefined' && pendingStartAt[path] != null) {
+    const t = pendingStartAt[path];
+    delete pendingStartAt[path];
+    return { t: Math.min(t, Math.max(0, duration - 3)), kind: 'callback' };
+  }
   const random = Math.random() * RANDOM_START_MAX_FRACTION * duration;
   if (Math.random() >= TUNING.BEST_START_CHANCE) return { t: random, kind: 'random' };
   const meta = videoMetaCache[path];
@@ -511,6 +517,7 @@ function rateScreen(i, dir, btn, strength) {
     onEngagement('heart', i, strength);
     if (typeof onMomentHeart === 'function') onMomentHeart(i);
     if (typeof gravityHeart === 'function') gravityHeart(i);
+    if (typeof onReplayHeart === 'function') onReplayHeart(i);
     statsLifetimeHearts += strength;
     sessionStats.hearts += strength;
     saveStats();
