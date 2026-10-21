@@ -639,6 +639,8 @@ button:hover{background:#251538;border-color:#b84dff;box-shadow:0 0 10px rgba(18
 .gradient-sweep{position:absolute;inset:0;z-index:5;pointer-events:none;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.18) 48%,rgba(214,153,255,.22) 52%,transparent 70%);background-size:300% 100%;animation:gradient-sweep 2.2s ease-in-out forwards;mix-blend-mode:screen}
 @keyframes gradient-sweep{from{background-position:100% 0}to{background-position:0 0}}
 .fx-stutter-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;opacity:0}
+.content-peak-glow{position:absolute;inset:0;opacity:0;z-index:3;pointer-events:none;border-radius:inherit;box-shadow:inset 0 0 28px 4px rgba(var(--mood-glow,var(--theme-glow,255,70,30)),.55);animation:content-peak-anim .9s ease-out forwards}
+@keyframes content-peak-anim{0%{opacity:0}18%{opacity:1}100%{opacity:0}}
 .fx-split{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1;pointer-events:none;opacity:0;transition:opacity .35s ease;background:#020105}
 .fx-split.shown{opacity:1}
 .split-lines{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0;transition:opacity .35s ease}

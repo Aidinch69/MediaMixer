@@ -284,6 +284,16 @@
 
   <div class="panel-tab" data-tab="flow">
     <details class="settings-section">
+      <summary><span class="section-title">🫀 Content Pulse</span><span class="settings-section-desc">The movement in the clips on screen leads the energy, glow and (optionally) the beat.</span></summary>
+      <div class="settings-section-body">
+        <div class="metric" id="content-status"></div>
+        <div class="slider"><label>Energy Follows the Clips</label><button class="badge" id="content-energy-toggle" onclick="toggleContent('energy')">ON</button></div>
+        <div class="slider"><label>Glow on Clip Peaks</label><button class="badge" id="content-peaks-toggle" onclick="toggleContent('peaks')">ON</button></div>
+        <div class="slider"><label>Cuts Wait for Clip Peaks</label><button class="badge" id="content-peakCuts-toggle" onclick="toggleContent('peakCuts')">ON</button></div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Every clip has its own movement curve from Clip DNA (clips not analysed yet are read live from tiny frames). Energy Follows the Clips: when the clips on screen move more than usual, the session energy lifts with them - and the binaural beat, spirals and everything else on the Shared Pulse follow - then settles as they calm. Glow on Clip Peaks: when a clip reaches one of its own motion peaks, its tile and the screen edge glow with it. Cuts Wait for Clip Peaks: about half the time, when a tile is about to change and its clip has a peak coming within a few seconds, the change waits until just after it - so you don't leave a clip mid-build. For the beat itself, pick Tempo Source → Follow Clips in Rhythm Mode: the beat takes the rhythm of the clip that's moving most (when it has a steady one), gliding as the lead clip changes. Fine-tune in Master Controls → Content Pulse.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
       <summary><span class="section-title">🧭 Session</span><span class="settings-section-desc">Start how you want, and wind down gently at the end.</span></summary>
       <div class="settings-section-body">
         <div class="metric" id="session-status">Open-ended session</div>
@@ -351,9 +361,10 @@
         <div class="metric" id="rhythm-status"></div>
         <div class="slider">
           <label>Tempo Source</label>
-          <div class="grid" style="grid-template-columns:1fr 1fr">
+          <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
             <button class="badge" id="rhythm-src-manual" onclick="setRhythmSource('manual')">Manual BPM</button>
             <button class="badge" id="rhythm-src-audio" onclick="setRhythmSource('audio')">Follow Audio</button>
+            <button class="badge" id="rhythm-src-content" onclick="setRhythmSource('content')">Follow Clips</button>
           </div>
         </div>
         <div class="slider"><label>Base Tempo: <b><span id="l-rhythm-bpm">90 BPM</span></b></label><input type="range" id="rhythm-bpm-input" min="50" max="160" step="2" value="90" oninput="setRhythmBpm(this.value)"></div>
@@ -671,6 +682,7 @@
 <script src="{{ url_for('static', filename='dashboard_rhythmfx.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_moments.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_textures.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_content.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_session.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_scenes.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_master.js') }}"></script>

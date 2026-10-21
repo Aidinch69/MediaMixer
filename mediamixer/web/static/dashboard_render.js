@@ -271,9 +271,11 @@ setInterval(() => {
 }, 100);
 
 let lastStatusData = null; // the latest status push (Scenes reads pace/tone/beat from it)
+let lastStatusAt = 0; // when it arrived (expires_in counts from here)
 
 function render(d) {
   lastStatusData = d;
+  lastStatusAt = Date.now();
   if (!d.screens || !d.screens.length) return;
   const tilesRebuilt = ensureTiles(d.screens.length);
   const columnsChanged = d.columns !== currentColumns;

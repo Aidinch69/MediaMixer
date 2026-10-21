@@ -59,6 +59,7 @@ const TELEMETRY_WATCHERS = [
   ['rhythmPattern', () => (rhythmActive() ? rhythmPattern : null)],
   ['floaterBarrage', () => (floaterBarrageActive ? 'on' : null)],
   ['moment', () => activeMoment],
+  ['contentHero', () => (contentHero >= 0 ? contentHero : null)],
   ['splitFrames', () => (splitFrames && splitFrames.shown ? splitFrames.idx : null)],
   ['cascade', () => (cascade ? cascade.mode : null)],
   ['slowmo', () => (slowmoTileIndex >= 0 ? slowmoTileIndex : null)],

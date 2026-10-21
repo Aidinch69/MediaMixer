@@ -43,6 +43,7 @@ window.onload = () => {
   loadRhythmFxPrefs();
   loadMomentPrefs();
   loadTexturePrefs();
+  loadContentPrefs();
   loadSessionPrefs();
   loadScenes();
   loadAnticipationPrefs();

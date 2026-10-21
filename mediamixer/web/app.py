@@ -170,6 +170,7 @@ def create_app(ctx: AppContext) -> Flask:
                 "speed": s["speed"],
                 "pinned": s["pinned"],
                 "held": s["held"],
+                "expires_in": s["expires_in"],  # seconds until this tile's automatic change
             }
             for s in snap["screens"]
         ]
@@ -557,6 +558,11 @@ def create_app(ctx: AppContext) -> Flask:
         keys = row.keys()
         out["peak_at"] = row["peak_at"] if "peak_at" in keys else None
         out["track"] = json.loads(row["track"]) if "track" in keys and row["track"] else None
+        # v3: the clip's own pulse (hex, 4 Hz), peaks, tempo and hook.
+        for k in ("pulse", "tempo", "tempo_conf", "hook_at"):
+            out[k] = row[k] if k in keys else None
+        for k in ("peaks", "tempo_track"):
+            out[k] = json.loads(row[k]) if k in keys and row[k] else None
         return out
 
     @app.route("/api/energy")

@@ -7,7 +7,11 @@ scaled down to a 48x27 thumbnail, via ffmpeg (the same binary the proxies
 use, and the small proxy file when one exists, so it's quick). Version 2
 adds a motion track - every TRACK_STEP_S, how much moves and where in the
 frame (for Smart Framing) - and the clip's strongest stretch (peak_at, for
-best-moment starts). It runs in a background thread
+best-moment starts). Version 3 decodes at 10 frames a second for the
+clip's own pulse: a 4 Hz motion curve, its motion peaks, its tempo (the
+rhythm of repeated movement, overall and per 8s window) and its hook (the
+strongest repeating stretch). The v2 fields still come from every 5th
+frame, so their values mean the same as before. It runs in a background thread
 at below-normal priority, one clip at a time, and results are kept in the
 clip_dna table - each clip is analysed once (or again after DNA_VERSION
 changes).
@@ -27,11 +31,19 @@ from .proxy import _find_ffmpeg
 
 log = logging.getLogger(__name__)
 
-DNA_VERSION = 2
+DNA_VERSION = 3
 SAMPLE_W, SAMPLE_H = 48, 27
-SAMPLE_FPS = 2
+DECODE_FPS = 10  # fine motion, for the pulse and tempo
+SAMPLE_FPS = 2  # the v2 fields: every DECODE_FPS // SAMPLE_FPS-th frame
 SAMPLE_SECONDS = 240
 COLOUR_EVERY = 4  # colour stats from every 4th sample - plenty, and much quicker
+PULSE_HZ = 4
+TEMPO_WINDOW_S = 8.0
+TEMPO_HOP_S = 4.0
+TEMPO_BPM_RANGE = (40.0, 150.0)
+TEMPO_MIN_CONF = 0.25  # autocorrelation below this isn't a rhythm
+HOOK_S = 2.5
+PEAK_MIN_GAP_S = 3.0
 TRACK_STEP_S = 2.0
 PEAK_WINDOW_S = 6.0
 MOTION_NOISE = 6  # per-pixel luma change below this is compression noise, not movement
@@ -102,7 +114,7 @@ def analyze(path: str, config) -> Optional[dict]:
     source = _proxy_for(path, config) or path
     cmd = [
         ffmpeg, "-v", "error", "-t", str(SAMPLE_SECONDS), "-i", source,
-        "-vf", f"fps={SAMPLE_FPS},scale={SAMPLE_W}:{SAMPLE_H}:flags=area",
+        "-vf", f"fps={DECODE_FPS},scale={SAMPLE_W}:{SAMPLE_H}:flags=area",
         "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
     ]
     try:
@@ -110,9 +122,12 @@ def analyze(path: str, config) -> Optional[dict]:
     except (OSError, subprocess.TimeoutExpired):
         return None
     frame_bytes = SAMPLE_W * SAMPLE_H * 3
-    frames = [raw[i:i + frame_bytes] for i in range(0, len(raw) - frame_bytes + 1, frame_bytes)]
-    if not frames:
+    fine_frames = [raw[i:i + frame_bytes] for i in range(0, len(raw) - frame_bytes + 1, frame_bytes)]
+    if not fine_frames:
         return None
+    fine_lumas = [[0.2126 * f[i] + 0.7152 * f[i + 1] + 0.0722 * f[i + 2] for i in range(0, frame_bytes, 3)] for f in fine_frames]
+    step = DECODE_FPS // SAMPLE_FPS
+    frames = fine_frames[::step]
 
     lumas = []
     hue_bins = [0.0] * HUE_BINS
@@ -120,7 +135,7 @@ def analyze(path: str, config) -> Optional[dict]:
     warm_total = 0.0
     px_total = 0
     for n, f in enumerate(frames):
-        lumas.append([0.2126 * f[i] + 0.7152 * f[i + 1] + 0.0722 * f[i + 2] for i in range(0, frame_bytes, 3)])
+        lumas.append(fine_lumas[n * step])
         if n % COLOUR_EVERY:
             continue
         for i in range(0, frame_bytes, 3):
@@ -159,6 +174,9 @@ def analyze(path: str, config) -> Optional[dict]:
     if accent_strength < ACCENT_MIN_STRENGTH:
         accent_hue = None
     colour_weight = sum(hue_bins)
+    fine = _fine_motion(fine_lumas)
+    pulse = _pulse(fine)
+    tempo, tempo_conf, tempo_track = _tempo(fine)
     return {
         "brightness": round(brightness, 4),
         "motion": round(motion, 4),
@@ -172,7 +190,124 @@ def analyze(path: str, config) -> Optional[dict]:
         "frames": len(frames),
         "track": track,
         "peak_at": peak_at,
+        "pulse": pulse,
+        "peaks": _peaks(pulse),
+        "tempo": tempo,
+        "tempo_conf": tempo_conf,
+        "tempo_track": tempo_track,
+        "hook_at": _hook_start(fine, tempo_track),
     }
+
+
+# ---- v3: the clip's own pulse ----
+def _fine_motion(lumas) -> list:
+    """Mean absolute luma change between consecutive frames (1/DECODE_FPS apart)."""
+    n = len(lumas[0]) * 255 if lumas else 1
+    raw = [sum(abs(a - b) for a, b in zip(l1, l2)) / n for l1, l2 in zip(lumas, lumas[1:])]
+    # Many clips repeat frames (shot at a lower rate, padded to 30 fps), so
+    # consecutive values alternate high/low - a fake 5 Hz "rhythm". A [1,2,1]
+    # smoothing cancels exactly that alternation and leaves real movement.
+    if len(raw) < 3:
+        return raw
+    return [raw[0]] + [(raw[i - 1] + 2 * raw[i] + raw[i + 1]) / 4 for i in range(1, len(raw) - 1)] + [raw[-1]]
+
+
+def _pulse(fine) -> Optional[str]:
+    """PULSE_HZ motion curve, scaled to the clip's own range (its 95th
+    percentile = 255), as a hex string - two characters per sample."""
+    if len(fine) < DECODE_FPS:
+        return None
+    series, i = [], 0.0  # 10 fps -> 4 Hz: 2.5 frames per sample, so chunks alternate 2 and 3
+    while int(i) < len(fine):
+        a, b = int(i), int(i + DECODE_FPS / PULSE_HZ)
+        chunk = fine[a:max(a + 1, b)]
+        series.append(sum(chunk) / len(chunk))
+        i += DECODE_FPS / PULSE_HZ
+    top = sorted(series)[int(len(series) * 0.95) - 1 if len(series) > 20 else -1] or 1e-9
+    return "".join(f"{min(255, int(v / top * 255)):02x}" for v in series)
+
+
+def decode_pulse(hexstr: Optional[str]) -> list:
+    return [int(hexstr[i:i + 2], 16) for i in range(0, len(hexstr or ""), 2)]
+
+
+def _peaks(pulse_hex: Optional[str]) -> list:
+    """Times (s) of the clip's motion peaks: local maxima of the smoothed
+    pulse in its top 30%, at least PEAK_MIN_GAP_S apart."""
+    p = decode_pulse(pulse_hex)
+    if len(p) < PULSE_HZ * 4:
+        return []
+    w = PULSE_HZ  # 1s smoothing
+    smooth = [sum(p[max(0, i - w // 2):i + w // 2 + 1]) / len(p[max(0, i - w // 2):i + w // 2 + 1]) for i in range(len(p))]
+    cut = sorted(smooth)[int(len(smooth) * 0.7)]
+    gap = int(PEAK_MIN_GAP_S * PULSE_HZ)
+    cands = [i for i in range(1, len(smooth) - 1) if smooth[i] >= cut and smooth[i] >= smooth[i - 1] and smooth[i] > smooth[i + 1]]
+    chosen = []
+    for i in sorted(cands, key=lambda i: -smooth[i]):
+        if all(abs(i - j) >= gap for j in chosen):
+            chosen.append(i)
+    return [round(i / PULSE_HZ, 2) for i in sorted(chosen)][:60]
+
+
+def _autocorr_tempo(x) -> tuple:
+    """(bpm, confidence) of the strongest repetition in a fine-motion window."""
+    n = len(x)
+    if n < DECODE_FPS * 3:
+        return None, 0.0
+    # Remove the slow trend (a 2s moving average) so only repetition remains.
+    w = DECODE_FPS
+    detr = [x[i] - sum(x[max(0, i - w):i + w + 1]) / len(x[max(0, i - w):i + w + 1]) for i in range(n)]
+    r0 = sum(v * v for v in detr)
+    if r0 <= 1e-12:
+        return None, 0.0
+    lo = max(2, int(DECODE_FPS * 60 / TEMPO_BPM_RANGE[1]))
+    hi = min(n // 2, int(math.ceil(DECODE_FPS * 60 / TEMPO_BPM_RANGE[0])))
+    if hi <= lo + 1:
+        return None, 0.0
+    r = {lag: sum(detr[i] * detr[i + lag] for i in range(n - lag)) / r0 for lag in range(lo - 1, hi + 2)}
+    best = max(range(lo, hi + 1), key=lambda lag: r[lag])
+    if r[best] <= 0 or r[best] < r[best - 1] or r[best] < r[best + 1]:
+        return None, max(0.0, r[best])
+    # Parabolic interpolation between lags - at 10 fps whole lags are coarse.
+    a, b, c = r[best - 1], r[best], r[best + 1]
+    denom = a - 2 * b + c
+    shift = 0.5 * (a - c) / denom if denom else 0.0
+    lag = best + max(-0.5, min(0.5, shift))
+    return 60.0 * DECODE_FPS / lag, b
+
+
+def _tempo(fine) -> tuple:
+    """(overall bpm or None, confidence, [[t, bpm, conf], ...] per window)."""
+    win, hop = int(TEMPO_WINDOW_S * DECODE_FPS), int(TEMPO_HOP_S * DECODE_FPS)
+    track = []
+    for start in range(0, max(1, len(fine) - win + 1), hop):
+        bpm, conf = _autocorr_tempo(fine[start:start + win])
+        track.append([round(start / DECODE_FPS, 1), round(bpm, 1) if bpm and conf >= TEMPO_MIN_CONF else None, round(conf, 3)])
+    rhythmic = [(b, c) for _t, b, c in track if b]
+    if len(rhythmic) < max(2, math.ceil(len(track) / 3)):  # a rhythm that holds, not one lucky window
+        return None, round(max((c for _t, _b, c in track), default=0.0), 3), track
+    # Confidence-weighted median.
+    rhythmic.sort()
+    half, acc = sum(c for _b, c in rhythmic) / 2, 0.0
+    for b, c in rhythmic:
+        acc += c
+        if acc >= half:
+            return round(b, 1), round(sum(c for _b, c in rhythmic) / len(track), 3), track
+    return None, 0.0, track
+
+
+def _hook_start(fine, tempo_track) -> Optional[float]:
+    """Start of the HOOK_S stretch with the most movement, favouring
+    stretches inside a rhythmic window - the bit worth repeating."""
+    span = int(HOOK_S * DECODE_FPS)
+    if len(fine) < span * 2:
+        return None
+    conf_at = lambda t: max((c for s, b, c in tempo_track if b and s <= t <= s + TEMPO_WINDOW_S), default=0.0)
+    sums = [sum(fine[:span])]
+    for i in range(1, len(fine) - span + 1):
+        sums.append(sums[-1] - fine[i - 1] + fine[i + span - 1])
+    best = max(range(0, len(sums), 2), key=lambda i: sums[i] * (1 + conf_at(i / DECODE_FPS)))
+    return round(best / DECODE_FPS, 1)
 
 
 def _motion_track(pairs) -> list:

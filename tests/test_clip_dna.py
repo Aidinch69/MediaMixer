@@ -145,3 +145,32 @@ def test_heart_burst_lean_only_swaps_nothing_and_uses_its_share(config, db):
     assert sess.state.current_paths() == before
     assert sess.state.like_this_share(0.7) == 0.4 and sess.state.like_this_pool()
     sessions.stop()
+
+
+def test_v3_tempo_finds_a_real_rhythm_and_ignores_repeated_frames():
+    import math as m
+    fps = clip_dna.DECODE_FPS
+    rng = random.Random(4)
+    # Movement swelling 1.5 times a second (90 BPM) for 40s, with noise.
+    series = [0.03 + 0.02 * m.sin(2 * m.pi * 1.5 * i / fps) + rng.uniform(-0.004, 0.004) for i in range(40 * fps)]
+    bpm, conf, track = clip_dna._tempo(series)
+    assert bpm and abs(bpm - 90) < 4 and conf > 0.3
+    # Repeated frames: every other frame doesn't change, so raw motion
+    # alternates high/low - after smoothing that must not read as a rhythm.
+    lumas, v = [], 0.0
+    for i in range(40 * fps):
+        if i % 2:
+            v = rng.uniform(0, 255)
+        lumas.append([v] * 8)
+    assert clip_dna._tempo(clip_dna._fine_motion(lumas))[0] is None
+
+
+def test_v3_pulse_and_peaks():
+    fps = clip_dna.DECODE_FPS
+    # Quiet with a burst of movement at 10s and 25s.
+    fine = [0.05 if 95 <= i <= 105 or 245 <= i <= 255 else 0.005 for i in range(30 * fps)]
+    pulse = clip_dna._pulse(fine)
+    values = clip_dna.decode_pulse(pulse)
+    assert len(values) == 30 * clip_dna.PULSE_HZ and max(values) == 255
+    peaks = clip_dna._peaks(pulse)
+    assert any(abs(p - 10) < 1 for p in peaks) and any(abs(p - 25) < 1 for p in peaks)

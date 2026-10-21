@@ -9,7 +9,7 @@ const MASTER_AREAS = ['Screen', 'Flow', 'Rewards', 'Sound'];
 const MASTER_AREA_OF_GROUP = {
   'Spiral': 'Screen', 'Layout Fade / Dynamic Mosaic': 'Screen', 'Clip Transitions': 'Screen', 'Spotlight Takeover': 'Screen',
   'Floater Barrage': 'Screen', 'Custom Loop Point': 'Screen', 'Living Screen': 'Screen', 'Visual Textures': 'Screen',
-  'Auto-Pilot': 'Flow', 'Rhythm & Pulse': 'Flow', 'Rhythm FX': 'Flow', 'Moments': 'Rewards', 'Taste Learning': 'Flow', 'Surges': 'Flow', 'Fresh Drops': 'Flow',
+  'Auto-Pilot': 'Flow', 'Rhythm & Pulse': 'Flow', 'Rhythm FX': 'Flow', 'Content Pulse': 'Flow', 'Moments': 'Rewards', 'Taste Learning': 'Flow', 'Surges': 'Flow', 'Fresh Drops': 'Flow',
   'Audio-Reactive': 'Sound',
 };
 // Engine field group -> menu area (everything else lands in Rewards).

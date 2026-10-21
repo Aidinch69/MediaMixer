@@ -342,7 +342,8 @@ class RuntimeState:
                 "layout": self.layout,
                 "folder": self.current_folder,
                 "screens": [
-                    {"path": s.current, "next_path": s.next, "tension": s.tension, "speed": s.speed, "pinned": s.pinned, "held": s.hold_until > time.time()}
+                    {"path": s.current, "next_path": s.next, "tension": s.tension, "speed": s.speed, "pinned": s.pinned, "held": s.hold_until > time.time(),
+                     "expires_in": round(max(0.0, s.expires_at - time.time()), 2)}
                     for s in self.screens
                 ],
                 "played": self.videos_in_folder,

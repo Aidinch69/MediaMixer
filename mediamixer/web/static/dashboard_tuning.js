@@ -230,6 +230,13 @@ const TUNING_DEFAULTS = {
   GRAIN_CALM_BOOST: 2.5,
   DUST_RATE: 0.04,
   EDGE_BLEED_OPACITY: 0.55,
+  CONTENT_ENERGY_GAIN: 1.0,
+  CONTENT_ENERGY_MAX: 0.12,
+  CONTENT_PEAK_GLOW: 0.45,
+  CONTENT_HERO_HOLD_MS: 8000,
+  PEAK_CUT_CHANCE: 0.5,
+  PEAK_CUT_MAX_WAIT_S: 6,
+  PEAK_CUT_AFTER_S: 0.8,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -385,6 +392,7 @@ const TUNING_GROUPS = [
   { label: 'Custom Loop Point', desc: 'Which favourites replay their best section, how often, and how many times.', keys: ['LOOP_HEART_THRESHOLD', 'LOOP_TOP_FRACTION', 'LOOP_CHANCE', 'LOOP_MAX_REPEATS'] },
   { label: 'Living Screen', desc: 'Breathing tiles, slow-motion moments and double exposures.', keys: ['BREATHE_ZOOM', 'BREATHE_DRIFT', 'BREATHE_PERIOD_MS', 'SLOWMO_PROBABILITY', 'SLOWMO_COOLDOWN_MS', 'SLOWMO_ENERGY_MIN', 'SLOWMO_SPEED', 'SLOWMO_HOLD_MS', 'DOUBLE_EXPOSURE_PROBABILITY', 'DOUBLE_EXPOSURE_COOLDOWN_MS', 'DOUBLE_EXPOSURE_MS', 'DOUBLE_EXPOSURE_OPACITY', 'GRADIENT_PROBABILITY', 'GRADIENT_COOLDOWN_MS', 'GRADIENT_HOLD_MS', 'BEST_START_CHANCE', 'BEST_START_LEAD_S', 'BEST_START_MIN_LEFT_S', 'SMART_FRAMING_STRENGTH', 'SMART_FRAMING_ZOOM', 'LIKE_THIS_MS'] },
   { label: 'Rhythm FX', desc: 'Stutter edits and Cascades - how often, how long, how many repeats.', keys: ['STUTTER_CHANCE', 'STUTTER_COOLDOWN_MS', 'STUTTER_REPEATS', 'CASCADE_CHANCE', 'CASCADE_COOLDOWN_MS', 'CASCADE_HOLD_BEATS'] },
+  { label: 'Content Pulse', desc: 'How much the movement in the clips on screen leads the energy, peak glow and Follow Clips tempo.', keys: ['CONTENT_ENERGY_GAIN', 'CONTENT_ENERGY_MAX', 'CONTENT_PEAK_GLOW', 'CONTENT_HERO_HOLD_MS', 'PEAK_CUT_CHANCE', 'PEAK_CUT_MAX_WAIT_S', 'PEAK_CUT_AFTER_S'] },
   { label: 'Visual Textures', desc: 'Split frames, film grain & dust, and edge bleed - odds, strength and how much calm moments add.', keys: ['SPLIT_CHANCE', 'SPLIT_COOLDOWN_MS', 'SPLIT_MS', 'GRAIN_OPACITY', 'GRAIN_CALM_BOOST', 'DUST_RATE', 'EDGE_BLEED_OPACITY'] },
   { label: 'Moments', desc: 'The Drop, Breath, Focus pull, Call & response, Echo trails, Favourite takeover and Heart burst - odds, rests and lengths.', keys: ['DROP_CHANCE', 'DROP_MIN_ENERGY', 'DROP_COOLDOWN_MS', 'BREATH_CHANCE', 'BREATH_COOLDOWN_MS', 'BREATH_MS', 'BREATH_SPEED', 'FOCUS_PULL_CHANCE', 'FOCUS_PULL_COOLDOWN_MS', 'FOCUS_PULL_BARS', 'CALL_RESPONSE_CHANCE', 'CALL_RESPONSE_COOLDOWN_MS', 'ECHO_CHANCE', 'ECHO_MIN_ENERGY', 'ECHO_COOLDOWN_MS', 'ECHO_MS', 'FAVORITE_TAKEOVER_HEARTS', 'FAVORITE_TAKEOVER_MS', 'FAVORITE_TAKEOVER_COOLDOWN_MS', 'HEART_BURST_WINDOW_MS', 'HEART_BURST_COOLDOWN_MS', 'HEART_BURST_LEAN_MS', 'HEART_BURST_LEAN_SHARE'] },
 ];
@@ -581,6 +589,13 @@ const TUNING_META = {
   HEART_BURST_WINDOW_MS: { label: 'Heart burst: two hearts within', unit: 's', min: 400, max: 3000, step: 100 },
   HEART_BURST_COOLDOWN_MS: { label: 'Rest between heart bursts', unit: 's', min: 5000, max: 300000, step: 5000 },
   HEART_BURST_LEAN_MS: { label: 'Heart burst: picks lean toward that look for', unit: 's', min: 0, max: 120000, step: 5000 },
+  CONTENT_ENERGY_GAIN: { label: 'Content pulse: how strongly clip movement moves the energy', unit: 'x', min: 0, max: 2, step: 0.05 },
+  CONTENT_ENERGY_MAX: { label: 'Content pulse: most it can lift or settle the energy', unit: 'x', min: 0, max: 0.3, step: 0.01 },
+  CONTENT_PEAK_GLOW: { label: 'Clip peak: screen-edge glow', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  CONTENT_HERO_HOLD_MS: { label: 'Follow Clips: least time one clip leads the beat', unit: 's', min: 2000, max: 60000, step: 1000 },
+  PEAK_CUT_CHANCE: { label: 'Cut after the peak: share of cuts that wait for one', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  PEAK_CUT_MAX_WAIT_S: { label: 'Cut after the peak: longest wait for it', unit: '', min: 1, max: 15, step: 0.5 },
+  PEAK_CUT_AFTER_S: { label: 'Cut after the peak: cut this long after it', unit: '', min: 0, max: 3, step: 0.1 },
   SPLIT_CHANCE: { label: 'Split frames: chance per check (every 15s)', unit: 'pct', min: 0, max: 1, step: 0.01 },
   SPLIT_COOLDOWN_MS: { label: 'Rest between split frames', unit: 's', min: 15000, max: 1800000, step: 15000 },
   SPLIT_MS: { label: 'Split frames length', unit: 's', min: 2000, max: 20000, step: 500 },

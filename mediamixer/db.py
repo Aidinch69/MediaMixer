@@ -56,6 +56,12 @@ CREATE TABLE IF NOT EXISTS clip_dna (
     duration        REAL,
     peak_at         REAL,
     track           TEXT,
+    pulse           TEXT,
+    peaks           TEXT,
+    tempo           REAL,
+    tempo_conf      REAL,
+    tempo_track     TEXT,
+    hook_at         REAL,
     analyzed_at     REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS scenes (
@@ -121,6 +127,12 @@ class Database:
         for column, ddl in (
             ("peak_at", "ALTER TABLE clip_dna ADD COLUMN peak_at REAL"),
             ("track", "ALTER TABLE clip_dna ADD COLUMN track TEXT"),
+            ("pulse", "ALTER TABLE clip_dna ADD COLUMN pulse TEXT"),
+            ("peaks", "ALTER TABLE clip_dna ADD COLUMN peaks TEXT"),
+            ("tempo", "ALTER TABLE clip_dna ADD COLUMN tempo REAL"),
+            ("tempo_conf", "ALTER TABLE clip_dna ADD COLUMN tempo_conf REAL"),
+            ("tempo_track", "ALTER TABLE clip_dna ADD COLUMN tempo_track TEXT"),
+            ("hook_at", "ALTER TABLE clip_dna ADD COLUMN hook_at REAL"),
         ):
             if column not in dna_cols:
                 conn.execute(ddl)
@@ -302,16 +314,16 @@ class Database:
 
     def save_dna(self, path: str, dna: Optional[dict], version: int):
         d = dna or {}
+        js = lambda k: json.dumps(d[k], separators=(",", ":")) if d.get(k) else None
+        cols = ("brightness", "motion", "hue", "accent_hue", "accent_strength", "warmth", "saturation", "duration", "peak_at",
+                "track", "pulse", "peaks", "tempo", "tempo_conf", "tempo_track", "hook_at")
+        values = [js(k) if k in ("track", "peaks", "tempo_track") else d.get(k) for k in cols]
         conn = self._connect()
         conn.execute(
-            "INSERT INTO clip_dna (video_path, version, ok, brightness, motion, hue, accent_hue, accent_strength, warmth, saturation, duration, peak_at, track, analyzed_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(video_path) DO UPDATE SET version=excluded.version, ok=excluded.ok, "
-            "brightness=excluded.brightness, motion=excluded.motion, hue=excluded.hue, accent_hue=excluded.accent_hue, "
-            "accent_strength=excluded.accent_strength, warmth=excluded.warmth, saturation=excluded.saturation, "
-            "duration=excluded.duration, peak_at=excluded.peak_at, track=excluded.track, analyzed_at=excluded.analyzed_at",
-            (path, version, 1 if dna else 0, d.get("brightness"), d.get("motion"), d.get("hue"), d.get("accent_hue"),
-             d.get("accent_strength"), d.get("warmth"), d.get("saturation"), d.get("duration"), d.get("peak_at"),
-             json.dumps(d["track"], separators=(",", ":")) if d.get("track") else None, time.time()),
+            "INSERT INTO clip_dna (video_path, version, ok, " + ", ".join(cols) + ", analyzed_at) VALUES (" + ",".join("?" * (len(cols) + 4)) + ") "
+            "ON CONFLICT(video_path) DO UPDATE SET version=excluded.version, ok=excluded.ok, "
+            + ", ".join(f"{c}=excluded.{c}" for c in cols) + ", analyzed_at=excluded.analyzed_at",
+            [path, version, 1 if dna else 0] + values + [time.time()],
         )
         conn.commit()
 

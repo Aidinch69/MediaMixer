@@ -806,7 +806,7 @@ const RHYTHM_WAVE_RISE_FRAC = 0.85; // rises over 85% of the period, drops back 
 let rhythmEnabled = false;
 let rhythmZoneActive = false;
 let rhythmBaseBpm = 90;
-let rhythmBpmSource = 'manual'; // 'manual' | 'audio'
+let rhythmBpmSource = 'manual'; // 'manual' | 'audio' | 'content' (the lead clip's own rhythm)
 let rhythmWaves = true;
 let rhythmSound = false;
 let rhythmSpeedSync = true;
@@ -850,6 +850,7 @@ function rhythmDriveTarget() {
   else if (autopilotZone === 'jackpot') d += 0.04;
   if (typeof windDownK === 'function') d -= 0.2 * windDownK(); // winding down settles everything
   if (typeof momentEnergy === 'function') d += momentEnergy(); // The Drop's surge, a Breath's settle
+  if (typeof contentEnergy === 'function') d += contentEnergy(); // the clips on screen moving more or less than usual
   return Math.max(TUNING.RHYTHM_DRIVE_MIN, Math.min(TUNING.RHYTHM_DRIVE_MAX, d));
 }
 
@@ -959,6 +960,7 @@ function rhythmWaveFrac() {
 }
 
 function rhythmEffectiveBaseBpm() {
+  if (rhythmBpmSource === 'content' && typeof contentTempo !== 'undefined' && contentTempo) return contentTempo;
   return rhythmBpmSource === 'audio' && detectedBpm ? detectedBpm : rhythmBaseBpm;
 }
 
@@ -1132,7 +1134,7 @@ function updateRhythmUi() {
     const b = document.getElementById('rhythm-pattern-' + p);
     if (b) b.classList.toggle('active', rhythmPatternPref === p);
   });
-  ['manual', 'audio'].forEach((s) => {
+  ['manual', 'audio', 'content'].forEach((s) => {
     const b = document.getElementById('rhythm-src-' + s);
     if (b) b.classList.toggle('active', rhythmBpmSource === s);
   });
@@ -1144,7 +1146,7 @@ function updateRhythmUi() {
   if (status) {
     const why = rhythmEnabled ? 'on' : rhythmZoneActive ? 'on (Rhythm Zone)' : finaleWantsRhythm() ? 'on (Finale)'
       : Date.now() < spinRhythmUntil ? 'on (Spin, ' + Math.ceil((spinRhythmUntil - Date.now()) / 1000) + 's left)' : 'off';
-    const src = rhythmBpmSource === 'audio' ? (detectedBpm ? 'detected ~' + detectedBpm + ' BPM' : 'no steady beat in the audio - using ' + rhythmBaseBpm) : rhythmBaseBpm + ' BPM base';
+    const src = rhythmBpmSource === 'content' ? (typeof contentTempo !== 'undefined' && contentTempo ? 'following the clips ~' + Math.round(contentTempo) + ' BPM' : 'no clip rhythm yet - using ' + rhythmBaseBpm) : rhythmBpmSource === 'audio' ? (detectedBpm ? 'detected ~' + detectedBpm + ' BPM' : 'no steady beat in the audio - using ' + rhythmBaseBpm) : rhythmBaseBpm + ' BPM base';
     const energy = rhythmReactive && Math.abs(rhythmDrive - 1) >= 0.02 ? ' (energy ×' + rhythmTempoDrive().toFixed(2) + ')' : '';
     status.innerText = 'Rhythm ' + why + ' · ' + src + (rhythmActive() ? ' · now ' + Math.round(currentRhythmBpm()) + ' BPM' + energy + ' · ' + RHYTHM_PATTERNS[rhythmPattern].label + ' · in sync ' + formatRunSeconds(rhythmRunMs()) : '');
   }
@@ -1160,7 +1162,7 @@ function loadRhythmPrefs() {
   const prefs = loadJsonPref('mm_rhythm', { enabled: false, bpm: 90, source: 'manual', waves: true, sound: false, speedSync: true, reactive: true, pattern: 'mix', cutOnBeat: true });
   rhythmEnabled = !!prefs.enabled;
   rhythmBaseBpm = Math.max(50, Math.min(160, Number(prefs.bpm) || 90));
-  rhythmBpmSource = prefs.source === 'audio' ? 'audio' : 'manual';
+  rhythmBpmSource = prefs.source === 'audio' || prefs.source === 'content' ? prefs.source : 'manual';
   rhythmWaves = !!prefs.waves;
   rhythmSound = !!prefs.sound;
   rhythmSpeedSync = !!prefs.speedSync;
