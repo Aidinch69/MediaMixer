@@ -170,7 +170,12 @@ class RotationEngine:
             return None
         library.mark_played(self._db, picked)
         bonus = self._state.get_exploration_bonus()
-        nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | {picked}, exploration_bonus=bonus, energy=self._state.get_energy(), taste_strength=self._state.taste_strength) or picked
+        # Match cut: the clip lined up next for this tile (preloaded, so the
+        # swap stays instant) is chosen to continue the one just placed.
+        match = None
+        if random.random() < cfg.match_cut_share:
+            match = library.match_target(self._db, picked, self._state.energy_heading())
+        nxt = library.pick_video(self._db, cfg, folder, exclude=exclude | {picked}, exploration_bonus=bonus, energy=self._state.get_energy(), taste_strength=self._state.taste_strength, match=match) or picked
         self._state.set_screen(index, picked, nxt, time.time() + expires_in)
         return picked
 

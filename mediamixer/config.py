@@ -153,6 +153,11 @@ class Config:
     # Clip DNA: how strongly the session's energy leans picks toward
     # high-motion clips (energetic) or calmer ones (settled). 0 = off.
     dna_motion_bias: float = 0.6
+    # Match cuts: how strongly a tile's next clip is chosen to continue the
+    # current one (look, and movement heading where the energy is), and for
+    # what share of picks. A lean, never a filter.
+    match_cut_strength: float = 1.0
+    match_cut_share: float = 0.6
     exploration_bonus_c: float = 0.50  # UCB-style bonus so rarely-played clips stay in rotation - nudged up for a bit more default discovery
 
     skip_penalty: float = -0.25

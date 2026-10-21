@@ -36,6 +36,8 @@ LIVE_FIELDS: Dict[str, LiveField] = {
     "tension_window_s": LiveField(0, 20, 0.5, "Tension Curve", "Tension window before a swap (s)"),
     "tension_max_drag": LiveField(0, 0.9, 0.01, "Tension Curve", "Max slow-down at the end of a clip"),
     "dna_motion_bias": LiveField(0, 2, 0.05, "Selection (Bandit)", "Clip DNA: energy-aware picking strength"),
+    "match_cut_strength": LiveField(0, 3, 0.05, "Selection (Bandit)", "Match cuts: how strongly the next clip continues the current one"),
+    "match_cut_share": LiveField(0, 1, 0.05, "Selection (Bandit)", "Match cuts: share of picks that match"),
     "recent_repeat_window_s": LiveField(0, 3600, 60, "Selection (Bandit)", "Don't repeat a clip within (s)"),
     "softmax_temp": LiveField(0.05, 3.0, 0.05, "Selection (Bandit)", "Softmax temperature (higher = more random)"),
     "decay_halflife_s": LiveField(3600, 2592000, 3600, "Selection (Bandit)", "Reward decay half-life (s)"),

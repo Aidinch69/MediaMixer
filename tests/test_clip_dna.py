@@ -174,3 +174,21 @@ def test_v3_pulse_and_peaks():
     assert len(values) == 30 * clip_dna.PULSE_HZ and max(values) == 255
     peaks = clip_dna._peaks(pulse)
     assert any(abs(p - 10) < 1 for p in peaks) and any(abs(p - 25) < 1 for p in peaks)
+
+
+def test_match_cut_leans_toward_continuing_the_outgoing_clip(config, db):
+    library._dna_taste_cache.update(at=0, value=None)
+    paths = make_clips(config, [f"{i:03}.mp4" for i in range(100)])
+    library.sync_library(db, config)
+    for i, p in enumerate(paths):  # motion and brightness spread evenly
+        db.save_dna(p, {"brightness": i / 100, "warmth": 0.1, "motion": 0.01 + i / 1000, "saturation": 0.3, "accent_hue": None}, clip_dna.DNA_VERSION)
+    random.seed(5)
+    outgoing = paths[20]
+    def avg_index(match, n=1500):
+        picks = [library.pick_video(db, config, library.GENERAL_FOLDER, match=match) for _ in range(n)]
+        return sum(paths.index(p) for p in picks) / n
+    plain = avg_index(None)
+    steady = avg_index(library.match_target(db, outgoing, 0.0))
+    rising = avg_index(library.match_target(db, outgoing, 0.12))
+    assert plain > 40 and steady < plain - 10  # pulled toward clip 20's look
+    assert rising > steady + 3  # energy rising: livelier than a straight match

@@ -179,8 +179,20 @@ class RuntimeState:
     # -- rotation --
     def set_energy(self, value: float):
         with self._lock:
+            now = time.time()
             self.energy = max(0.5, min(2.0, value))
-            self.energy_at = time.time()
+            self.energy_at = now
+            self.energy_history = [(t, e) for t, e in getattr(self, "energy_history", []) if now - t < 90] + [(now, self.energy)]
+
+    def energy_heading(self, span_s: float = 20.0) -> float:
+        """Where the energy is going: now minus ~span_s ago (0 if unknown)."""
+        with self._lock:
+            hist = getattr(self, "energy_history", [])
+            if len(hist) < 2 or time.time() - self.energy_at > 60:
+                return 0.0
+            target = hist[-1][0] - span_s
+            past = min(hist, key=lambda x: abs(x[0] - target))
+            return hist[-1][1] - past[1]
 
     def get_energy(self) -> float:
         """Neutral (1.0) if the dashboard hasn't reported in a while."""

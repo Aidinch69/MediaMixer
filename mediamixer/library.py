@@ -113,6 +113,7 @@ def pick_video(
     exploration_bonus: Optional[float] = None,
     energy: float = 1.0,
     taste_strength: float = 0.0,
+    match: Optional[dict] = None,
 ) -> Optional[str]:
     """Pick a video from `folder`, avoiding `exclude` (one path, or any collection of
     paths - e.g. every video currently showing on another screen, so the same clip
@@ -143,6 +144,8 @@ def pick_video(
         for r in rows
     ]
     _apply_motion_lean(scores, rows, energy, config.dna_motion_bias)
+    if match:
+        _apply_match(scores, rows, match, config.match_cut_strength)
     if taste_strength > 0:
         taste = dna_taste(db)
         if taste:
@@ -170,6 +173,44 @@ def _apply_motion_lean(scores: list, rows, energy: float, bias: float):
         m = r["motion"] if "motion" in r.keys() else None
         if m is not None:
             scores[i] += bias * lean * max(-2.5, min(2.5, (m - mean) / sd)) * 0.25
+
+
+# ---- Match cuts ----
+MATCH_TRAIT_WEIGHTS = {"motion": 1.0, "brightness": 0.6, "warmth": 0.3}
+MATCH_HEADING_FULL = 0.12  # an energy change this size over ~20s = full lean
+
+
+def match_target(db: Database, outgoing: Optional[str], heading: float) -> Optional[dict]:
+    """What the next clip should look like to continue `outgoing`: the same
+    look, with movement nudged the way the energy is heading."""
+    row = db.dna_for(outgoing) if outgoing else None
+    if row is None or row["motion"] is None:
+        return None
+    lean = max(-1.0, min(1.0, heading / MATCH_HEADING_FULL))
+    return {"motion": row["motion"], "brightness": row["brightness"], "warmth": row["warmth"], "motion_shift_sd": 0.8 * lean}
+
+
+def _apply_match(scores: list, rows, match: dict, strength: float):
+    """Penalise distance from the match target, per trait in folder standard
+    deviations (squared, capped at 2.5 sd): a clip 2 sd off in movement is
+    ~0.37x as likely at strength 1. Unanalysed clips stay neutral."""
+    if not strength:
+        return
+    keys = rows[0].keys() if rows else []
+    for trait, weight in MATCH_TRAIT_WEIGHTS.items():
+        if trait not in keys or match.get(trait) is None:
+            continue
+        vals = [r[trait] for r in rows if r[trait] is not None]
+        if len(vals) < 5:
+            continue
+        mean = sum(vals) / len(vals)
+        sd = (sum((v - mean) ** 2 for v in vals) / len(vals)) ** 0.5 or 1.0
+        target = (match[trait] - mean) / sd + (match.get("motion_shift_sd", 0.0) if trait == "motion" else 0.0)
+        for i, r in enumerate(rows):
+            if r[trait] is None:
+                continue
+            d = min(2.5, abs((r[trait] - mean) / sd - target))
+            scores[i] -= strength * weight * 0.15 * d * d
 
 
 # ---- Clip DNA taste ----
