@@ -360,30 +360,30 @@ setInterval(() => {
 // Runs alongside the daily quests, never replacing them.
 const WEEKLY_ARC_KEY = 'mm_weekly_arc';
 const WEEKLY_ARC_DEFS = [
-  { id: 'heartbound', name: 'Heartbound', finalXp: 25000, stages: [
-    { desc: 'Heart 30 clips', metric: 'hearts', target: 30, xp: 4000 },
-    { desc: 'Catch 15 chase flashes', metric: 'catches', target: 15, xp: 6000 },
-    { desc: 'Land 8 jackpots', metric: 'jackpots', target: 8, xp: 8000 },
-    { desc: 'Release Overdrive twice', metric: 'overdrives', target: 2, xp: 10000 },
+  { id: 'heartbound', name: 'Heartbound', finalXp: 50000, stages: [
+    { desc: 'Heart 1,500 clips', metric: 'hearts', target: 1500, xp: 8000 },
+    { desc: 'Catch 200 chase flashes', metric: 'catches', target: 200, xp: 12000 },
+    { desc: 'Land 250 jackpots', metric: 'jackpots', target: 250, xp: 16000 },
+    { desc: 'Release Overdrive 30 times', metric: 'overdrives', target: 30, xp: 20000 },
   ] },
-  { id: 'showtime', name: 'Showtime', finalXp: 30000, stages: [
-    { desc: 'Rate 50 clips', metric: 'rates', target: 50, xp: 4000 },
-    { desc: 'Claim 10 bonuses', metric: 'bonuses', target: 10, xp: 6000 },
-    { desc: 'See 2 Spotlights', metric: 'spotlights', target: 2, xp: 8000 },
-    { desc: 'Complete a Finale', metric: 'finales', target: 1, xp: 12000 },
+  { id: 'showtime', name: 'Showtime', finalXp: 60000, stages: [
+    { desc: 'Rate 1,500 clips', metric: 'rates', target: 1500, xp: 8000 },
+    { desc: 'Claim 100 bonuses', metric: 'bonuses', target: 100, xp: 12000 },
+    { desc: 'See 30 Spotlights', metric: 'spotlights', target: 30, xp: 16000 },
+    { desc: 'Complete 2 Finales', metric: 'finales', target: 2, xp: 24000 },
   ] },
-  { id: 'momentum', name: 'Momentum', finalXp: 30000, stages: [
-    { desc: 'Heart 40 clips', metric: 'hearts', target: 40, xp: 5000 },
-    { desc: 'Catch 25 chase flashes', metric: 'catches', target: 25, xp: 7000 },
-    { desc: 'Release Overdrive 3 times', metric: 'overdrives', target: 3, xp: 9000 },
-    { desc: 'Land 12 jackpots', metric: 'jackpots', target: 12, xp: 11000 },
+  { id: 'momentum', name: 'Momentum', finalXp: 60000, stages: [
+    { desc: 'Heart 2,000 clips', metric: 'hearts', target: 2000, xp: 10000 },
+    { desc: 'Catch 300 chase flashes', metric: 'catches', target: 300, xp: 14000 },
+    { desc: 'Release Overdrive 40 times', metric: 'overdrives', target: 40, xp: 18000 },
+    { desc: 'Land 400 jackpots', metric: 'jackpots', target: 400, xp: 22000 },
   ] },
-  { id: 'collector', name: 'Collector', finalXp: 28000, stages: [
-    { desc: 'Rate 30 clips', metric: 'rates', target: 30, xp: 3000 },
-    { desc: 'Land 5 jackpots', metric: 'jackpots', target: 5, xp: 6000 },
-    { desc: 'Claim 15 bonuses', metric: 'bonuses', target: 15, xp: 8000 },
-    { desc: 'See a Spotlight', metric: 'spotlights', target: 1, xp: 6000 },
-    { desc: 'Release Overdrive', metric: 'overdrives', target: 1, xp: 8000 },
+  { id: 'collector', name: 'Collector', finalXp: 56000, stages: [
+    { desc: 'Rate 1,000 clips', metric: 'rates', target: 1000, xp: 6000 },
+    { desc: 'Land 150 jackpots', metric: 'jackpots', target: 150, xp: 12000 },
+    { desc: 'Claim 150 bonuses', metric: 'bonuses', target: 150, xp: 16000 },
+    { desc: 'See 20 Spotlights', metric: 'spotlights', target: 20, xp: 12000 },
+    { desc: 'Release Overdrive 25 times', metric: 'overdrives', target: 25, xp: 16000 },
   ] },
 ];
 let weeklyArc = { weekStart: '', arcId: '', stageIndex: 0, progress: 0, done: false };

@@ -8,64 +8,72 @@
 // Counts arrive two ways: arcMetric() (dashboard_events.js) forwards every
 // metric it sees (hearts, catches, jackpots, bonuses, ratings, Overdrive,
 // Finales, Spotlights), and logEvent is wrapped to pick up the rest
-// (spins, sealed opens, MEGA jackpots, chase chains, replays, Moments...).
+// (spins, sealed opens, MEGA jackpots, chase chains, Moments...).
 // Play time comes from the engine (/api/playtime).
 
 const CHALLENGE_KEY = 'mm_challenges';
 const DAILY_COUNT = 3;
 const WEEKLY_COUNT = 3;
-const DAILY_SWEEP_XP = 8000;
-const PERFECT_WEEK_XP = 60000;
+const DAILY_SWEEP_XP = 15000;
+const PERFECT_WEEK_XP = 100000;
 const DAILY_SWAPS = 1;
+// Bump when the pools change: today's and this week's picks re-roll
+// (progress already made still counts toward the new picks).
+const CHALLENGE_VERSION = 2;
 
 // metric -> how progress is shown; anything not here is a plain count.
 const MINUTE_METRICS = new Set(['minutesToday', 'minutesWeek']);
 const GAUGE_METRICS = new Set(['minutesToday', 'minutesWeek', 'daysWeek', 'chainBest']); // set to the best value, not added
 
+// Sized from real play rates (per hour of watching, roughly): ~850 hearts,
+// ~120 jackpots, ~16 MEGAs, ~110 catches, ~60 Moments, ~25 spins, ~15
+// Overdrives/Spotlights/sealed opens, ~880 clips. A daily is about 1-2
+// hours of play on its own; a weekly about 10-20 hours.
 const DAILY_POOL = [
-  { id: 'd_hearts25', icon: '💗', desc: 'Heart 25 clips', metric: 'hearts', target: 25, xp: 2500 },
-  { id: 'd_hearts60', icon: '💗', desc: 'Heart 60 clips', metric: 'hearts', target: 60, xp: 5000 },
-  { id: 'd_rate40', icon: '👍', desc: 'Rate 40 clips', metric: 'rates', target: 40, xp: 3000 },
-  { id: 'd_jackpots3', icon: '🎰', desc: 'Land 3 jackpots', metric: 'jackpots', target: 3, xp: 3000 },
-  { id: 'd_jackpots8', icon: '🎰', desc: 'Land 8 jackpots', metric: 'jackpots', target: 8, xp: 6000 },
-  { id: 'd_mega1', icon: '💥', desc: 'Land a MEGA jackpot', metric: 'megas', target: 1, xp: 5000 },
-  { id: 'd_catch10', icon: '🏃', desc: 'Catch 10 chase flashes', metric: 'catches', target: 10, xp: 3500 },
-  { id: 'd_chain8', icon: '⛓️', desc: 'Hit a chase chain of 8', metric: 'chainBest', target: 8, xp: 5000 },
-  { id: 'd_bonus4', icon: '✨', desc: 'Claim 4 bonus taps', metric: 'bonuses', target: 4, xp: 3000 },
-  { id: 'd_sealed2', icon: '🔓', desc: 'Open 2 sealed tiles', metric: 'sealedOpens', target: 2, xp: 3000 },
-  { id: 'd_spin5', icon: '🎡', desc: 'Spin 5 times', metric: 'spins', target: 5, xp: 2000 },
-  { id: 'd_moments3', icon: '🎆', desc: 'See 3 Moments', metric: 'moments', target: 3, xp: 3000 },
-  { id: 'd_overdrive1', icon: '🔥', desc: 'Release Overdrive', metric: 'overdrives', target: 1, xp: 3500 },
-  { id: 'd_replay2', icon: '↺', desc: 'Get 2 heart replays', metric: 'replays', target: 2, xp: 2500 },
-  { id: 'd_fx6', icon: '🌈', desc: 'Trigger 6 tile effects', metric: 'fxSeen', target: 6, xp: 2500 },
-  { id: 'd_clips100', icon: '🎞️', desc: 'Watch 100 clips', metric: 'clipsSeen', target: 100, xp: 3000 },
-  { id: 'd_hooks3', icon: '🪝', desc: 'Catch 3 hooks', metric: 'hooks', target: 3, xp: 2500 },
-  { id: 'd_spectacle2', icon: '🌀', desc: 'See 2 Color Rushes or Floater Barrages', metric: 'spectacles', target: 2, xp: 3000 },
-  { id: 'd_time20', icon: '⏱️', desc: 'Watch for 20 minutes', metric: 'minutesToday', target: 20, xp: 3000 },
-  { id: 'd_time45', icon: '⏱️', desc: 'Watch for 45 minutes', metric: 'minutesToday', target: 45, xp: 5000 },
-  { id: 'd_time90', icon: '⏱️', desc: 'Watch for 90 minutes', metric: 'minutesToday', target: 90, xp: 8000 },
-  { id: 'd_time180', icon: '⏱️', desc: 'Watch for 3 hours', metric: 'minutesToday', target: 180, xp: 14000 },
+  { id: 'd2_hearts1000', icon: '💗', desc: 'Heart 1,000 clips', metric: 'hearts', target: 1000, xp: 6000 },
+  { id: 'd2_hearts2000', icon: '💗', desc: 'Heart 2,000 clips', metric: 'hearts', target: 2000, xp: 11000 },
+  { id: 'd2_rate1500', icon: '👍', desc: 'Rate 1,500 clips', metric: 'rates', target: 1500, xp: 8000 },
+  { id: 'd2_jackpots150', icon: '🎰', desc: 'Land 150 jackpots', metric: 'jackpots', target: 150, xp: 7000 },
+  { id: 'd2_jackpots300', icon: '🎰', desc: 'Land 300 jackpots', metric: 'jackpots', target: 300, xp: 12000 },
+  { id: 'd2_mega25', icon: '💥', desc: 'Land 25 MEGA jackpots', metric: 'megas', target: 25, xp: 9000 },
+  { id: 'd2_catch150', icon: '🏃', desc: 'Catch 150 chase flashes', metric: 'catches', target: 150, xp: 7000 },
+  { id: 'd2_chain20', icon: '⛓️', desc: 'Hit a chase chain of 20', metric: 'chainBest', target: 20, xp: 8000 },
+  { id: 'd2_bonus80', icon: '✨', desc: 'Claim 80 bonus taps', metric: 'bonuses', target: 80, xp: 7000 },
+  { id: 'd2_sealed25', icon: '🔓', desc: 'Open 25 sealed tiles', metric: 'sealedOpens', target: 25, xp: 7000 },
+  { id: 'd2_spin40', icon: '🎡', desc: 'Spin 40 times', metric: 'spins', target: 40, xp: 6000 },
+  { id: 'd2_moments100', icon: '🎆', desc: 'See 100 Moments', metric: 'moments', target: 100, xp: 7000 },
+  { id: 'd2_overdrive20', icon: '🔥', desc: 'Release Overdrive 20 times', metric: 'overdrives', target: 20, xp: 7000 },
+  { id: 'd2_spot20', icon: '🔦', desc: 'See 20 Spotlight Takeovers', metric: 'spotlights', target: 20, xp: 7000 },
+  { id: 'd2_fx500', icon: '🌈', desc: 'Trigger 500 tile effects', metric: 'fxSeen', target: 500, xp: 6000 },
+  { id: 'd2_clips1500', icon: '🎞️', desc: 'Watch 1,500 clips', metric: 'clipsSeen', target: 1500, xp: 7000 },
+  { id: 'd2_hooks150', icon: '🪝', desc: 'Catch 150 hooks', metric: 'hooks', target: 150, xp: 6000 },
+  { id: 'd2_spectacle30', icon: '🌀', desc: 'See 30 Color Rushes or Floater Barrages', metric: 'spectacles', target: 30, xp: 7000 },
+  { id: 'd2_time60', icon: '⏱️', desc: 'Watch for 1 hour', metric: 'minutesToday', target: 60, xp: 5000 },
+  { id: 'd2_time120', icon: '⏱️', desc: 'Watch for 2 hours', metric: 'minutesToday', target: 120, xp: 9000 },
+  { id: 'd2_time180', icon: '⏱️', desc: 'Watch for 3 hours', metric: 'minutesToday', target: 180, xp: 13000 },
+  { id: 'd2_time300', icon: '⏱️', desc: 'Watch for 5 hours', metric: 'minutesToday', target: 300, xp: 20000, rare: true },
 ];
 
 const WEEKLY_POOL = [
-  { id: 'w_time2h', icon: '⏱️', desc: 'Watch 2 hours this week', metric: 'minutesWeek', target: 120, xp: 15000, time: true },
-  { id: 'w_time5h', icon: '⏱️', desc: 'Watch 5 hours this week', metric: 'minutesWeek', target: 300, xp: 30000, time: true },
-  { id: 'w_time10h', icon: '⏱️', desc: 'Watch 10 hours this week', metric: 'minutesWeek', target: 600, xp: 50000, time: true },
-  { id: 'w_time25h', icon: '⏱️', desc: 'Watch 25 hours this week', metric: 'minutesWeek', target: 1500, xp: 100000, time: true },
-  { id: 'w_time50h', icon: '🏁', desc: 'Watch 50 hours this week', metric: 'minutesWeek', target: 3000, xp: 200000, time: true, rare: true },
-  { id: 'w_days4', icon: '📅', desc: 'Play on 4 different days', metric: 'daysWeek', target: 4, xp: 20000 },
-  { id: 'w_days7', icon: '📅', desc: 'Play every day this week', metric: 'daysWeek', target: 7, xp: 50000 },
-  { id: 'w_hearts300', icon: '💗', desc: 'Heart 300 clips', metric: 'hearts', target: 300, xp: 25000 },
-  { id: 'w_jackpots40', icon: '🎰', desc: 'Land 40 jackpots', metric: 'jackpots', target: 40, xp: 25000 },
-  { id: 'w_mega5', icon: '💥', desc: 'Land 5 MEGA jackpots', metric: 'megas', target: 5, xp: 30000 },
-  { id: 'w_catch75', icon: '🏃', desc: 'Catch 75 chase flashes', metric: 'catches', target: 75, xp: 25000 },
-  { id: 'w_chain20', icon: '⛓️', desc: 'Hit a chase chain of 20', metric: 'chainBest', target: 20, xp: 30000 },
-  { id: 'w_overdrive8', icon: '🔥', desc: 'Release Overdrive 8 times', metric: 'overdrives', target: 8, xp: 25000 },
-  { id: 'w_finale1', icon: '🎆', desc: 'Complete a Finale', metric: 'finales', target: 1, xp: 20000 },
-  { id: 'w_moments25', icon: '🎆', desc: 'See 25 Moments', metric: 'moments', target: 25, xp: 20000 },
-  { id: 'w_dailies10', icon: '☀️', desc: 'Complete 10 daily challenges', metric: 'dailiesDone', target: 10, xp: 30000 },
-  { id: 'w_spins40', icon: '🎡', desc: 'Spin 40 times', metric: 'spins', target: 40, xp: 15000 },
-  { id: 'w_spot3', icon: '🔦', desc: 'See 3 Spotlight Takeovers', metric: 'spotlights', target: 3, xp: 20000 },
+  { id: 'w2_time5h', icon: '⏱️', desc: 'Watch 5 hours this week', metric: 'minutesWeek', target: 300, xp: 25000, time: true },
+  { id: 'w2_time10h', icon: '⏱️', desc: 'Watch 10 hours this week', metric: 'minutesWeek', target: 600, xp: 50000, time: true },
+  { id: 'w2_time20h', icon: '⏱️', desc: 'Watch 20 hours this week', metric: 'minutesWeek', target: 1200, xp: 90000, time: true },
+  { id: 'w2_time35h', icon: '⏱️', desc: 'Watch 35 hours this week', metric: 'minutesWeek', target: 2100, xp: 140000, time: true },
+  { id: 'w2_time50h', icon: '🏁', desc: 'Watch 50 hours this week', metric: 'minutesWeek', target: 3000, xp: 200000, time: true, rare: true },
+  { id: 'w2_days5', icon: '📅', desc: 'Play on 5 different days', metric: 'daysWeek', target: 5, xp: 30000 },
+  { id: 'w2_days7', icon: '📅', desc: 'Play every day this week', metric: 'daysWeek', target: 7, xp: 60000 },
+  { id: 'w2_hearts10k', icon: '💗', desc: 'Heart 10,000 clips', metric: 'hearts', target: 10000, xp: 60000 },
+  { id: 'w2_jackpots1200', icon: '🎰', desc: 'Land 1,200 jackpots', metric: 'jackpots', target: 1200, xp: 60000 },
+  { id: 'w2_mega150', icon: '💥', desc: 'Land 150 MEGA jackpots', metric: 'megas', target: 150, xp: 60000 },
+  { id: 'w2_catch1200', icon: '🏃', desc: 'Catch 1,200 chase flashes', metric: 'catches', target: 1200, xp: 60000 },
+  { id: 'w2_chain30', icon: '⛓️', desc: 'Hit a chase chain of 30', metric: 'chainBest', target: 30, xp: 50000 },
+  { id: 'w2_overdrive150', icon: '🔥', desc: 'Release Overdrive 150 times', metric: 'overdrives', target: 150, xp: 50000 },
+  { id: 'w2_finale5', icon: '🎆', desc: 'Complete 5 Finales', metric: 'finales', target: 5, xp: 40000 },
+  { id: 'w2_moments700', icon: '🎆', desc: 'See 700 Moments', metric: 'moments', target: 700, xp: 50000 },
+  { id: 'w2_dailies15', icon: '☀️', desc: 'Complete 15 daily challenges', metric: 'dailiesDone', target: 15, xp: 50000 },
+  { id: 'w2_spins250', icon: '🎡', desc: 'Spin 250 times', metric: 'spins', target: 250, xp: 40000 },
+  { id: 'w2_spot150', icon: '🔦', desc: 'See 150 Spotlight Takeovers', metric: 'spotlights', target: 150, xp: 50000 },
+  { id: 'w2_sealed150', icon: '🔓', desc: 'Open 150 sealed tiles', metric: 'sealedOpens', target: 150, xp: 50000 },
 ];
 
 let challenges = null;
@@ -107,6 +115,19 @@ function loadChallenges() {
   const saved = loadJsonPref(CHALLENGE_KEY, {});
   challenges = Object.assign({ day: '', week: '', daily: [], weekly: [], dayCounts: {}, weekCounts: {}, swapsLeft: DAILY_SWAPS, swept: false, perfect: false }, saved);
   challenges.totals = Object.assign(freshTotals(), saved.totals || {});
+  if (challenges.version !== CHALLENGE_VERSION) {
+    challenges.version = CHALLENGE_VERSION;
+    if (challenges.day === challengeDayKey()) {
+      challenges.daily = pickChallenges(DAILY_POOL, DAILY_COUNT, false);
+      challenges.swapsLeft = DAILY_SWAPS;
+      challenges.swept = false;
+    }
+    if (challenges.week === weekStartKey()) {
+      challenges.weekly = pickChallenges(WEEKLY_POOL, WEEKLY_COUNT, true);
+      challenges.perfect = false;
+    }
+    saveChallenges();
+  }
   rollChallengePeriods();
 }
 
@@ -349,7 +370,7 @@ function challengeRow(c, counts, i, daily) {
   const def = challengeDef(c.id);
   if (!def) return '';
   const value = Math.min(counts[def.metric] || 0, def.target);
-  const shown = MINUTE_METRICS.has(def.metric) ? fmtMinutes(value) + ' / ' + fmtMinutes(def.target) : Math.floor(value) + ' / ' + def.target;
+  const shown = MINUTE_METRICS.has(def.metric) ? fmtMinutes(value) + ' / ' + fmtMinutes(def.target) : Math.floor(value).toLocaleString() + ' / ' + def.target.toLocaleString();
   const swap = daily && !c.done && challenges.swapsLeft > 0
     ? '<button class="ch-swap" onclick="swapDailyChallenge(' + i + ')" title="Swap for a different challenge (' + challenges.swapsLeft + ' left today)">🎲</button>' : '';
   return '<div class="ch-row' + (c.done ? ' ch-done' : '') + '"><div class="ch-top"><span>' + (c.done ? '✅' : def.icon) + ' ' + def.desc + '</span>' + swap + '</div>' +
@@ -379,7 +400,6 @@ function challengeFromEvent(kind, d) {
   else if (kind === 'sealed.open') challengeMetric('sealedOpens');
   else if (kind === 'payoff' && (d.tier === 'mega' || d.tier === 'milestone')) challengeMetric('megas');
   else if (kind === 'chase.catch' && d.chain) challengeMetric('chainBest', d.chain);
-  else if (kind === 'replay') challengeMetric('replays');
   else if (kind === 'fx.tile' && d.kind !== 'shock') challengeMetric('fxSeen');
   else if (kind === 'clip.start') challengeMetric('clipsSeen');
   else if (kind === 'hook.start' && d.kind) challengeMetric('hooks');
