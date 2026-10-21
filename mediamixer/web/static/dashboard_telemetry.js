@@ -49,6 +49,8 @@ const TELEMETRY_WATCHERS = [
   ['spiral', () => (spiralActive ? 'on' : null)],
   ['brainwave', () => (brainwaveBand() ? brainwaveBand().label : null)],
   ['manualSpiral', () => (manualSpiralEnabled && manualSpiralName ? manualSpiralName : null)],
+  ['perf', () => perfMode + (perfLite() ? ':light' : ':full')],
+  ['floaters', () => (fxEnabled ? effectiveFxCount() : null)],
   ['colorRush', () => (colorRushActive ? 'on' : null)],
   ['surge', () => (Date.now() < surgeExpireAt ? 'on' : null)],
   ['spinSurge', () => (Date.now() < spinSurgeEndsAt ? 'on' : null)],
@@ -253,10 +255,9 @@ function samplePlayback() {
     if (v.getVideoPlaybackQuality) {
       const q = v.getVideoPlaybackQuality();
       const prev = playbackFrameTotals[i] || { total: 0, dropped: 0 };
-      if (q.totalVideoFrames >= prev.total) {
-        frames += q.totalVideoFrames - prev.total;
-        dropped += q.droppedVideoFrames - prev.dropped;
-      }
+      const restarted = q.totalVideoFrames < prev.total || q.droppedVideoFrames < prev.dropped; // a new clip resets both
+      frames += restarted ? q.totalVideoFrames : q.totalVideoFrames - prev.total;
+      dropped += restarted ? q.droppedVideoFrames : q.droppedVideoFrames - prev.dropped;
       playbackFrameTotals[i] = { total: q.totalVideoFrames, dropped: q.droppedVideoFrames };
     }
   });

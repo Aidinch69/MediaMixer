@@ -81,7 +81,7 @@ function perfCheck() {
     const q = v.getVideoPlaybackQuality();
     const prev = perfFrameTotals[i] || { total: 0, dropped: 0 };
     // The counters restart whenever the tile loads a new clip.
-    const restarted = q.totalVideoFrames < prev.total;
+    const restarted = q.totalVideoFrames < prev.total || q.droppedVideoFrames < prev.dropped;
     frames += restarted ? q.totalVideoFrames : q.totalVideoFrames - prev.total;
     dropped += restarted ? q.droppedVideoFrames : q.droppedVideoFrames - prev.dropped;
     perfFrameTotals[i] = { total: q.totalVideoFrames, dropped: q.droppedVideoFrames };
@@ -94,8 +94,8 @@ function perfCheck() {
   if (perfBadWindows < PERF_BAD_WINDOWS) return;
   perfAutoLight = true;
   savePerfPrefs();
-  applyPerf();
   if (typeof logEvent === 'function') logEvent('perf.light', { auto: true, dropped: +perfLastDropRatio.toFixed(2) });
+  try { applyPerf(); } catch (e) { if (typeof logEvent === 'function') logEvent('perf.error', { msg: String(e) }); }
   toast('⚡ Light mode on - this device was dropping video frames. Change it in Screen → Layout & Pace.');
 }
 

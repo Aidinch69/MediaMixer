@@ -154,7 +154,7 @@ def build(ctx, events: list, prep_status: dict) -> dict:
 
     counts = Counter()
     for e in events:
-        if e.get("k") in ("video.stall", "video.error") and isinstance(e.get("d"), dict) and e["d"].get("clip"):
+        if e.get("k") in ("video.stall", "video.error", "video.idle") and isinstance(e.get("d"), dict) and e["d"].get("clip"):
             counts[e["d"]["clip"]] += 1
     clips = []
     for rel, n in counts.most_common(STALLED_CLIPS_MAX):

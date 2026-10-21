@@ -213,11 +213,13 @@ function renderRewards(from, inWin, intervals, end) {
 function playbackHealth(inWin) {
   const errors = inWin.filter((e) => e.k === 'video.error' && e.d && e.d.code !== 1);
   const stalls = inWin.filter((e) => e.k === 'video.stall');
-  if (!errors.length && !stalls.length) return 'smooth <span class="muted">(no failed clips or stalls over 1.5s)</span>';
+  const idle = inWin.filter((e) => e.k === 'video.idle');
+  const idleNote = idle.length ? ` · ${idle.length} stopped tiles restarted (${Object.entries(idle.reduce((m, e) => ((m[e.d.fix] = (m[e.d.fix] || 0) + 1), m), {})).map(([k, n]) => k + ' ' + n).join(', ')})` : '';
+  if (!errors.length && !stalls.length && !idle.length) return 'smooth <span class="muted">(no failed clips or stalls over 1.5s)</span>';
   const stallS = stalls.reduce((sum, e) => sum + (e.d.ms || 0), 0) / 1000;
   const worst = Object.entries(stalls.concat(errors).reduce((m, e) => ((m[e.d.clip] = (m[e.d.clip] || 0) + 1), m), {}))
     .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([clip, n]) => `${esc(String(clip).replace(/^.*\//, ''))} ×${n}`).join(' · ');
-  return `${errors.length} failed to play (${errors.filter((e) => e.d.orig).length} even as the original) · ${stalls.length} stalls, ${stallS.toFixed(0)}s total`
+  return `${errors.length} failed to play (${errors.filter((e) => e.d.orig).length} even as the original) · ${stalls.length} stalls, ${stallS.toFixed(0)}s total${idleNote}`
     + (worst ? ` <span class="muted">· most: ${worst}</span>` : '');
 }
 

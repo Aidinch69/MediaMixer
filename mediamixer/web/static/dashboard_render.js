@@ -288,6 +288,61 @@ function onTileVideoPlaying(i) {
   if (ms >= TILE_STALL_LOG_MS && typeof logEvent === 'function') logEvent('video.stall', Object.assign({ tile: i, ms, clip: currentPaths[i], tiles: tileElements.length }, tileWaitInfo[i]));
 }
 
+// ---- Idle-tile watchdog ----
+// A tile that has stopped moving for TILE_IDLE_FIX_MS gets a nudge, by
+// what it's stuck on: a clip that ended with no next clip arriving (e.g.
+// the tile is pinned or held) restarts and asks for a new one; a tile
+// paused for no reason plays again; one frozen with video already
+// buffered skips forward a hair to wake the decoder; one still loading
+// after TILE_STUCK_LOAD_MS reloads. Each fix is logged (video.idle).
+const TILE_IDLE_FIX_MS = 3000;
+const TILE_STUCK_LOAD_MS = 10000;
+const tileIdleSince = {};
+
+function tileBufferedAhead(v) {
+  for (let r = 0; r < v.buffered.length; r++) {
+    if (v.buffered.start(r) <= v.currentTime && v.currentTime <= v.buffered.end(r)) return v.buffered.end(r) - v.currentTime;
+  }
+  return 0;
+}
+
+function tileIdleWatchdog() {
+  if (document.hidden) return;
+  const now = Date.now();
+  tileElements.forEach((_t, i) => {
+    const v = getTileVideo(i);
+    if (!v || !v.getAttribute('src')) return;
+    if (!v.paused && !v.ended && v.readyState >= 3) { delete tileIdleSince[i]; return; }
+    if (!tileIdleSince[i]) { tileIdleSince[i] = now; return; }
+    const idleMs = now - tileIdleSince[i];
+    const ahead = tileBufferedAhead(v);
+    let fix = null;
+    if (v.ended && idleMs >= TILE_IDLE_FIX_MS) {
+      fix = 'restart';
+      v.currentTime = 0;
+      v.play().catch(() => {});
+      fetch('/api/rotate?screen=' + i);
+    } else if (v.paused && !v.ended && v.readyState >= 2 && idleMs >= TILE_IDLE_FIX_MS) {
+      fix = 'play';
+      v.play().catch((e) => { if (typeof logEvent === 'function') logEvent('video.playRejected', { tile: i, err: e && e.name }); });
+    } else if (!v.paused && v.readyState === 2 && ahead > 1 && idleMs >= TILE_IDLE_FIX_MS) {
+      fix = 'nudge';
+      v.currentTime = v.currentTime + 0.05;
+    } else if (v.readyState < 2 && idleMs >= TILE_STUCK_LOAD_MS) {
+      fix = 'reload';
+      v.load();
+      applyRandomStart(v, i);
+    }
+    if (!fix) return;
+    if (typeof logEvent === 'function') {
+      logEvent('video.idle', { tile: i, ms: idleMs, fix, ended: v.ended, paused: v.paused, ready: v.readyState, net: v.networkState,
+        at: +v.currentTime.toFixed(1), dur: +(v.duration || 0).toFixed(1), aheadS: +ahead.toFixed(1), clip: currentPaths[i], tiles: tileElements.length });
+    }
+    tileIdleSince[i] = now; // give the fix time to work before trying again
+  });
+}
+setInterval(tileIdleWatchdog, 1000);
+
 // ---- Cut on the Beat ----
 // With Rhythm Mode running, clip changes wait for the next beat and
 // automatic layout changes for the next downbeat, so the grid cuts like a
