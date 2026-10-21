@@ -339,6 +339,7 @@ class DnaWorker:
         self._db, self._config = db, config
         self._idle_s, self._gap_s = idle_s, gap_s
         self._stop = threading.Event()
+        self._wake = threading.Event()
         self.done = 0
         self.failed = 0
         self.current: Optional[str] = None
@@ -350,15 +351,21 @@ class DnaWorker:
         else:
             log.warning("ffmpeg not found - Clip DNA analysis disabled")
 
+    def wake(self):
+        """Check for clips to analyse now rather than at the next idle recheck."""
+        self._wake.set()
+
     def stop(self):
         self._stop.set()
+        self._wake.set()
 
     def _run(self):
         self._stop.wait(20)  # let startup and the first page load settle first
         while not self._stop.is_set():
             todo = self._db.paths_missing_dna(DNA_VERSION)
             if not todo:
-                self._stop.wait(self._idle_s)
+                self._wake.wait(self._idle_s)
+                self._wake.clear()
                 continue
             log.info("Clip DNA: %d clip(s) to analyse", len(todo))
             for path in todo:

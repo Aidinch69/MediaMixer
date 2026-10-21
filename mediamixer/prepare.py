@@ -19,10 +19,11 @@ import os
 import signal
 import socket
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from . import library, sources
+from . import library, proxy, sources
 from .clip_dna import DNA_VERSION, analyze
 from .config import load_config
 from .db import Database
@@ -55,14 +56,19 @@ def missing_proxies(config) -> list:
     for kind in PROXY_KINDS:
         for _root, full in src.iter_files(kind, config.video_exts):
             proxy_path = src.proxy_path(full, kind)
-            # A .tmp means another process (the engine's on-demand path, or
-            # another copy of this tool) is mid-transcode on it right now.
-            if proxy_path and not os.path.isfile(proxy_path) and not os.path.isfile(proxy_path + ".tmp"):
+            # Skip clips another process is mid-transcode on, and clips
+            # ffmpeg has already failed to convert.
+            if (proxy_path and not os.path.isfile(proxy_path)
+                    and not proxy.in_progress(proxy_path) and not proxy.failed_before(proxy_path)):
                 out.append((full, proxy_path))
     return out
 
 
 def build_proxies(config, ffmpeg: str, workers: int) -> int:
+    if os.path.isdir(config.proxy_dir):
+        removed = proxy.recheck_old_proxies(ffmpeg, config, stop=lambda: _stop)
+        if removed:
+            log.info("Proxies: %d made with older settings will be rebuilt", removed)
     pending = missing_proxies(config)
     if not pending:
         log.info("Proxies: all up to date")
@@ -111,6 +117,57 @@ def run_pass(config, ffmpeg: str, workers: int, do_proxies: bool, do_dna: bool) 
                 run_dna(config, db)
     finally:
         db.close()
+
+
+class LibraryWatcher:
+    """Library prep inside the engine: rescans the source folders every
+    `interval_s` (or straight away when woken - e.g. a folder was just added
+    in the menu), nudges the Clip DNA worker when there's anything to
+    analyse, and builds missing proxies one at a time at low priority - so
+    new clips get ready without waiting for Prepare.bat or a clip to play."""
+
+    def __init__(self, db, config, dna=None, interval_s: float = 60.0):
+        self._db, self._config, self._dna = db, config, dna
+        self._interval_s = interval_s
+        self._wake = threading.Event()
+        self._stopped = threading.Event()
+        self.current: str | None = None
+        self._thread = threading.Thread(target=self._run, name="library-watcher", daemon=True)
+
+    def start(self):
+        self._thread.start()
+
+    def wake(self):
+        self._wake.set()
+
+    def stop(self):
+        self._stopped.set()
+        self._wake.set()
+
+    def _run(self):
+        self._wake.wait(15)  # let startup and the first page load settle first
+        while not self._stopped.is_set():
+            self._wake.clear()
+            try:
+                self._pass()
+            except Exception:
+                log.exception("library watcher pass failed")
+            self._wake.wait(self._interval_s)
+
+    def _pass(self):
+        library.sync_library(self._db, self._config)
+        if self._dna is not None and self._db.paths_missing_dna(DNA_VERSION):
+            self._dna.wake()
+        ffmpeg = _find_ffmpeg()
+        if not ffmpeg:
+            return
+        proxy.recheck_old_proxies(ffmpeg, self._config, stop=self._stopped.is_set)
+        for source, proxy_path in missing_proxies(self._config):
+            if self._stopped.is_set() or self._wake.is_set():
+                return  # woken mid-way (e.g. folders changed): rescan first
+            self.current = os.path.basename(source)
+            _generate(ffmpeg, source, proxy_path, self._config)
+            self.current = None
 
 
 def configure_logging(log_file: str | None) -> None:

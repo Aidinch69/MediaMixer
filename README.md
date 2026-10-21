@@ -27,14 +27,14 @@ It runs on your PC as a small local server. Open the dashboard in a browser on t
 
 - **Windows 10/11.** The scripts are Windows batch files. The Python code itself is cross-platform.
 - **Python 3.10 or newer.** `Setup.bat` offers to install it.
-- **ffmpeg.** Strongly recommended. `Setup.bat` offers to install it. Without it, clips still play, but there are no proxies (smooth playback with many tiles) and no Clip DNA (smart picking, framing, hooks and more).
+- **ffmpeg.** Strongly recommended. `Setup.bat` offers to download it into the project folder. Without it, clips still play, but there are no proxies (smooth playback with many tiles) and no Clip DNA (smart picking, framing, hooks and more).
 - **A modern browser.** Chrome or Edge works best.
 
 ## Quick start
 
 1. **Get the code.** Clone the repo or download it as a ZIP and unzip it anywhere.
-2. **Run `Setup.bat`.** It checks Python, installs the packages (`flask`, `waitress`, `qrcode`) and checks for ffmpeg, offering to install anything missing. It also asks whether to turn on **background prep** (see [below](#library-prep-proxies-and-clip-dna)).
-3. **Run `Run.bat`.** The engine starts and the dashboard opens in your browser at <http://localhost:5000>. Keep the black window open while you use it; closing it stops MediaMixer.
+2. **Run `Setup.bat`.** It checks Python, installs the packages (`flask`, `waitress`, `qrcode`) and checks for ffmpeg, offering to download anything missing (no winget or admin rights needed). It also asks whether to turn on **background prep** and whether to add a **MediaMixer shortcut** to the Desktop and Start menu (see [below](#library-prep-proxies-and-clip-dna)).
+3. **Start it** with the **MediaMixer shortcut** or `Run.bat`. The shortcut opens the dashboard in its own app window (Chrome or Edge, with no tabs or address bar). `Run.bat` opens it in a browser tab at <http://localhost:5000>. Either way, a black console window runs the engine; the shortcut starts it minimized. Closing that window stops MediaMixer.
 4. **Choose your folders.** In the dashboard menu (✕ / ☰ at the top right), open the **⚙️ More** tab → **📁 Sources** and add the folders your clips are in (see [Sources](#your-media-sources-and-folders)). Alternatively, drop clips into the `media_assets` folder that appears next to `Run.bat`.
 5. *(Optional)* **Run `Prepare.bat`** once to build proxies and Clip DNA for the whole library up front. Otherwise this happens gradually in the background.
 
@@ -82,16 +82,17 @@ Video formats: `.mp4 .mkv .avi .mov .webm`. Overlay images: `.jpg .png .gif .web
 
 | Script | What it does |
 |---|---|
-| `Setup.bat` | One-time setup on a new PC: Python check, packages, ffmpeg, and optional background prep. Safe to run again. |
-| `Run.bat` | Starts MediaMixer and opens the dashboard. If it's already running, it just opens the dashboard. Stop it by closing the window or pressing Ctrl+C. |
+| `Setup.bat` | One-time setup on a new PC: Python check, packages, ffmpeg (downloaded into `ffmpeg\`), optional background prep and an optional app shortcut. Safe to run again. |
+| `Run.bat` | Starts MediaMixer and opens the dashboard. If it's already running, it just opens the dashboard. Stop it by closing the window or pressing Ctrl+C. `Run.bat --app` opens it in an app window; this is what the shortcut runs. |
 | `Prepare.bat` | Builds proxies and Clip DNA for the whole library, with progress, then exits. Works whether or not MediaMixer is running. `Prepare.bat --watch` keeps going and picks up new clips every 10 minutes. `--workers 4` runs more transcodes at once. |
 | `Uninstall.bat` | Stops MediaMixer and removes background prep from login. It then asks, separately, whether to delete the proxy cache, your history and settings, and the Python packages. It never touches your media; afterwards, delete the project folder to finish. |
+| `mediamixer\install_shortcuts.ps1` | Adds the MediaMixer shortcut (`-Uninstall` removes it). `Setup.bat` offers this. |
 | `mediamixer\install_cache_warmer.ps1` | Turns background prep on (it starts hidden at every login). `Setup.bat` runs this for you. Add `-Uninstall` to turn it off. |
 
 `Run.bat` is just `python Engine.py --open` run from the project folder. It adds no delay and has no performance cost. You can also run things directly from a terminal in the project folder:
 
 ```
-python Engine.py [--open] [--port 5050] [--host 127.0.0.1]
+python Engine.py [--open | --app] [--port 5050] [--host 127.0.0.1]
 python -m mediamixer.prepare [--watch] [--workers N] [--no-proxies] [--no-dna]
 ```
 
@@ -106,8 +107,10 @@ What happens when:
 
 | | MediaMixer running | MediaMixer not running |
 |---|---|---|
-| **Proxies** | Made on demand the first time a clip plays (it plays the original until the proxy is ready). | Built by background prep, if turned on, or by `Prepare.bat`. |
+| **Proxies** | Built in the background, one at a time at low priority. Any clip that plays before its proxy is ready plays the original. | Built by background prep, if turned on, or by `Prepare.bat`. |
 | **Clip DNA** | Analysed in the background, one clip at a time, at low priority. | Analysed by background prep, if turned on, or by `Prepare.bat`. |
+
+While MediaMixer runs, it rescans your source folders every minute, and right away when you change folders in Sources, so new clips start getting prepared within seconds.
 
 All of these can run together safely. Files are written to a temporary name and then renamed, so interrupted work is never half-finished, and anything already being transcoded is skipped. Stopping at any point is fine; the next run continues where it left off. **⚙️ More → 📁 Sources** shows how much of the library has proxies and DNA. Background prep logs to `cache_warmer.log`.
 
@@ -203,7 +206,7 @@ Every section in the menu has a **"What does this do?"** link with the full deta
 - **📱 Phone Access:** a QR code for your phone.
 - **📂 Categories:** jump to a category.
 - **🕹️ Overrides:** lock or skip manually.
-- **🛰️ Observability:** Auto-Pilot's live state, plus a link to the **/debug** page (event timeline, hit rates, what gets liked).
+- **🛰️ Observability:** Auto-Pilot's live state, plus a link to the **/debug** page (event timeline, hit rates, what gets liked, and a **Playback** line counting clips that failed to play or stalled).
 
 ---
 
@@ -259,7 +262,8 @@ Every engine default (pace presets, layouts, reward weights, odds) is in `mediam
 | `Run.bat` closes or shows "not set up" | Run `Setup.bat`. If Python was just installed, open a new window first. |
 | "Address already in use" / port 5000 busy | Another program is using it. Use `Run.bat --port 5050`. |
 | Phone can't connect | It must be on the same Wi-Fi network. Allow Python through Windows Firewall (private networks). Use the IP shown in Phone Access. |
-| Choppy with many tiles | The proxies aren't built yet. Run `Prepare.bat` and watch progress in More → Sources. Make sure ffmpeg is installed. |
+| Choppy with many tiles, or tiles freezing | Check that every clip has a proxy (progress is in More → Sources); run `Prepare.bat` to build them all now. Make sure ffmpeg is installed. Fewer tiles helps on slower PCs. **/debug → Rewards & pacing → Playback** shows which clips stalled or failed. A clip whose proxy won't play is retried from the original, and the proxy is rebuilt. |
+| A clip never gets a proxy | ffmpeg couldn't convert it. A `.failed` file next to where its proxy would be (in `media_proxies`) holds the error; delete that file to retry. |
 | "ffmpeg not found" | Run `Setup.bat`, or unzip an ffmpeg build into an `ffmpeg\` folder in the project. |
 | A folder shows "⚠️ not found" | The drive is unplugged or the folder moved. Its clips sit out until it's back, or remove the folder and add its new location. |
 | New clips don't show | They appear within a couple of minutes (Fresh Drops debut one at a time). Check that the extension is supported and the folder name doesn't start with `_`. |

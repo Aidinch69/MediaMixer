@@ -35,9 +35,11 @@ foreach ($l in $listeners) {
     }
 }
 
-# 2. Background prep: stop it and remove its login shortcut.
+# 2. Background prep (stop it, remove its login shortcut) and the app shortcuts.
 & "$PSScriptRoot\install_cache_warmer.ps1" -Uninstall
 Start-Sleep -Seconds 1
+
+& "$PSScriptRoot\install_shortcuts.ps1" -Uninstall
 
 # 3. Generated data (all of it can be rebuilt).
 Write-Output ""

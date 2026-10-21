@@ -14,3 +14,4 @@ class AppContext:
     db: Database
     sessions: SessionManager
     dna: object = None  # clip_dna.DnaWorker, when running
+    watcher: object = None  # prepare.LibraryWatcher, when running

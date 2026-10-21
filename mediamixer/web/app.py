@@ -219,7 +219,28 @@ def create_app(ctx: AppContext) -> Flask:
         # measured sample was 8.2 Mbps vs the proxy's 1200kbps target), a
         # real cost even at just 2 simultaneous screens.
         path = sources.get(config).to_abs("tiles", filename)
+        if request.args.get("orig"):  # the dashboard's fallback when a proxy won't play
+            return _send_file(path)
         return _send_file(path and (proxy.ensure_proxy(path, config, "tiles") or path))
+
+    @app.route("/api/proxy_bad", methods=["POST"])
+    def api_proxy_bad():
+        """The browser couldn't decode this clip's proxy: delete it so it's
+        rebuilt (with today's settings) instead of failing every time."""
+        path = sources.get(config).to_abs("tiles", request.args.get("path", ""))
+        pp = path and sources.get(config).proxy_path(path, "tiles")
+        removed = False
+        ffmpeg = proxy._find_ffmpeg()
+        # The same browser error also covers a dropped connection, so only
+        # delete a proxy ffprobe agrees is unreadable or 10-bit.
+        if pp and os.path.isfile(pp) and not proxy.in_progress(pp) and ffmpeg and not proxy.playable(ffmpeg, pp):
+            try:
+                os.remove(pp)
+                removed = True
+                log.warning("Removed a proxy the browser couldn't play: %s", pp)
+            except OSError:
+                pass
+        return jsonify(ok=True, removed=removed)
 
     @app.route("/audio/<path:filename>")
     def audio_file(filename):
@@ -256,6 +277,8 @@ def create_app(ctx: AppContext) -> Flask:
             return jsonify(ok=False, error=str(exc)), 400
         if kind == "tiles":
             library.sync_library(db, config)
+        if ctx.watcher is not None:
+            ctx.watcher.wake()  # start on any new clips' proxies + DNA now
         elif kind == "audio":
             sessions.refresh_audio()
         return jsonify(ok=True, sources=sources.get(config).describe(), prep=_prep_status())
@@ -281,6 +304,7 @@ def create_app(ctx: AppContext) -> Flask:
             "videos": total, "proxied": proxied,
             "dna_total": dna["total"], "dna_done": dna["analysed"] + dna["failed"],
             "dna_running": bool(ctx.dna and getattr(ctx.dna, "current", None)),
+            "proxy_running": bool(ctx.watcher and getattr(ctx.watcher, "current", None)),
         }
 
     @app.route("/api/folders")

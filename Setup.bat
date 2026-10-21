@@ -74,9 +74,18 @@ if not errorlevel 2 (
   powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0mediamixer\install_cache_warmer.ps1"
 )
 
+rem -- 5. App shortcut --
+echo.
+echo A MediaMixer shortcut on the Desktop and Start menu starts it and opens
+echo it in its own app window ^(no tabs or address bar^), like an installed app.
+choice /m "Add the MediaMixer shortcut"
+if not errorlevel 2 (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0mediamixer\install_shortcuts.ps1"
+)
+
 echo.
 echo ==== Setup done ====
-echo  Start:    Run.bat
+echo  Start:    the MediaMixer shortcut, or Run.bat
 echo  Folders:  in the dashboard menu, More ^> Sources
 echo  Prep now: Prepare.bat  ^(optional - builds proxies + DNA for everything^)
 echo.

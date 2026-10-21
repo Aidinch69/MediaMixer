@@ -204,8 +204,21 @@ function renderRewards(from, inWin, intervals, end) {
     ['Reward rhythm', gaps.length ? `one every ${fmtDur(mean)}${cv != null ? ' <span class="muted">· variability ' + cv.toFixed(2) + (cv < 0.5 ? ' (predictable)' : cv > 1.2 ? ' (very streaky)' : ' (nicely variable)') + '</span>' : ''}` : '<span class="muted">not enough yet</span>'],
     ['Ratings', `${inWin.filter((e) => e.k === 'rate' && e.d.dir === 'up').length} up · ${inWin.filter((e) => e.k === 'rate' && e.d.dir !== 'up').length} down · ${count('skip', from)} skips`],
     ['Layout changes', `${(intervals.layout || []).filter((iv) => iv.start >= from).length}`],
+    ['Playback', playbackHealth(inWin)],
   ];
   $('rewards').innerHTML = rows.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join('');
+}
+
+// Tile videos that failed to decode or stalled (logged by dashboard_render.js).
+function playbackHealth(inWin) {
+  const errors = inWin.filter((e) => e.k === 'video.error' && e.d && e.d.code !== 1);
+  const stalls = inWin.filter((e) => e.k === 'video.stall');
+  if (!errors.length && !stalls.length) return 'smooth <span class="muted">(no failed clips or stalls over 1.5s)</span>';
+  const stallS = stalls.reduce((sum, e) => sum + (e.d.ms || 0), 0) / 1000;
+  const worst = Object.entries(stalls.concat(errors).reduce((m, e) => ((m[e.d.clip] = (m[e.d.clip] || 0) + 1), m), {}))
+    .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([clip, n]) => `${esc(String(clip).replace(/^.*\//, ''))} ×${n}`).join(' · ');
+  return `${errors.length} failed to play (${errors.filter((e) => e.d.orig).length} even as the original) · ${stalls.length} stalls, ${stallS.toFixed(0)}s total`
+    + (worst ? ` <span class="muted">· most: ${worst}</span>` : '');
 }
 
 function renderTimeline(start, end, intervals, inWin) {

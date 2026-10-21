@@ -30,6 +30,9 @@ function createTileElement(i) {
     vid.volume = tileAudioVolume; // master Tile Audio Volume slider - shared by every tile, not a per-tile solo toggle
     vid.muted = tileAudioVolume <= 0;
     vid.addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
+    vid.addEventListener('error', () => onTileVideoError(i, vid));
+    vid.addEventListener('waiting', () => { tileWaitStart[i] = Date.now(); });
+    vid.addEventListener('playing', () => onTileVideoPlaying(i));
     vid.addEventListener('loadedmetadata', () => {
       onAspectKnown(i);
       applyLoopAnchorIfReady(i, currentPaths[i]); // duration is only known from here on
@@ -239,6 +242,38 @@ function swapTileClip(i, vid, path, name) {
   applyRandomStart(vid, i);
   const label = document.getElementById('label-' + i);
   if (label) label.innerText = name || '';
+}
+
+// ---- Playback problems ----
+// A clip the browser can't decode used to just freeze its tile. Now: if it
+// was the proxy, the server is told to throw it away (it gets rebuilt) and
+// the tile retries the original file; if that won't play either, the tile
+// moves on. Both, and any stall over TILE_STALL_LOG_MS, are logged for /debug.
+const TILE_STALL_LOG_MS = 1500;
+const tileWaitStart = {};
+
+function onTileVideoError(i, vid) {
+  const src = vid.currentSrc || vid.src || '';
+  if (src.indexOf('/media/') < 0) return; // src cleared, not a real failure
+  const code = vid.error ? vid.error.code : 0;
+  const orig = src.indexOf('&orig=1') >= 0;
+  if (typeof logEvent === 'function') logEvent('video.error', { tile: i, code, orig, clip: currentPaths[i] });
+  if (code === 1) return; // aborted - the tile is already loading something else
+  if (!orig) {
+    if (code === 3 || code === 4) fetch('/api/proxy_bad?path=' + encodeURIComponent(currentPaths[i] || ''), { method: 'POST' }).catch(() => {});
+    vid.src = src + '&orig=1';
+    applyRandomStart(vid, i);
+    return;
+  }
+  fetch('/api/rotate?screen=' + i);
+}
+
+function onTileVideoPlaying(i) {
+  const started = tileWaitStart[i];
+  if (!started) return;
+  delete tileWaitStart[i];
+  const ms = Date.now() - started;
+  if (ms >= TILE_STALL_LOG_MS && typeof logEvent === 'function') logEvent('video.stall', { tile: i, ms, clip: currentPaths[i] });
 }
 
 // ---- Cut on the Beat ----

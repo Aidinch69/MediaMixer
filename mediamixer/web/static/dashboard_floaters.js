@@ -94,7 +94,11 @@ function fetchFxList(source) {
   if (fxSourceLists[source]) return Promise.resolve(fxSourceLists[source]);
   return fetch('/api/overlay_fx/list?source=' + source)
     .then(r => r.json())
-    .then(d => { fxSourceLists[source] = d.items || []; return fxSourceLists[source]; })
+    .then(d => {
+      const items = d.items || [];
+      fxSourceLists[source] = items.length ? items : null; // an empty folder is asked again next time, not remembered
+      return items;
+    })
     .catch(() => []);
 }
 

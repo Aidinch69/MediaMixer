@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import logging
 import threading
-import webbrowser
 from dataclasses import replace
 
 from waitress import serve
@@ -14,6 +13,8 @@ from .clip_dna import DnaWorker
 from .config import Config, load_config
 from .context import AppContext
 from .db import Database
+from .launch import open_dashboard
+from .prepare import LibraryWatcher
 from .network import get_lan_ip, get_tailscale_https_url
 from .session import SessionManager
 from .web.app import create_app
@@ -27,13 +28,15 @@ class MediaMixerApp:
         self.db = Database(self.config)
         self.sessions = SessionManager(self.db, self.config)
         self.dna = DnaWorker(self.db, self.config)
-        self.ctx = AppContext(self.config, self.db, self.sessions, self.dna)
+        self.watcher = LibraryWatcher(self.db, self.config, self.dna)
+        self.ctx = AppContext(self.config, self.db, self.sessions, self.dna, self.watcher)
         self.flask_app = create_app(self.ctx)
         self._stopped = threading.Event()
 
-    def run(self, open_browser: bool = False):
+    def run(self, open_browser: bool = False, app_window: bool = False):
         library.sync_library(self.db, self.config)
         self.dna.start()
+        self.watcher.start()
 
         # Werkzeug's dev server (Flask's default .run()) is explicitly not
         # built for this: several simultaneous video streams plus a
@@ -60,8 +63,8 @@ class MediaMixerApp:
             log.info("Tailscale (installable, HTTPS) -> %s", tailscale_url)
         log.info("Each device gets its own independent playback session")
         log.info("=" * 60)
-        if open_browser:
-            threading.Timer(1.0, webbrowser.open, args=(f"http://localhost:{self.config.port}",)).start()
+        if open_browser or app_window:
+            threading.Timer(1.0, open_dashboard, args=(f"http://localhost:{self.config.port}", app_window)).start()
 
         try:
             self.sessions.run_scheduler()
@@ -77,6 +80,7 @@ class MediaMixerApp:
         log.info("shutting down...")
         self.sessions.stop()
         self.dna.stop()
+        self.watcher.stop()
         self.db.close()
 
 
@@ -95,6 +99,7 @@ def main():
     parser.add_argument("--port", type=int, default=None, help="override the web server port")
     parser.add_argument("--log-level", default="INFO")
     parser.add_argument("--open", action="store_true", help="open the dashboard in the default browser once it's up")
+    parser.add_argument("--app", action="store_true", help="open the dashboard in its own app window (Chrome/Edge) once it's up")
     args = parser.parse_args()
 
     _configure_logging(args.log_level)
@@ -105,7 +110,7 @@ def main():
     if args.port:
         config = replace(config, port=args.port)
 
-    MediaMixerApp(config).run(open_browser=args.open)
+    MediaMixerApp(config).run(open_browser=args.open, app_window=args.app)
 
 
 if __name__ == "__main__":

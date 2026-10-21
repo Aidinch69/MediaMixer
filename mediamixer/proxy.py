@@ -17,6 +17,7 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from . import sources
@@ -59,10 +60,97 @@ def _find_ffmpeg() -> str | None:
     return found
 
 
+# A .tmp proxy younger than this belongs to a transcode still running (in
+# this process or another one); an older one was left by a crash.
+TMP_STALE_S = 1800
+TRANSCODE_TIMEOUT_S = 1500
+
+
+def in_progress(proxy_path: str) -> bool:
+    try:
+        return time.time() - os.path.getmtime(proxy_path + ".tmp") < TMP_STALE_S
+    except OSError:
+        return False
+
+
+def failed_before(proxy_path: str) -> bool:
+    """A clip ffmpeg couldn't convert is marked so it isn't retried on
+    every scan forever (delete the .failed file to try again)."""
+    return os.path.isfile(proxy_path + ".failed")
+
+
+# Bumped when proxies made by older settings need replacing; see
+# recheck_old_proxies. 2 = always 8-bit 4:2:0 (older ones could be 10-bit).
+PROXY_FORMAT = "2"
+_PLAYABLE_PIX_FMTS = ("yuv420p", "yuvj420p")
+
+
+def playable(ffmpeg: str, proxy_path: str) -> bool:
+    """Whether a proxy is a readable 8-bit 4:2:0 video - what browsers
+    decode in hardware. Unreadable or 10-bit/4:4:4 files are not."""
+    ffprobe = os.path.join(os.path.dirname(ffmpeg), "ffprobe" + os.path.splitext(ffmpeg)[1])
+    try:
+        out = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=pix_fmt", "-of", "csv=p=0", proxy_path],
+            capture_output=True, text=True, timeout=30,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return True  # can't tell - never delete on a hunch
+    return out.returncode == 0 and out.stdout.strip().split(",")[0] in _PLAYABLE_PIX_FMTS
+
+
+def recheck_old_proxies(ffmpeg: str, config, stop=None) -> int:
+    """Once per proxy folder (per PROXY_FORMAT): delete proxies made with
+    older settings that browsers can't decode in hardware, so they get
+    rebuilt. Returns how many were removed."""
+    marker = os.path.join(config.proxy_dir, ".proxy_format")
+    try:
+        with open(marker, encoding="utf-8") as f:
+            if f.read().strip() == PROXY_FORMAT:
+                return 0
+    except OSError:
+        pass
+    removed = 0
+    for dirpath, _dirs, files in os.walk(config.proxy_dir):
+        for name in files:
+            if stop is not None and stop():
+                return removed  # no marker yet - picks up again next time
+            path = os.path.join(dirpath, name)
+            if name.endswith(".proxy.mp4") and not in_progress(path) and not playable(ffmpeg, path):
+                try:
+                    os.remove(path)
+                    removed += 1
+                except OSError:
+                    pass
+    if removed:
+        log.info("Replacing %d proxies made with older settings", removed)
+    os.makedirs(config.proxy_dir, exist_ok=True)
+    with open(marker, "w", encoding="utf-8") as f:
+        f.write(PROXY_FORMAT)
+    return removed
+
+
+def _claim(tmp_path: str) -> bool:
+    """Create the .tmp exclusively, so the engine, background prep and
+    Prepare.bat can never transcode the same clip at the same time."""
+    for _ in range(2):
+        try:
+            os.close(os.open(tmp_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            return True
+        except FileExistsError:
+            if time.time() - os.path.getmtime(tmp_path) < TMP_STALE_S:
+                return False
+            os.remove(tmp_path)  # left behind by a crash
+    return False
+
+
 def _generate(ffmpeg: str, source_path: str, proxy_path: str, config) -> None:
     try:
         os.makedirs(os.path.dirname(proxy_path), exist_ok=True)
         tmp_path = proxy_path + ".tmp"
+        if not _claim(tmp_path):
+            return
         dim = config.proxy_max_dimension
         kbps = config.proxy_bitrate_kbps
         cmd = [
@@ -73,6 +161,12 @@ def _generate(ffmpeg: str, source_path: str, proxy_path: str, config) -> None:
             # so the transcode's own CPU footprint matters more than how
             # tightly the output is packed.
             "-c:v", "libx264", "-preset", "ultrafast",
+            # 8-bit 4:2:0 always: a 10-bit/HDR or 4:4:4 source would otherwise
+            # give a High 10 / 4:4:4 H.264 file that Chrome can't decode.
+            "-pix_fmt", "yuv420p",
+            # A keyframe every 2s keeps seeks (random starts, hooks,
+            # replays) quick, and 60fps sources drop to 30 - tiles are small.
+            "-g", "60", "-fpsmax", "30",
             "-b:v", f"{kbps}k", "-maxrate", f"{int(kbps * 1.3)}k", "-bufsize", f"{kbps * 2}k",
             "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart",
             # ffmpeg infers the container from the output filename's extension;
@@ -98,12 +192,16 @@ def _generate(ffmpeg: str, source_path: str, proxy_path: str, config) -> None:
         if creationflags:
             popen_kwargs["creationflags"] = creationflags
         try:
-            subprocess.run(cmd, check=True, capture_output=True, timeout=180, **popen_kwargs)
+            subprocess.run(cmd, check=True, capture_output=True, timeout=TRANSCODE_TIMEOUT_S, **popen_kwargs)
             os.replace(tmp_path, proxy_path)
-        except Exception:
-            log.exception("Proxy transcode failed for %s", source_path)
+        except Exception as exc:
+            detail = exc.stderr.decode("utf-8", "replace")[-300:] if getattr(exc, "stderr", None) else exc
+            log.warning("Proxy transcode failed for %s: %s", source_path, detail)
             if os.path.isfile(tmp_path):
                 os.remove(tmp_path)
+            if not isinstance(exc, subprocess.TimeoutExpired):
+                with open(proxy_path + ".failed", "w", encoding="utf-8") as f:
+                    f.write(str(detail))
     finally:
         with _pending_lock:
             _pending.discard(source_path)
@@ -123,6 +221,8 @@ def ensure_proxy(source_path: str, config, kind: str = "tiles") -> str | None:
         return None
     if os.path.isfile(proxy_path):
         return proxy_path
+    if failed_before(proxy_path) or in_progress(proxy_path):
+        return None
 
     ffmpeg = _find_ffmpeg()
     if not ffmpeg:

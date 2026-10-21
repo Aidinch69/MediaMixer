@@ -28,6 +28,7 @@ function renderSourcesPrep(prep) {
   const pct = (a, b) => (b ? Math.floor((a / b) * 100) : 100) + '%';
   el.innerHTML = '🎞️ Proxies ' + prep.proxied + ' / ' + prep.videos + ' (' + pct(prep.proxied, prep.videos) + ')'
     + ' · 🧬 DNA ' + prep.dna_done + ' / ' + prep.dna_total + ' (' + pct(prep.dna_done, prep.dna_total) + ')'
+    + (prep.proxy_running ? ' · building proxies' : '')
     + (prep.dna_running ? ' · analysing now' : '')
     + '<br><span style="opacity:.7">Proxy folder: ' + sourcesEsc(sourcesData.proxy_dir) + '</span>';
 }
@@ -66,6 +67,13 @@ function saveSourceFolders(kind, folders) {
     renderSources();
     if (kind === 'tiles') showSourcesNote('Library rescanned. Reload the page to refresh the Categories list.');
     if (kind === 'spirals') { spiralList = null; spiralListPromise = null; }
+    if (kind === 'overlay' || kind === 'tiles') fxSourceLists = { dedicated: null, library: null };
+    // Picking overlay folders means you want them used: point the floaters
+    // at them if they were still on the main library.
+    if (kind === 'overlay' && folders.length && fxSource === 'library') {
+      setFxSource('dedicated');
+      showSourcesNote('Floating Overlay now uses these folders (Screen → Floating Overlay to change).');
+    }
   });
 }
 
@@ -130,9 +138,22 @@ function closeSourceBrowser() {
   sourcesBrowseKind = null;
 }
 
+// While the section is open, the prep counts refresh on their own.
+let sourcesPrepTimer = null;
+
 function initSources() {
   const section = document.getElementById('sources-section');
-  if (section) section.addEventListener('toggle', () => { if (section.open) loadSources(); });
+  if (!section) return;
+  section.addEventListener('toggle', () => {
+    clearInterval(sourcesPrepTimer);
+    sourcesPrepTimer = null;
+    if (!section.open) return;
+    loadSources();
+    sourcesPrepTimer = setInterval(() => {
+      if (document.hidden || sourcesBrowseKind) return; // don't redraw under an open folder browser
+      fetch('/api/sources').then((r) => r.json()).then((d) => { sourcesData = d; renderSourcesPrep(d.prep); }).catch(() => {});
+    }, 5000);
+  });
 }
 
 initSources();
