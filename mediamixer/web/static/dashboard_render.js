@@ -31,7 +31,7 @@ function createTileElement(i) {
     vid.muted = tileAudioVolume <= 0;
     vid.addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
     vid.addEventListener('error', () => onTileVideoError(i, vid));
-    vid.addEventListener('waiting', () => { tileWaitStart[i] = Date.now(); });
+    vid.addEventListener('waiting', () => { tileWaitStart[i] = Date.now(); tileWaitInfo[i] = tileStallContext(vid); });
     vid.addEventListener('playing', () => onTileVideoPlaying(i));
     vid.addEventListener('loadedmetadata', () => {
       onAspectKnown(i);
@@ -251,6 +251,18 @@ function swapTileClip(i, vid, path, name) {
 // moves on. Both, and any stall over TILE_STALL_LOG_MS, are logged for /debug.
 const TILE_STALL_LOG_MS = 1500;
 const tileWaitStart = {};
+const tileWaitInfo = {};
+
+// What a tile looked like the moment it started waiting: how much was
+// buffered ahead, how far into the clip, and whether it was on the original.
+function tileStallContext(vid) {
+  let ahead = 0;
+  for (let r = 0; r < vid.buffered.length; r++) {
+    if (vid.buffered.start(r) <= vid.currentTime && vid.currentTime <= vid.buffered.end(r)) ahead = vid.buffered.end(r) - vid.currentTime;
+  }
+  const src = vid.currentSrc || '';
+  return { aheadS: +ahead.toFixed(1), at: +vid.currentTime.toFixed(1), ready: vid.readyState, net: vid.networkState, orig: src.indexOf('&orig=1') >= 0, shard: (src.match(/127\.0\.0\.(\d+)/) || [])[1] || null };
+}
 
 function onTileVideoError(i, vid) {
   const src = vid.currentSrc || vid.src || '';
@@ -273,7 +285,7 @@ function onTileVideoPlaying(i) {
   if (!started) return;
   delete tileWaitStart[i];
   const ms = Date.now() - started;
-  if (ms >= TILE_STALL_LOG_MS && typeof logEvent === 'function') logEvent('video.stall', { tile: i, ms, clip: currentPaths[i] });
+  if (ms >= TILE_STALL_LOG_MS && typeof logEvent === 'function') logEvent('video.stall', Object.assign({ tile: i, ms, clip: currentPaths[i], tiles: tileElements.length }, tileWaitInfo[i]));
 }
 
 // ---- Cut on the Beat ----

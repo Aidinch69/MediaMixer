@@ -218,6 +218,8 @@ function initTelemetry() {
       mosaic: mosaicEnabled, beatVoice: rhythmVoice, beatVolume: rhythmVolume, tempoSource: rhythmBpmSource, cutOnBeat: rhythmCutOnBeat,
     },
   }), 0));
+  addEventListener('load', () => setTimeout(() => collectBrowserInfo().then((info) => logEvent('client.info', info)), 1000));
+  setInterval(samplePlayback, PLAYBACK_SAMPLE_MS);
   sampleTelemetryWatchers();
   setInterval(sampleTelemetryWatchers, TELEMETRY_SAMPLE_MS);
   setInterval(() => flushTelemetry(false), TELEMETRY_FLUSH_MS);
@@ -225,6 +227,43 @@ function initTelemetry() {
   document.addEventListener('visibilitychange', () => {
     logEvent(document.hidden ? 'session.hide' : 'session.show');
     if (document.hidden) flushTelemetry(true);
+  });
+}
+
+// Every PLAYBACK_SAMPLE_MS: how the tile videos are doing right now -
+// how many are playing vs waiting, how much is buffered ahead, and frames
+// decoded/dropped since the last sample (dropped frames = the decoder or
+// the page couldn't keep up; waiting with little buffered = data not
+// arriving fast enough).
+const PLAYBACK_SAMPLE_MS = 20000;
+const playbackFrameTotals = {};
+
+function samplePlayback() {
+  if (document.hidden || typeof tileElements === 'undefined') return;
+  let playing = 0, waiting = 0, ahead = 0, frames = 0, dropped = 0;
+  tileElements.forEach((_t, i) => {
+    const v = getTileVideo(i);
+    if (!v || !v.src) return;
+    if (v.readyState >= 3 && !v.paused) playing++;
+    else waiting++;
+    for (let r = 0; r < v.buffered.length; r++) {
+      if (v.buffered.start(r) <= v.currentTime && v.currentTime <= v.buffered.end(r)) ahead += v.buffered.end(r) - v.currentTime;
+    }
+    if (v.getVideoPlaybackQuality) {
+      const q = v.getVideoPlaybackQuality();
+      const prev = playbackFrameTotals[i] || { total: 0, dropped: 0 };
+      if (q.totalVideoFrames >= prev.total) {
+        frames += q.totalVideoFrames - prev.total;
+        dropped += q.droppedVideoFrames - prev.dropped;
+      }
+      playbackFrameTotals[i] = { total: q.totalVideoFrames, dropped: q.droppedVideoFrames };
+    }
+  });
+  logEvent('playback.sample', {
+    tiles: tileElements.length, playing, waiting,
+    aheadS: +(ahead / Math.max(1, playing + waiting)).toFixed(1), frames, dropped,
+    floaters: document.querySelectorAll('.fx-sprite').length,
+    videos: [...document.querySelectorAll('video')].filter((v) => v.src && !v.paused).length, // everything decoding at once
   });
 }
 

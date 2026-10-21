@@ -18,7 +18,7 @@ import qrcode
 import qrcode.image.svg
 from flask import Flask, Response, g, jsonify, render_template, request, send_from_directory
 
-from .. import insights, library, proxy, sources
+from .. import diagnostics, insights, library, proxy, sources
 from ..clip_dna import DNA_VERSION
 from ..context import AppContext
 from ..live_config import SESSION_MIRRORED, LiveConfig
@@ -110,7 +110,7 @@ def create_app(ctx: AppContext) -> Flask:
             return
         # The debug view (often opened on a second device) only reads the
         # event log - it shouldn't spin up a viewer session of its own.
-        if request.method == "GET" and (request.path == "/debug" or request.path.startswith("/api/events") or request.path == "/api/insights"):
+        if request.method == "GET" and (request.path == "/debug" or request.path.startswith("/api/events") or request.path in ("/api/insights", "/api/diagnostics")):
             return
         session_id = request.cookies.get(config.session_cookie_name)
         session = sessions.get(session_id)
@@ -890,6 +890,20 @@ def create_app(ctx: AppContext) -> Flask:
             session=session_id,
             events=[{"id": r["id"], "t": r["ts"], "k": r["kind"], "d": json.loads(r["data"]) if r["data"] else None} for r in rows],
         )
+
+    @app.route("/api/diagnostics")
+    def api_diagnostics():
+        """The /debug export: one session's events plus engine, drive and
+        clip details (see mediamixer.diagnostics)."""
+        session_id = request.args.get("session", "")
+        if not session_id:
+            recent = db.event_sessions(time.time() - 86400)
+            session_id = recent[0]["session"] if recent else ""
+        rows = db.events_after(session_id, since_ts=request.args.get("since", time.time() - 3600, type=float), limit=20000) if session_id else []
+        events = [{"t": r["ts"], "k": r["kind"], "d": json.loads(r["data"]) if r["data"] else None} for r in rows]
+        bundle = diagnostics.build(ctx, events, _prep_status())
+        bundle["session"] = session_id
+        return jsonify(bundle)
 
     @app.route("/api/recap")
     def api_recap():

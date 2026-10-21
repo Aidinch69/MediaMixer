@@ -481,6 +481,34 @@ function loadInsights() {
 $('session').addEventListener('change', () => { sessionId = $('session').value; fetchEvents(true); });
 $('window').addEventListener('change', () => fetchEvents(true));
 $('filter').addEventListener('input', render);
+// One JSON file with everything needed to look into a problem elsewhere:
+// the engine's bundle (/api/diagnostics) plus this browser's own details.
+async function exportDiagnostics() {
+  const btn = $('export');
+  btn.disabled = true;
+  btn.textContent = '⏳ Gathering… (testing drive speed)';
+  try {
+    const q = new URLSearchParams({ since: nowS() - windowS() });
+    if (sessionId) q.set('session', sessionId);
+    const [bundle, browser] = await Promise.all([
+      fetch('/api/diagnostics?' + q).then((r) => r.json()),
+      collectBrowserInfo().catch(() => null),
+    ]);
+    bundle.export_browser = browser;
+    bundle.window_s = windowS();
+    const blob = new Blob([JSON.stringify(bundle, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'mediamixer-diagnostics-' + new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-') + '.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    btn.textContent = '✓ Saved to Downloads';
+  } catch (e) {
+    btn.textContent = '⚠ Export failed - is MediaMixer running?';
+  }
+  setTimeout(() => { btn.disabled = false; btn.textContent = '⬇ Export diagnostics'; }, 4000);
+}
+$('export').addEventListener('click', exportDiagnostics);
 $('live').addEventListener('click', () => { live = !live; $('live').classList.toggle('on', live); $('live').textContent = live ? '● Live' : '○ Paused'; });
 addEventListener('resize', render);
 

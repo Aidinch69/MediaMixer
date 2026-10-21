@@ -57,6 +57,7 @@
     </select>
   </label>
   <button id="live" class="on">● Live</button>
+  <button id="export" title="Download this session's events plus engine, drive and clip details as one file">⬇ Export diagnostics</button>
   <span id="status" class="muted"></span>
 </header>
 <main id="main">
@@ -113,6 +114,7 @@
     <div class="scroll"><table id="feed"></table></div>
   </section>
 </main>
+<script src="{{ url_for('static', filename='browser_info.js') }}"></script>
 <script src="{{ url_for('static', filename='debug.js') }}"></script>
 </body>
 </html>
