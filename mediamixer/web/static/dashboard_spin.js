@@ -120,7 +120,7 @@ function startSpinSurge() {
   tileElements.forEach((t, i) => {
     const vid = getTileVideo(i);
     if (!vid) return;
-    const natural = (tileNaturalBase[i] || 1) * globalSpeedMult();
+    const natural = (tileNaturalBase[i] || 1) * tileSpeedMult(i);
     setTimelineSpeedEffect(i, vid, 'spinSurge', SPEED_PRIORITY.spinSurge, natural * mult, SPIN_SURGE_RAMP_MS, SPIN_SURGE_MS - SPIN_SURGE_RAMP_MS * 2, SPIN_SURGE_RAMP_MS, natural);
   });
   document.body.classList.add('spin-surge-on');

@@ -48,16 +48,20 @@ function globalSpeedMult() {
   return finaleSpeedMult() * rhythmSpeedMult();
 }
 
+// globalSpeedMult plus this tile's own beat-match nudge (dashboard_content.js).
+function tileSpeedMult(i) {
+  return globalSpeedMult() * (typeof beatMatchMult === 'function' ? beatMatchMult(i) : 1);
+}
+
 setInterval(() => {
-  const mult = globalSpeedMult();
   tileElements.forEach((tile, i) => {
     const effects = tileSpeedEffects[i];
     if (effects && effects.size) return;
     const base = tileNaturalBase[i];
     const vid = getTileVideo(i);
     if (!vid || !base) return;
-    const target = base * mult;
-    if (Math.abs(vid.playbackRate - target) > 0.01) vid.playbackRate = target;
+    const target = base * tileSpeedMult(i);
+    if (Math.abs(vid.playbackRate - target) > 0.004) vid.playbackRate = target;
   });
 }, 200);
 
@@ -1005,6 +1009,7 @@ function onRhythmBeat(n) {
   rhythmFxBeat(n);
   if (downbeat) audioGlowKick = Math.max(audioGlowKick, 0.55); // updateAudioGlow decays it back down
   if (rhythmVoice !== 'off') playRhythmVoice(downbeat);
+  if (typeof visualToneBeat === 'function') visualToneBeat(downbeat);
   if (zoomFxTiles.size) kickAllZoomTiles(downbeat ? 0.9 : 0.5);
   if (n % 8 === 0) maybeMantraOnBeat(0.8);
 }

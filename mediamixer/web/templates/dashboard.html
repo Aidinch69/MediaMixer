@@ -311,7 +311,9 @@
         <div class="slider"><label>Energy Follows the Clips</label><button class="badge" id="content-energy-toggle" onclick="toggleContent('energy')">ON</button></div>
         <div class="slider"><label>Glow on Clip Peaks</label><button class="badge" id="content-peaks-toggle" onclick="toggleContent('peaks')">ON</button></div>
         <div class="slider"><label>Cuts Wait for Clip Peaks</label><button class="badge" id="content-peakCuts-toggle" onclick="toggleContent('peakCuts')">ON</button></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Every clip has its own movement curve from Clip DNA (clips not analysed yet are read live from tiny frames). Energy Follows the Clips: when the clips on screen move more than usual, the session energy lifts with them - and the binaural beat, spirals and everything else on the Shared Pulse follow - then settles as they calm. Glow on Clip Peaks: when a clip reaches one of its own motion peaks, its tile and the screen edge glow with it. Cuts Wait for Clip Peaks: about half the time, when a tile is about to change and its clip has a peak coming within a few seconds, the change waits until just after it - so you don't leave a clip mid-build. For the beat itself, pick Tempo Source → Follow Clips in Rhythm Mode: the beat takes the rhythm of the clip that's moving most (when it has a steady one), gliding as the lead clip changes. Fine-tune in Master Controls → Content Pulse.</p></details>
+        <div class="slider"><label>Beat-Matching (Rhythm Mode)</label><button class="badge" id="content-beatMatch-toggle" onclick="toggleContent('beatMatch')">ON</button></div>
+        <div class="slider"><label>Visual Tone (Rhythm Mode)</label><button class="badge" id="content-visualTone-toggle" onclick="toggleContent('visualTone')">ON</button></div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Every clip has its own movement curve from Clip DNA (clips not analysed yet are read live from tiny frames). Energy Follows the Clips: when the clips on screen move more than usual, the session energy lifts with them - and the binaural beat, spirals and everything else on the Shared Pulse follow - then settles as they calm. Glow on Clip Peaks: when a clip reaches one of its own motion peaks, its tile and the screen edge glow with it. Cuts Wait for Clip Peaks: about half the time, when a tile is about to change and its clip has a peak coming within a few seconds, the change waits until just after it - so you don't leave a clip mid-build. Beat-Matching: while Rhythm Mode runs, clips that have a steady rhythm of their own (about a quarter of them, from Clip DNA) are nudged up to 12% faster or slower (or matched at double or half speed) so their movement falls in time with the beat - only ever a small nudge, glided in; clips far off the beat are left alone. Visual Tone: the screen breathes with the beat - a soft light and the edge glow swell on each beat with the same shape as the Tone beat sound. For the beat itself, pick Tempo Source → Follow Clips in Rhythm Mode: the beat takes the rhythm of the clip that's moving most (when it has a steady one), gliding as the lead clip changes. Fine-tune in Master Controls → Content Pulse.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -485,6 +487,13 @@
   </div>
 
   <div class="panel-tab" data-tab="rewards">
+    <details class="settings-section">
+      <summary><span class="section-title">🎯 Barrages</span><span class="settings-section-desc">How often the barrage hype (a few tiles highlighted, the rest dimmed) comes up.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider"><label>Barrage odds: <b><span id="l-barrage-odds">-</span></b></label><input type="range" id="barrage-odds-input" min="0" max="0.15" step="0.005" value="0.04" oninput="setBarrageOdds(this.value)"></div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">The engine rolls for a barrage about every 3 seconds; this is the chance per roll (default 4%, lowered from 5%). After one ends there's always a rest (Master Controls → Barrage / Jackpot). Shared by every device and kept across restarts. While Auto-Pilot is on it sets the odds itself from its zone, so this applies with Auto-Pilot off.</p></details>
+      </div>
+    </details>
     <details class="settings-section">
       <summary><span class="section-title">🎆 Moments</span><span class="settings-section-desc">Structured moments: The Drop, Breath, Countdown, Focus pull, Call &amp; response, Echo trails - and the love moments.</span></summary>
       <div class="settings-section-body">

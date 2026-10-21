@@ -358,7 +358,7 @@ function render(d) {
     const pinned = !!s.pinned;
     if (tileElements[i] && tileElements[i].classList.contains('tile-pinned') !== pinned) tileElements[i].classList.toggle('tile-pinned', pinned);
     if (vid.loop !== (pinned || !!s.held)) vid.loop = pinned || !!s.held;
-    const naturalSpeed = tileNaturalBase[i] * globalSpeedMult();
+    const naturalSpeed = tileNaturalBase[i] * tileSpeedMult(i);
     const barrageTiles = d.barrage > 0 ? (d.barrage_tiles || []) : [];
     const isSelected = barrageTiles.includes(i);
     const isDimmed = barrageTiles.length > 0 && !isSelected;

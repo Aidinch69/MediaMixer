@@ -126,7 +126,7 @@ function startSlowmo(idx) {
   slowmoLastAt = Date.now();
   const inMs = 700, holdMs = TUNING.SLOWMO_HOLD_MS, outMs = 900;
   const total = inMs + holdMs + outMs;
-  setTimelineSpeedEffect(idx, vid, 'slowmo', SPEED_PRIORITY.slowmo, TUNING.SLOWMO_SPEED, inMs, holdMs, outMs, tileNaturalBase[idx] * globalSpeedMult());
+  setTimelineSpeedEffect(idx, vid, 'slowmo', SPEED_PRIORITY.slowmo, TUNING.SLOWMO_SPEED, inMs, holdMs, outMs, tileNaturalBase[idx] * tileSpeedMult(idx));
   tile.classList.add('fx-slowmo');
   // Motion-trail ghost: frames drawn over each other without clearing, so
   // movement leaves soft trails behind it.

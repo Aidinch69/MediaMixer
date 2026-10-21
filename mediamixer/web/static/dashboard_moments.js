@@ -126,7 +126,7 @@ function startBreath() {
   if (lastSynthParams) updateSynthParams(lastSynthParams);
   tileElements.forEach((t, i) => {
     const vid = getTileVideo(i);
-    if (vid) setTimelineSpeedEffect(i, vid, 'breath', SPEED_PRIORITY.breath, TUNING.BREATH_SPEED, 1500, Math.max(0, ms - 3000), 1500, (tileNaturalBase[i] || 1) * globalSpeedMult());
+    if (vid) setTimelineSpeedEffect(i, vid, 'breath', SPEED_PRIORITY.breath, TUNING.BREATH_SPEED, 1500, Math.max(0, ms - 3000), 1500, (tileNaturalBase[i] || 1) * tileSpeedMult(i));
   });
   toast('🌬️ Breathe');
   setTimeout(() => momentVeil('moment-dim', 0, 1500), Math.max(0, ms - 1500));

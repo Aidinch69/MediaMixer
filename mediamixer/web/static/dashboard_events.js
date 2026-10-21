@@ -260,7 +260,7 @@ function releaseOverdrive() {
   tileElements.forEach((t, i) => {
     const vid = getTileVideo(i);
     if (!vid) return;
-    const natural = (tileNaturalBase[i] || 1) * globalSpeedMult();
+    const natural = (tileNaturalBase[i] || 1) * tileSpeedMult(i);
     setTimelineSpeedEffect(i, vid, 'overdrive', SPEED_PRIORITY.overdrive, natural * TUNING.OVERDRIVE_SPEED_MULT, rampMs, holdMs, rampMs, natural);
   });
   if (anticipationFxEnabled) maybeTriggerSpiralOverlay();

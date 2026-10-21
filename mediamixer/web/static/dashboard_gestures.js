@@ -159,7 +159,7 @@ function setTileUserSpeed(idx, value) {
   tileUserSpeed[idx] = v;
   const vid = getTileVideo(idx);
   if (tileNaturalBase[idx]) tileNaturalBase[idx] = tileNaturalBase[idx] / old * v;
-  if (vid) resolveAndApplyTileSpeed(idx, vid, (tileNaturalBase[idx] || v) * globalSpeedMult());
+  if (vid) resolveAndApplyTileSpeed(idx, vid, (tileNaturalBase[idx] || v) * tileSpeedMult(idx));
   const now = Date.now();
   if (now - (tileSpeedLabelAt[idx] || 0) > 150) { tileSpeedLabelAt[idx] = now; showClaimRewardLabel(idx, (v >= 1 ? '⏩ ' : '⏪ ') + v.toFixed(1) + 'x'); }
 }

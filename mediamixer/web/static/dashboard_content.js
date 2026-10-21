@@ -11,7 +11,7 @@
 //  - with Rhythm Mode's tempo source on "Follow Clips", sets the beat to
 //    the rhythm of the clip that's moving most (its DNA tempo).
 
-const contentOn = { energy: true, peaks: true, peakCuts: true };
+const contentOn = { energy: true, peaks: true, peakCuts: true, beatMatch: true, visualTone: true };
 const CONTENT_TICK_MS = 125;
 const CONTENT_LIVE_W = 16, CONTENT_LIVE_H = 9;
 let contentLevel = 0; // 0..1, screen-wide movement right now
@@ -154,18 +154,23 @@ function checkContentPeak(i) {
 // ---- Follow Clips tempo ----
 // The hero clip's own rhythm (its DNA tempo at this point in the clip),
 // folded into a playable range and glided so it never jumps.
-function contentHeroBpm() {
-  if (contentHero < 0) return null;
-  const dna = contentDna(contentHero);
-  const vid = getTileVideo(contentHero);
+// A clip's own rhythm at its current position: the most confident DNA
+// tempo window covering it, else its overall tempo (null = no steady rhythm).
+function clipTempoAt(i) {
+  const dna = contentDna(i);
+  const vid = getTileVideo(i);
   if (!dna || !vid) return null;
-  let bpm = null;
   if (dna.tempo_track) {
     const t = vid.currentTime;
     const w = dna.tempo_track.filter((x) => x[1] && x[0] <= t && t <= x[0] + 8).sort((a, b) => b[2] - a[2])[0];
-    if (w) bpm = w[1];
+    if (w) return w[1];
   }
-  bpm = bpm || dna.tempo;
+  return dna.tempo || null;
+}
+
+function contentHeroBpm() {
+  if (contentHero < 0) return null;
+  let bpm = clipTempoAt(contentHero);
   if (!bpm) return null;
   while (bpm < 70) bpm *= 2;
   while (bpm > 140) bpm /= 2;
@@ -215,7 +220,82 @@ function checkPeakCuts() {
   });
 }
 
-setInterval(() => { contentTick(); checkPeakCuts(); }, CONTENT_TICK_MS);
+// ---- Beat-matching ----
+// While Rhythm Mode runs, clips with a steady rhythm of their own are nudged
+// a few percent faster or slower so their movement falls in time with the
+// beat (or twice / half as fast - whichever is nearest). Only when it's a
+// small nudge (TUNING.BEAT_MATCH_MAX); a clip far off the beat is left
+// alone rather than visibly sped up. Glided, so it's never a jump.
+const beatMatch = []; // tile -> { path, m }
+
+function beatMatchMult(i) {
+  const b = beatMatch[i];
+  return b && b.path === currentPaths[i] ? b.m : 1;
+}
+
+function beatMatchTarget(i) {
+  if (!contentOn.beatMatch || !rhythmActive()) return 1;
+  const clipBpm = clipTempoAt(i);
+  if (!clipBpm) return 1;
+  // How fast its rhythm plays right now, before any beat-match nudge.
+  const playing = clipBpm * (tileNaturalBase[i] || 1) * globalSpeedMult();
+  const beat = currentRhythmBpm();
+  // The nudge to the nearest of half / same / double the beat, if it's small.
+  const m = [0.5, 1, 2].map((k) => (beat * k) / playing).sort((a, b) => Math.abs(a - 1) - Math.abs(b - 1))[0];
+  return Math.abs(m - 1) <= TUNING.BEAT_MATCH_MAX ? m : 1;
+}
+
+function beatMatchTick(dt) {
+  tileElements.forEach((t, i) => {
+    const path = currentPaths[i];
+    let b = beatMatch[i];
+    if (!b || b.path !== path) b = beatMatch[i] = { path, m: 1 };
+    const target = beatMatchTarget(i);
+    b.m += (target - b.m) * (1 - Math.exp(-dt / 1500));
+    if (Math.abs(b.m - 1) < 0.001 && target === 1) b.m = 1;
+  });
+  beatMatch.length = tileElements.length;
+}
+
+// How many tiles are locked to the beat right now (for the menu / log).
+function beatMatchedCount() {
+  return beatMatch.filter((b, i) => b && b.path === currentPaths[i] && Math.abs(b.m - 1) > 0.002).length;
+}
+
+// ---- Visual Tone ----
+// The screen breathes with the beat: a soft light over the screens and the
+// edge glow swell on each beat with the same shape as the Tone voice
+// (quick rise, easing back over a third of the beat), downbeats a bit more.
+let beatVeil = null;
+
+function visualToneBeat(downbeat) {
+  if (!contentOn.visualTone || document.hidden) return;
+  if (!beatVeil) {
+    const theater = document.getElementById('theater-box');
+    if (!theater) return;
+    beatVeil = document.createElement('div');
+    beatVeil.id = 'beat-veil';
+    theater.appendChild(beatVeil);
+  }
+  const k = TUNING.VISUAL_TONE_STRENGTH * (downbeat ? 1 : 0.65);
+  const beatMs = Math.min(1000, 60000 / Math.max(30, currentRhythmBpm()));
+  beatVeil.animate([
+    { opacity: 0 },
+    { opacity: k, offset: Math.min(0.2, 40 / beatMs) },
+    { opacity: 0 },
+  ], { duration: beatMs * 0.95, easing: 'ease-out' });
+  audioGlowKick = Math.max(audioGlowKick, Math.min(0.9, k * 2.6));
+}
+
+let contentLastTickAt = performance.now();
+setInterval(() => {
+  const now = performance.now();
+  const dt = Math.min(500, now - contentLastTickAt);
+  contentLastTickAt = now;
+  contentTick();
+  checkPeakCuts();
+  beatMatchTick(dt);
+}, CONTENT_TICK_MS);
 
 // ---- prefs ----
 function loadContentPrefs() {
@@ -236,7 +316,8 @@ function updateContentUi() {
   if (el) {
     const dna = contentHero >= 0 ? contentDna(contentHero) : null;
     el.innerText = 'Movement now ' + Math.round(contentLevel * 100) + '% (usual ' + Math.round(contentBaseline * 100) + '%)' +
-      (contentTempo ? ' · clip rhythm ~' + Math.round(contentTempo) + ' BPM' : dna ? ' · lead clip has no steady rhythm' : '');
+      (contentTempo ? ' · clip rhythm ~' + Math.round(contentTempo) + ' BPM' : dna ? ' · lead clip has no steady rhythm' : '') +
+      (rhythmActive() && contentOn.beatMatch ? ' · ' + beatMatchedCount() + ' tile(s) moving in time with the beat' : '');
   }
 }
 setInterval(() => { if (document.getElementById('content-status')) updateContentUi(); }, 2000);

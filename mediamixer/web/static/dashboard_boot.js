@@ -46,6 +46,7 @@ window.onload = () => {
   loadContentPrefs();
   loadHookPrefs();
   loadGravityPrefs();
+  loadEngineConfig(); // engine-side settings (e.g. the Barrages slider) - not only when Master opens
   loadSessionPrefs();
   loadScenes();
   loadAnticipationPrefs();

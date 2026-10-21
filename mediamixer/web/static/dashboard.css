@@ -650,6 +650,7 @@ button:hover{background:#251538;border-color:#b84dff;box-shadow:0 0 10px rgba(18
 @keyframes content-peak-anim{0%{opacity:0}18%{opacity:1}100%{opacity:0}}
 .fx-hook{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1;pointer-events:none;opacity:0;background:#020105}
 .fx-hook.shown{opacity:1}
+#beat-veil{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0;mix-blend-mode:screen;background:radial-gradient(ellipse at center,rgba(var(--mood-glow,var(--theme-glow,255,70,30)),.35) 0%,rgba(255,240,230,.18) 60%,rgba(var(--mood-glow,var(--theme-glow,255,70,30)),.5) 100%)}
 .fx-split{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1;pointer-events:none;opacity:0;transition:opacity .35s ease;background:#020105}
 .fx-split.shown{opacity:1}
 .split-lines{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0;transition:opacity .35s ease}
