@@ -7,7 +7,6 @@
 // goes up, so coming back later always has somewhere to pick up from.
 const XP_STORAGE_KEY = 'mm_xp_state';
 const XP_PER_TIER = { small: 10, medium: 20, mega: 40, milestone: 60 };
-const PRESTIGE_LEVEL_CAP = 20;
 let xpTotal = 0;
 let xpLevel = 1;
 let prestigeCount = 0;
@@ -48,18 +47,16 @@ function updateLevelUi() {
     el.innerText = stars + 'LV ' + xpLevel + ' · ' + xpTotal + 'xp (' + pct + '% to ' + (xpLevel + 1) + ')' + legacyTag;
   }
   const btn = document.getElementById('prestige-btn');
-  if (btn) btn.style.display = xpLevel >= PRESTIGE_LEVEL_CAP ? 'inline-block' : 'none';
+  if (btn) btn.style.display = xpLevel >= TUNING.PRESTIGE_LEVEL_CAP ? 'inline-block' : 'none';
 }
 
 // Prestige Legacy Carry-over: each star is a permanent +5% XP bonus (capped
 // at 50% / 10 stars) rather than prestiging being a pure reset - "trading
 // back to 0" should leave something behind that keeps paying off, not just
 // a cosmetic star.
-const LEGACY_BONUS_PER_STAR = 0.05;
-const LEGACY_BONUS_CAP = 0.5;
 
 function legacyBonusMultiplier() {
-  return 1 + Math.min(prestigeCount, 10) * LEGACY_BONUS_PER_STAR;
+  return 1 + Math.min(prestigeCount, 10) * TUNING.LEGACY_BONUS_PER_STAR;
 }
 
 function awardXp(amount) {
@@ -75,13 +72,13 @@ function awardXp(amount) {
 // star rank instead of the number just climbing forever uncapped - keeps
 // "leveling up" meaningful again after the curve would otherwise flatten.
 function prestige() {
-  if (xpLevel < PRESTIGE_LEVEL_CAP) return;
+  if (xpLevel < TUNING.PRESTIGE_LEVEL_CAP) return;
   prestigeCount++;
   xpTotal = 0;
   recomputeLevel();
   updateLevelUi();
   saveXpState();
-  toast('🌟 Prestige ' + prestigeCount + '! +' + Math.round(LEGACY_BONUS_PER_STAR * 100) + '% permanent XP');
+  toast('🌟 Prestige ' + prestigeCount + '! +' + Math.round(TUNING.LEGACY_BONUS_PER_STAR * 100) + '% permanent XP');
   checkTrophies();
 }
 
@@ -91,14 +88,13 @@ function prestige() {
 // odds, so a burst of activity feels electric regardless of which mechanic
 // it's coming through, instead of each mechanic tracking its own isolated
 // streak that never interacts with the others.
-const COMBO_WINDOW_MS = 4000;
 let comboCount = 0;
 let comboExpireAt = 0;
 
 function registerCombo() {
   const now = Date.now();
   comboCount = now < comboExpireAt ? comboCount + 1 : 1;
-  comboExpireAt = now + COMBO_WINDOW_MS;
+  comboExpireAt = now + TUNING.COMBO_WINDOW_MS;
   updateComboUi();
   return comboMultiplier();
 }

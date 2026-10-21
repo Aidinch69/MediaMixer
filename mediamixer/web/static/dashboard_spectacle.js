@@ -110,13 +110,12 @@ function maybeTriggerSpiralOverlay() {
 // checked every 20s) since a spiral now runs a genuinely long time
 // (30-60s hold); maybeTriggerSpiralOverlay's own spiralActive guard
 // still applies, so this never interrupts one already running.
-const HEART_SPIRAL_CHECK_MS = 20000;
 
 function maybeTriggerSpiralFromHearts() {
   if (heartMultiplier <= 0 || spiralActive) return;
   if (Math.random() < 0.04 * heartMultiplier * (1 + autopilotAmbientBoost)) maybeTriggerSpiralOverlay();
 }
-setInterval(maybeTriggerSpiralFromHearts, HEART_SPIRAL_CHECK_MS);
+setInterval(maybeTriggerSpiralFromHearts, TUNING.HEART_SPIRAL_CHECK_MS);
 
 // ---- Color Rush ----
 // A rare, short multi-color event combining several pieces at once:
@@ -128,7 +127,6 @@ setInterval(maybeTriggerSpiralFromHearts, HEART_SPIRAL_CHECK_MS);
 // DOM-spawned confetti) - accepted on purpose rather than the usual
 // opacity/transform-only restraint elsewhere, since it's rare and
 // short-lived rather than ambient/constant.
-const COLOR_RUSH_DURATION_MS = 12000;
 const COLOR_RUSH_STREAK_COUNT = 28;
 const COLOR_RUSH_HUES = [340, 280, 220, 160, 90, 40]; // pink, purple, blue, green, lime, gold
 let colorRushActive = false;
@@ -230,16 +228,16 @@ function triggerColorRush() {
   if (colorRushActive || !tileElements.length) return;
   colorRushActive = true;
   toast('🌈 Color Rush!');
-  fireDiscoRain(COLOR_RUSH_DURATION_MS);
-  fireDiscoBorder(COLOR_RUSH_DURATION_MS);
-  fireScreenBeat(COLOR_RUSH_DURATION_MS);
-  fireDiscoTilePulse(COLOR_RUSH_DURATION_MS);
+  fireDiscoRain(TUNING.COLOR_RUSH_DURATION_MS);
+  fireDiscoBorder(TUNING.COLOR_RUSH_DURATION_MS);
+  fireScreenBeat(TUNING.COLOR_RUSH_DURATION_MS);
+  fireDiscoTilePulse(TUNING.COLOR_RUSH_DURATION_MS);
   burstConfetti(50);
-  const midBurst = setTimeout(() => burstConfetti(30), COLOR_RUSH_DURATION_MS / 2);
+  const midBurst = setTimeout(() => burstConfetti(30), TUNING.COLOR_RUSH_DURATION_MS / 2);
   setTimeout(() => {
     clearTimeout(midBurst);
     colorRushActive = false;
-  }, COLOR_RUSH_DURATION_MS + 1000); // +1000 covers disco-rain's own fade-out tail above
+  }, TUNING.COLOR_RUSH_DURATION_MS + 1000); // +1000 covers disco-rain's own fade-out tail above
 }
 startTunableInterval('COLOR_RUSH_CHECK_MS', maybeTriggerColorRush);
 
@@ -325,20 +323,17 @@ startTunableInterval('DOUBLE_FEATURE_CHECK_MS', maybeTriggerDoubleFeature);
 // Ambient color-breathe: purely decorative, no mechanic behind it at
 // all - just a slow multi-color pulse on a random tile every so often,
 // to keep an idle grid feeling a little alive even between real events.
-const AMBIENT_PULSE_CHECK_MS = 25000;
-const AMBIENT_PULSE_PROBABILITY = 0.3;
-const AMBIENT_PULSE_DURATION_MS = 12000;
 
 function maybeTriggerAmbientPulse() {
   if (anticipationActive || !tileGlowEls.length) return;
-  if (Math.random() >= AMBIENT_PULSE_PROBABILITY) return;
+  if (Math.random() >= TUNING.AMBIENT_PULSE_PROBABILITY) return;
   const idx = Math.floor(Math.random() * tileGlowEls.length);
   const el = tileGlowEls[idx];
   if (!el) return;
   el.classList.remove('ambient-breath');
   void el.offsetWidth; // restart the animation cleanly if one was already mid-cycle
   el.classList.add('ambient-breath');
-  setTimeout(() => el.classList.remove('ambient-breath'), AMBIENT_PULSE_DURATION_MS);
+  setTimeout(() => el.classList.remove('ambient-breath'), TUNING.AMBIENT_PULSE_DURATION_MS);
 }
 
 function clearMysteryTile(idx, trueMysteryReveal) {

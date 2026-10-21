@@ -94,7 +94,6 @@ function smartFramingPan(i, dt) {
 // seconds already buffered, so a real stall can't coincide with it.
 let slowmoTileIndex = -1;
 let slowmoLastAt = 0;
-const SLOWMO_CHECK_MS = 6000;
 
 function slowmoBufferedAhead(vid) {
   try {
@@ -116,7 +115,7 @@ function maybeTriggerSlowmo() {
   const ready = candidates.filter((i) => { const v = getTileVideo(i); return v && v.readyState >= 3 && !v.paused && slowmoBufferedAhead(v) >= 4; });
   if (ready.length) startSlowmo(ready[Math.floor(Math.random() * ready.length)]);
 }
-setInterval(maybeTriggerSlowmo, SLOWMO_CHECK_MS);
+setInterval(maybeTriggerSlowmo, TUNING.SLOWMO_CHECK_MS);
 
 function startSlowmo(idx) {
   const tile = tileElements[idx];
@@ -168,9 +167,6 @@ function startSlowmo(idx) {
 // few seconds, then separates. Revealed only once it's actually playing.
 let doubleExposureTileIndex = -1;
 let doubleExposureLastAt = 0;
-const DOUBLE_EXPOSURE_CHECK_MS = 30000;
-const DOUBLE_EXPOSURE_FADE_IN_MS = 2000;
-const DOUBLE_EXPOSURE_FADE_OUT_MS = 2500;
 
 function maybeTriggerDoubleExposure() {
   if (!livingDouble || perfLite() || doubleExposureTileIndex >= 0 || document.hidden || !tileElements.length) return;
@@ -181,7 +177,7 @@ function maybeTriggerDoubleExposure() {
   const candidates = tileElements.map((t, i) => i).filter((i) => !busy.has(i));
   if (candidates.length) startDoubleExposure(candidates[Math.floor(Math.random() * candidates.length)]);
 }
-setInterval(maybeTriggerDoubleExposure, DOUBLE_EXPOSURE_CHECK_MS);
+setInterval(maybeTriggerDoubleExposure, TUNING.DOUBLE_EXPOSURE_CHECK_MS);
 
 function startDoubleExposure(idx) {
   const tile = tileElements[idx];
@@ -212,8 +208,8 @@ function startDoubleExposure(idx) {
         if (!over.isConnected || elapsed >= ms) { finish(); return; }
         // Slow in, slow out - a second clip appearing should drift into
         // view, not pop (the shared FX envelope's 0.4s fade-in is too quick).
-        const fadeIn = Math.min(1, elapsed / DOUBLE_EXPOSURE_FADE_IN_MS);
-        const fadeOut = Math.min(1, (ms - elapsed) / DOUBLE_EXPOSURE_FADE_OUT_MS);
+        const fadeIn = Math.min(1, elapsed / TUNING.DOUBLE_EXPOSURE_FADE_IN_MS);
+        const fadeOut = Math.min(1, (ms - elapsed) / TUNING.DOUBLE_EXPOSURE_FADE_OUT_MS);
         const k = fxSmoothstep(Math.max(0, fadeIn)) * fxSmoothstep(Math.max(0, fadeOut));
         over.style.opacity = (k * TUNING.DOUBLE_EXPOSURE_OPACITY).toFixed(3);
         requestAnimationFrame(step);
@@ -253,7 +249,6 @@ const GRADIENT_KINDS = {
   warmth: '🎨 Gradient · cool → warm',
   motion: '🎨 Gradient · calm → wild',
 };
-const GRADIENT_CHECK_MS = 45000;
 let livingGradient = true;
 let livingDoubleMatch = true;
 let gradientLastAt = 0;
@@ -267,7 +262,7 @@ function maybeTriggerGradient() {
   const kinds = Object.keys(GRADIENT_KINDS);
   startGradient(kinds[Math.floor(Math.random() * kinds.length)]);
 }
-setInterval(maybeTriggerGradient, GRADIENT_CHECK_MS);
+setInterval(maybeTriggerGradient, TUNING.GRADIENT_CHECK_MS);
 
 function startGradient(metric) {
   gradientLastAt = Date.now();

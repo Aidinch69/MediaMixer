@@ -11,6 +11,7 @@ const MASTER_AREA_OF_GROUP = {
   'Floater Barrage': 'Screen', 'Custom Loop Point': 'Screen', 'Living Screen': 'Screen', 'Visual Textures': 'Screen', 'Hooks & Tease': 'Screen', 'Replays & Callbacks': 'Rewards', 'Gravity': 'Screen',
   'Auto-Pilot': 'Flow', 'Rhythm & Pulse': 'Flow', 'Rhythm FX': 'Flow', 'Content Pulse': 'Flow', 'Moments': 'Rewards', 'Taste Learning': 'Flow', 'Surges': 'Flow', 'Fresh Drops': 'Flow',
   'Audio-Reactive': 'Sound', 'Spatial Sound': 'Sound',
+  'Floater Motion': 'Screen', 'Auto-Pilot Zones': 'Flow', 'Living Screen Timing': 'Screen', 'Tile FX & Mantras': 'Screen', 'Tiles & Gestures': 'Screen', 'Session & Finale': 'Flow', 'Performance (Auto)': 'Screen', 'Brainwave': 'Sound',
 };
 // Engine field group -> menu area (everything else lands in Rewards).
 const MASTER_AREA_OF_ENGINE_GROUP = { 'Tension Curve': 'Screen', 'Selection (Bandit)': 'Flow' };

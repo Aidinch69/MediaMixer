@@ -14,9 +14,7 @@
 
 const PERF_KEY = 'mm_perf';
 const PERF_CHECK_MS = 10000;
-const PERF_DROP_LIMIT = 0.25; // share of tile video frames dropped in a check window
 const PERF_MIN_FRAMES = 120; // too little played to judge
-const PERF_BAD_WINDOWS = 2; // in a row
 const PERF_LIGHT_FX = ['prism', 'zoom', 'vhs']; // CSS-only tile effects - no canvas copies or SVG filters
 const PERF_LIGHT_FLOATERS = 1;
 const PERF_LIGHT_FLOATER_BARRAGE = 4;
@@ -90,8 +88,8 @@ function perfCheck() {
   perfLastDropRatio = dropped / frames;
   updatePerfUi();
   if (perfMode !== 'auto' || perfAutoLight) return;
-  perfBadWindows = perfLastDropRatio > PERF_DROP_LIMIT ? perfBadWindows + 1 : 0;
-  if (perfBadWindows < PERF_BAD_WINDOWS) return;
+  perfBadWindows = perfLastDropRatio > TUNING.PERF_DROP_LIMIT ? perfBadWindows + 1 : 0;
+  if (perfBadWindows < TUNING.PERF_BAD_WINDOWS) return;
   perfAutoLight = true;
   savePerfPrefs();
   if (typeof logEvent === 'function') logEvent('perf.light', { auto: true, dropped: +perfLastDropRatio.toFixed(2) });

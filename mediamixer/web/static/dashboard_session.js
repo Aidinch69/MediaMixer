@@ -11,7 +11,6 @@
 // little. Nothing stops playing, nothing saved is changed, and Keep going
 // puts it all back exactly as it was.
 const WIND_DOWN_DEFAULT_MS = 5 * 60000;
-const WIND_DOWN_MAX_DIM = 0.45;
 let windDown = null;
 let windDownScheduledAt = 0; // when a chosen session length starts its wind-down
 let windDownLastIntensityAt = 0;
@@ -64,7 +63,7 @@ setInterval(() => {
   if (!windDown && windDownScheduledAt && Date.now() >= windDownScheduledAt) startWindDown();
   if (!windDown) return;
   const k = windDownK();
-  document.getElementById('wind-down-dim').style.opacity = (WIND_DOWN_MAX_DIM * k).toFixed(3);
+  document.getElementById('wind-down-dim').style.opacity = (TUNING.WIND_DOWN_MAX_DIM * k).toFixed(3);
   if (!autopilotEnabled) {
     const want = Math.max(windDown.saved.pace, windDownPaceFloor());
     if (lastStatusData && lastStatusData.pace_idx !== want) { pace(want, true); setSceneInput('pace-input', want); }

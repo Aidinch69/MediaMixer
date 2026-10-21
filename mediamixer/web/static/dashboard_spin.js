@@ -86,19 +86,16 @@ function rollSpinOutcome() {
 // or guaranteed, cashes the streak in.
 const SPIN_STREAK_TARGET = 5;
 const SPIN_DOUBLE_CHARGES = 3; // catches/claims/unlocks the x2 outcome covers
-const SPIN_RHYTHM_MS = 90000; // a little over one full tempo wave
-const SPIN_MANTRA_RUSH_MS = 20000;
 let spinStreak = 0;
 let spinDoubleCharges = 0;
 let spinRhythmUntil = 0; // read by rhythmActive() in dashboard_layers.js
 let spinMantraRushUntil = 0; // read by mantraIntensity() in dashboard_layers.js
 
 // Spin Surge: a rare high-end pull, one notch under Overdrive. Every tile
-// ramps up to a shared random 1.15-1.3x for SPIN_SURGE_MS (then eases
+// ramps up to a shared random 1.15-1.3x for TUNING.SPIN_SURGE_MS (then eases
 // back), colors run richer through the tension filter render() already
 // writes (so it never fights Prism/VHS for the filter), the passive
 // Surge odds boost runs alongside it, and a cyan edge glow marks it.
-const SPIN_SURGE_MS = 18000;
 const SPIN_SURGE_RAMP_MS = 1500;
 let spinSurgeStartedAt = 0;
 let spinSurgeEndsAt = 0;
@@ -114,14 +111,14 @@ function spinSurgeColorBoost() {
 function startSpinSurge() {
   const now = Date.now();
   spinSurgeStartedAt = now;
-  spinSurgeEndsAt = now + SPIN_SURGE_MS;
+  spinSurgeEndsAt = now + TUNING.SPIN_SURGE_MS;
   surgeExpireAt = Math.max(surgeExpireAt, spinSurgeEndsAt);
   const mult = randomInRange(1.15, 1.3);
   tileElements.forEach((t, i) => {
     const vid = getTileVideo(i);
     if (!vid) return;
     const natural = (tileNaturalBase[i] || 1) * tileSpeedMult(i);
-    setTimelineSpeedEffect(i, vid, 'spinSurge', SPEED_PRIORITY.spinSurge, natural * mult, SPIN_SURGE_RAMP_MS, SPIN_SURGE_MS - SPIN_SURGE_RAMP_MS * 2, SPIN_SURGE_RAMP_MS, natural);
+    setTimelineSpeedEffect(i, vid, 'spinSurge', SPEED_PRIORITY.spinSurge, natural * mult, SPIN_SURGE_RAMP_MS, TUNING.SPIN_SURGE_MS - SPIN_SURGE_RAMP_MS * 2, SPIN_SURGE_RAMP_MS, natural);
   });
   document.body.classList.add('spin-surge-on');
   fireColorSplashPiece('border');
@@ -133,7 +130,7 @@ function startSpinSurge() {
     tileElements.forEach((t, i) => { const v = getTileVideo(i); if (v) applyTileTensionFilter(i, v); });
   }, 200);
   clearTimeout(spinSurgeEndTimer);
-  spinSurgeEndTimer = setTimeout(() => document.body.classList.remove('spin-surge-on'), SPIN_SURGE_MS - FX_FADE_OUT_MS);
+  spinSurgeEndTimer = setTimeout(() => document.body.classList.remove('spin-surge-on'), TUNING.SPIN_SURGE_MS - TUNING.FX_FADE_OUT_MS);
   return mult;
 }
 
@@ -301,7 +298,7 @@ function spin() {
     } else if (outcome === 'surge') {
       const mult = startSpinSurge();
       showSpinResult('🚀 SURGE!');
-      toast('🚀 Surge! Everything ' + mult.toFixed(2) + 'x for ' + SPIN_SURGE_MS / 1000 + 's, odds up');
+      toast('🚀 Surge! Everything ' + mult.toFixed(2) + 'x for ' + TUNING.SPIN_SURGE_MS / 1000 + 's, odds up');
     } else if (outcome === 'spiral') {
       maybeTriggerSpiralOverlay();
       playChimeSound(0.7, 0.9);
@@ -309,13 +306,13 @@ function spin() {
       toast('🌀 Spiral!');
     } else if (outcome === 'mantra') {
       // A center trance line, a burst around it, then mantras keep coming
-      // faster than usual for SPIN_MANTRA_RUSH_MS.
-      spinMantraRushUntil = Date.now() + SPIN_MANTRA_RUSH_MS;
+      // faster than usual for TUNING.SPIN_MANTRA_RUSH_MS.
+      spinMantraRushUntil = Date.now() + TUNING.SPIN_MANTRA_RUSH_MS;
       showMantra('trance');
       setTimeout(() => mantraBurst(5), 700);
       scheduleNextMantra();
       showSpinResult('💬 Mantra!');
-      toast('💬 Mantra rush for ' + SPIN_MANTRA_RUSH_MS / 1000 + 's');
+      toast('💬 Mantra rush for ' + TUNING.SPIN_MANTRA_RUSH_MS / 1000 + 's');
     } else if (outcome === 'double') {
       spinDoubleCharges += SPIN_DOUBLE_CHARGES;
       saveSpinState();
@@ -323,9 +320,9 @@ function spin() {
       showSpinResult('⚡ x2 Catches!');
       toast('⚡ Your next ' + SPIN_DOUBLE_CHARGES + ' catches, claims or unlocks pay double (' + spinDoubleCharges + ' banked)');
     } else if (outcome === 'rhythm') {
-      spinRhythmUntil = Date.now() + SPIN_RHYTHM_MS;
+      spinRhythmUntil = Date.now() + TUNING.SPIN_RHYTHM_MS;
       showSpinResult('🥁 Rhythm!');
-      toast('🥁 Rhythm Mode for ' + SPIN_RHYTHM_MS / 1000 + 's - ride the wave');
+      toast('🥁 Rhythm Mode for ' + TUNING.SPIN_RHYTHM_MS / 1000 + 's - ride the wave');
     } else if (outcome === 'respin') {
       spinReadyAt = Date.now();
       playChimeSound(0.6, 1.2);

@@ -108,7 +108,6 @@ function maybeTriggerSealedTile() {
   }
 }
 
-const SEALED_LOCK_DIM_OPACITY = 0.4; // matches .tile-sealed-dim::after's old CSS default
 
 function fadeSealedDim(idx, durationMs) {
   endFadeableOverlay(tileElements[idx], 'tile-sealed-dim', 'sealed-dim', durationMs);
@@ -133,7 +132,7 @@ function activateSealedTile(idx) {
   // genuine slowdown.
   const tile = tileElements[idx];
   if (tile) {
-    startFadeableOverlay(tile, 'tile-sealed-dim', 'sealed-dim', SEALED_LOCK_DIM_OPACITY, 0); // instant on, same as before
+    startFadeableOverlay(tile, 'tile-sealed-dim', 'sealed-dim', TUNING.SEALED_LOCK_DIM_OPACITY, 0); // instant on, same as before
     tile.classList.remove('tile-sealed-missed');
   }
   const vid = getTileVideo(idx);

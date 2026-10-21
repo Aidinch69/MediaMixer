@@ -5,26 +5,26 @@
 setInterval(updateSpinButton, 1000);
 
 window.addEventListener('resize', () => { if (mosaicEnabled) layoutMosaic(); });
-setInterval(() => { if (mosaicEnabled) layoutMosaic(); }, MOSAIC_REFLOW_INTERVAL_MS);
-setInterval(maybeTriggerFakeNearMiss, FAKE_NEAR_MISS_CHECK_MS);
+setInterval(() => { if (mosaicEnabled) layoutMosaic(); }, TUNING.MOSAIC_REFLOW_INTERVAL_MS);
+setInterval(maybeTriggerFakeNearMiss, TUNING.FAKE_NEAR_MISS_CHECK_MS);
 startTunableInterval('BONUS_WINDOW_CHECK_MS', maybeTriggerBonusWindow);
 startTunableInterval('CHASE_CHECK_MS', maybeTriggerChase);
 setInterval(tickSessionTimer, 1000);
 setInterval(tickStreakWarning, 1000);
 setInterval(tickGoldenHour, 5000);
-setInterval(maybeTriggerSurge, SURGE_CHECK_MS);
+setInterval(maybeTriggerSurge, TUNING.SURGE_CHECK_MS);
 setInterval(tickSurgeBadge, 5000);
 setInterval(tickAnticipationMeter, 1000);
 setInterval(tickDueAura, 5000);
 startTunableInterval('MYSTERY_TILE_CHECK_MS', maybeTriggerMysteryTile);
-setInterval(maybeTriggerAmbientPulse, AMBIENT_PULSE_CHECK_MS);
+setInterval(maybeTriggerAmbientPulse, TUNING.AMBIENT_PULSE_CHECK_MS);
 
 // Session-opening primer: guarantee a near-miss within the first ~15-25s
 // of opening the dashboard (if anticipation/near-miss are on), so a
 // session never starts cold waiting for the random checks to land one.
 function runSessionPrimer() {
   if (anticipationFxEnabled && nearMissEnabled && !anticipationActive && !lastKnownBarrage && !lastKnownJackpot) {
-    runAnticipationBuildUp(FAKE_NEAR_MISS_BUILD_S, false);
+    runAnticipationBuildUp(TUNING.FAKE_NEAR_MISS_BUILD_S, false);
   }
 }
 

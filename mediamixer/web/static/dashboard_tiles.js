@@ -2,7 +2,6 @@
 // loaded in the order listed in dashboard.html.
 // Tile/layout state, custom loop points, featured clips, Mosaic fit and the tile speed controller.
 
-const RANDOM_START_MAX_FRACTION = 0.5; // clips start somewhere in their first 0-50%
 const BINAURAL_BASE_GAIN = 0.15;
 
 // Browsers cap concurrent connections to ~6 per origin (HTTP/1.1). A big grid
@@ -136,14 +135,13 @@ function applyLoopAnchorIfReady(i, path) {
 // real about the content, not a random ambient flourish the way Mosaic
 // Fit's aspect-driven sizing already varies tile shape for unrelated
 // reasons.
-const FEATURED_HEART_THRESHOLD = 2; // 1 heart could be a slip; 2+ is a real favorite
 
 function applyFeaturedIfReady(i, path) {
   if (currentPaths[i] !== path) return;
   const tile = tileElements[i];
   if (!tile) return;
   const heartCount = videoMetaCache[path] ? videoMetaCache[path].heart_count : 0;
-  tile.classList.toggle('tile-featured', heartCount >= FEATURED_HEART_THRESHOLD);
+  tile.classList.toggle('tile-featured', heartCount >= TUNING.FEATURED_HEART_THRESHOLD);
 }
 
 // One request per clip load feeds both Custom Loop Point and Featured
@@ -175,10 +173,9 @@ function fetchVideoMetaFor(i, path) {
 // become known once a clip's metadata loads, and clips rotate on their own
 // independent schedules, so reflowing on every single change would make
 // neighboring tiles constantly resize around each other; instead this
-// reflows periodically (MOSAIC_REFLOW_INTERVAL_MS) plus a few explicit
+// reflows periodically (TUNING.MOSAIC_REFLOW_INTERVAL_MS) plus a few explicit
 // triggers (toggling on, tile count changing, window resize, and once
 // shortly after a tile's *first* real aspect ratio arrives).
-const MOSAIC_REFLOW_INTERVAL_MS = 8000;
 const DEFAULT_ASPECT = 16 / 9;
 let mosaicEnabled = true;
 let aspectRatios = [];

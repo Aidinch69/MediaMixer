@@ -28,7 +28,6 @@ const CYCLE_DRIFT_FRAC = 0.2;
 const CYCLE_DRIFT_PERIOD_MS = 17 * 60000;
 // A rare, brief head-fake while climbing toward a climax - not just
 // surface flourish, an actual temporary dip in the real curve.
-const FAKEOUT_PROBABILITY_PER_TICK = 0.015;
 const FAKEOUT_DURATION_MS = 6000;
 const FAKEOUT_MULT = 0.3;
 // Multi-cycle "season": every 3rd cycle gets a raised ceiling, but only
@@ -147,11 +146,10 @@ let autopilotZone = null;
 let autopilotZoneStartedAt = 0;
 let autopilotPrevZone = null; // for crossfade and transition-chemistry recording
 let autopilotZoneChangedAt = 0;
-const ZONE_CROSSFADE_MS = 15000;
 
 // Falls back to 1 (no-op) whenever Auto-Pilot is off, so manual play is
 // never affected by zone weighting at all. Crossfades from the previous
-// zone's multiplier over ZONE_CROSSFADE_MS instead of an instant snap
+// zone's multiplier over TUNING.ZONE_CROSSFADE_MS instead of an instant snap
 // the moment a new zone is picked, so a zone change doesn't yank every
 // odds table to its new value in one tick.
 function autopilotZoneMultiplier(key) {
@@ -159,8 +157,8 @@ function autopilotZoneMultiplier(key) {
   const current = AUTOPILOT_ZONES[autopilotZone][key];
   if (!autopilotPrevZone) return current;
   const age = Date.now() - autopilotZoneChangedAt;
-  if (age >= ZONE_CROSSFADE_MS) return current;
-  return lerp(AUTOPILOT_ZONES[autopilotPrevZone][key], current, age / ZONE_CROSSFADE_MS);
+  if (age >= TUNING.ZONE_CROSSFADE_MS) return current;
+  return lerp(AUTOPILOT_ZONES[autopilotPrevZone][key], current, age / TUNING.ZONE_CROSSFADE_MS);
 }
 
 // A small, short-lived boost layered on top of the slow zone-satiation
@@ -252,7 +250,6 @@ let zoneTimesPicked = zoneMap(0);
 // as choice (does engagement tend to rise more after Vault->Chase than
 // after Vault->Color?).
 let zoneTransitionPayoff = {};
-const COLD_ZONE_INSURANCE_PROBABILITY = 0.12;
 
 function loadZonePayoffPrefs() {
   try {
@@ -302,7 +299,7 @@ function pickAutopilotZone(excludeName, fromZone) {
   // shot - otherwise an unlucky first impression could bury a zone
   // under a low EMA score it then never gets picked often enough to
   // recover from.
-  if (Math.random() < COLD_ZONE_INSURANCE_PROBABILITY) {
+  if (Math.random() < TUNING.COLD_ZONE_INSURANCE_PROBABILITY) {
     const minPicks = Math.min(...names.map((z) => zoneTimesPicked[z]));
     const coldest = names.filter((z) => zoneTimesPicked[z] === minPicks);
     const picked = coldest[Math.floor(Math.random() * coldest.length)];
@@ -578,7 +575,7 @@ function autopilotTick() {
   const { a: ambA, b: ambB, lf: ambLf } = autopilotPhaseAt(ambientFrac);
 
   // Rare head-fake while climbing: a brief real dip, not just a visual flourish.
-  if (!autopilotFakeoutActive && lf > 0.3 && lf < 0.65 && Math.random() < FAKEOUT_PROBABILITY_PER_TICK) {
+  if (!autopilotFakeoutActive && lf > 0.3 && lf < 0.65 && Math.random() < TUNING.FAKEOUT_PROBABILITY_PER_TICK) {
     autopilotFakeoutActive = true;
     autopilotFakeoutUntil = now + FAKEOUT_DURATION_MS;
   }

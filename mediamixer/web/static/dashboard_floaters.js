@@ -9,11 +9,6 @@
 // bounce. Pure CSS-transition driven (one transition covers the whole
 // drift, the browser interpolates it with no per-frame JS), so it's cheap
 // regardless of how many sprites are running.
-const FX_MIN_LIFETIME_S = 10;
-const FX_MAX_LIFETIME_S = 25;
-const FX_FADE_S = 1.5;
-const FX_MIN_SIZE_VW = 6;
-const FX_MAX_SIZE_VW = 32;
 const FX_SHARD_OFFSET = 100; // keep fx sprites on their own loopback shards, separate from the main grid
 
 let fxEnabled = true;
@@ -184,7 +179,7 @@ function activateFxSprite(sprite) {
     vid.src = mediaOrigin(FX_SHARD_OFFSET + sprite.slot) + item.base + item.path;
     vid.play().catch(() => {});
 
-    const sizePx = ((FX_MIN_SIZE_VW + Math.random() * (FX_MAX_SIZE_VW - FX_MIN_SIZE_VW)) / 100) * window.innerWidth;
+    const sizePx = ((TUNING.FX_MIN_SIZE_VW + Math.random() * (TUNING.FX_MAX_SIZE_VW - TUNING.FX_MIN_SIZE_VW)) / 100) * window.innerWidth;
     el.style.width = sizePx + 'px';
     el.style.height = (sizePx * 9 / 16) + 'px'; // corrected above once real metadata loads
 
@@ -203,7 +198,7 @@ function activateFxSprite(sprite) {
     const endY = Math.max(0, Math.min(maxY, startY + Math.sin(angle) * distance));
     const lifetime = sprite.burst
       ? 3 + Math.random() * 3
-      : FX_MIN_LIFETIME_S + Math.random() * (FX_MAX_LIFETIME_S - FX_MIN_LIFETIME_S);
+      : TUNING.FX_MIN_LIFETIME_S + Math.random() * (TUNING.FX_MAX_LIFETIME_S - TUNING.FX_MIN_LIFETIME_S);
 
     el.style.transition = 'none';
     el.style.transform = `translate(${startX}px, ${startY}px)`;
@@ -211,7 +206,7 @@ function activateFxSprite(sprite) {
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        el.style.transition = `transform ${lifetime}s linear, opacity ${FX_FADE_S}s ease`;
+        el.style.transition = `transform ${lifetime}s linear, opacity ${TUNING.FX_FADE_S}s ease`;
         el.style.transform = `translate(${endX}px, ${endY}px)`;
         sprite.opacity = randomFloaterOpacity();
         el.style.opacity = String(sprite.opacity);
@@ -231,8 +226,8 @@ function activateFxSprite(sprite) {
           return;
         }
         sprite.timer = setTimeout(() => activateFxSprite(sprite), 500 + Math.random() * 3000);
-      }, FX_FADE_S * 1000 + 100);
-    }, Math.max(0, lifetime - FX_FADE_S) * 1000);
+      }, TUNING.FX_FADE_S * 1000 + 100);
+    }, Math.max(0, lifetime - TUNING.FX_FADE_S) * 1000);
   });
 }
 

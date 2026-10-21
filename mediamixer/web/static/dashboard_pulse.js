@@ -109,7 +109,7 @@ setInterval(updatePulseUi, 1000);
 // wandering with the beat slider, clip tension and the Shared Pulse (which
 // lands it between bands - "off key"). 'free' keeps the old behaviour.
 // 'mood' picks Theta / Alpha / Beta from the zone and energy, only after a
-// mood has held for BRAINWAVE_MOOD_HOLD_MS, glides across, then sits exactly
+// mood has held for TUNING.BRAINWAVE_MOOD_HOLD_MS, glides across, then sits exactly
 // on the new frequency.
 const BRAINWAVE_BANDS = {
   delta: { label: 'Delta', hz: 2.5, desc: 'deep' },
@@ -118,7 +118,6 @@ const BRAINWAVE_BANDS = {
   beta: { label: 'Beta', hz: 15, desc: 'alert, energised' },
   gamma: { label: 'Gamma', hz: 40, desc: 'peak' },
 };
-const BRAINWAVE_MOOD_HOLD_MS = 15000;
 const BRAINWAVE_GLIDE_TAU_S = 2.5; // ~7s to settle on a new band
 let brainwaveMode = 'theta'; // 'free' | 'mood' | a band key
 let brainwaveMoodBand = 'alpha';
@@ -137,7 +136,7 @@ setInterval(() => {
   const now = Date.now();
   if (want === brainwaveMoodBand) { brainwaveMoodCandidate = null; return; }
   if (want !== brainwaveMoodCandidate) { brainwaveMoodCandidate = want; brainwaveMoodCandidateAt = now; return; }
-  if (now - brainwaveMoodCandidateAt >= BRAINWAVE_MOOD_HOLD_MS) {
+  if (now - brainwaveMoodCandidateAt >= TUNING.BRAINWAVE_MOOD_HOLD_MS) {
     brainwaveMoodBand = want;
     brainwaveMoodCandidate = null;
     if (lastSynthParams) updateSynthParams(lastSynthParams);

@@ -11,9 +11,6 @@
 // timer with nothing real behind it, left to fizzle instead of pay off.
 // Both are purely visual/audio flourish layered on the existing barrage/
 // jackpot mechanic - nothing here changes what actually gets selected.
-const FAKE_NEAR_MISS_CHECK_MS = 15000;
-const FAKE_NEAR_MISS_PROBABILITY = 0.25;
-const FAKE_NEAR_MISS_BUILD_S = 3.5;
 const HONEST_BUILD_SAFETY_MS = 6000; // auto-fizzle if a real payoff never arrives (shouldn't normally fire)
 
 let anticipationFxEnabled = true;
@@ -458,8 +455,6 @@ const JACKPOT_TIERS = [
 ];
 const MILESTONE_TIER = { name: 'milestone', flash: 2.2, chime: 1.5, burst: 3.5, bass: 2.0, shake: true };
 const MILESTONE_COUNTS = [5, 10, 25, 50, 100, 200, 500, 1000];
-const STREAK_RESET_MS = 180000; // 3 minutes without a jackpot resets the streak back to 0
-const STREAK_WARNING_S = 30; // show the "at risk" countdown in the last 30s before that reset
 const TIER_REVEAL_DELAYS = [70, 70, 80, 90, 110, 140, 180, 230, 320]; // speeds up then settles, like a reel stopping
 const TIER_LABELS = { small: 'JACKPOT', medium: 'BIG JACKPOT', mega: 'MEGA JACKPOT', milestone: 'MILESTONE' };
 
@@ -507,14 +502,13 @@ function teaseNextTheme(theater) {
 // it doesn't change real odds - but it ticks faster during Golden
 // Hour/Surge/combo since those *do* raise real odds, so it stays honest
 // about when things are actually hotter.
-const ANTICIPATION_METER_FULL_MS = 90000;
 let lastAnyPayoffAt = 0;
 
 function tickAnticipationMeter() {
   const fill = document.getElementById('anticipation-meter-fill');
   if (!fill) return;
   const effectiveElapsed = (Date.now() - lastAnyPayoffAt) * oddsMultiplier();
-  const pct = Math.min(100, (effectiveElapsed / ANTICIPATION_METER_FULL_MS) * 100);
+  const pct = Math.min(100, (effectiveElapsed / TUNING.ANTICIPATION_METER_FULL_MS) * 100);
   fill.style.width = pct + '%';
 }
 

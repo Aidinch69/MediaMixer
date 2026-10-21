@@ -64,7 +64,6 @@ function pickJackpotTier() {
 // own toast/label after the fact, instead of a countdown you'd just sit
 // and wait out. Deliberately separate from jackpotHeat/heartMultiplier,
 // which are both always visible - this one only works because it isn't.
-const HIDDEN_MULT_CHECK_MS = 50000;
 let hiddenMultExpireAt = 0;
 
 function maybeTriggerHiddenMultiplier() {
@@ -73,7 +72,7 @@ function maybeTriggerHiddenMultiplier() {
     hiddenMultExpireAt = Date.now() + TUNING.HIDDEN_MULT_DURATION_MS;
   }
 }
-setInterval(maybeTriggerHiddenMultiplier, HIDDEN_MULT_CHECK_MS);
+setInterval(maybeTriggerHiddenMultiplier, TUNING.HIDDEN_MULT_CHECK_MS);
 
 function hiddenMultiplierFactor() {
   return Date.now() < hiddenMultExpireAt ? TUNING.HIDDEN_MULT_VALUE : 1;
@@ -94,7 +93,7 @@ function resolveTier() {
 
 function registerJackpotStreak() {
   const now = Date.now();
-  if (now - lastJackpotAt > STREAK_RESET_MS) jackpotStreak = 0;
+  if (now - lastJackpotAt > TUNING.STREAK_RESET_MS) jackpotStreak = 0;
   jackpotStreak++;
   lastJackpotAt = now;
   const el = document.getElementById('jackpot-streak');
@@ -107,11 +106,11 @@ function registerJackpotStreak() {
 function tickStreakWarning() {
   const el = document.getElementById('jackpot-streak');
   if (!el || jackpotStreak <= 1) return;
-  const remaining = (lastJackpotAt + STREAK_RESET_MS - Date.now()) / 1000;
+  const remaining = (lastJackpotAt + TUNING.STREAK_RESET_MS - Date.now()) / 1000;
   if (remaining <= 0) {
     jackpotStreak = 0;
     el.innerText = '';
-  } else if (remaining <= STREAK_WARNING_S) {
+  } else if (remaining <= TUNING.STREAK_WARNING_S) {
     el.innerText = '⚠️ Streak ' + jackpotStreak + ' resets in ' + Math.ceil(remaining) + 's!';
     el.style.color = '#ff6b6b';
   }
@@ -129,14 +128,13 @@ function registerMilestone() {
 // Fake-downgrade reveals: the reel-stop flicker occasionally holds on MEGA
 // before snapping down to the actual (lower) tier - the near-miss idea
 // applied to the reveal animation itself, not just the lead-up to it.
-const FAKE_DOWNGRADE_PROBABILITY = 0.2;
 
 function revealTier(tier, onDone) {
   const el = document.getElementById('tier-reveal');
   const order = ['small', 'medium', 'mega'];
   el.style.display = 'block';
   requestAnimationFrame(() => el.classList.add('show'));
-  const fakeDowngrade = (tier.name === 'small' || tier.name === 'medium') && Math.random() < FAKE_DOWNGRADE_PROBABILITY;
+  const fakeDowngrade = (tier.name === 'small' || tier.name === 'medium') && Math.random() < TUNING.FAKE_DOWNGRADE_PROBABILITY;
   let i = 0;
   function lockIn() {
     el.innerText = TIER_LABELS[tier.name] || tier.name.toUpperCase();
@@ -166,13 +164,11 @@ function revealTier(tier, onDone) {
 // Jackpot chain re-triggers: mega/milestone payoffs get a shrinking chance
 // to immediately re-fire into another payoff (slot-machine "re-spin"
 // feel), capped so a chain can't run away indefinitely.
-const CHAIN_BASE_PROBABILITY = 0.3;
-const MAX_CHAIN_DEPTH = 2;
 
 function decideChain(tier, chainDepth) {
-  if (chainDepth >= MAX_CHAIN_DEPTH) return false;
+  if (chainDepth >= TUNING.MAX_CHAIN_DEPTH) return false;
   if (tier.name !== 'mega' && tier.name !== 'milestone') return false;
-  return Math.random() < CHAIN_BASE_PROBABILITY * Math.pow(0.5, chainDepth);
+  return Math.random() < TUNING.CHAIN_BASE_PROBABILITY * Math.pow(0.5, chainDepth);
 }
 
 function runPayoff(chainDepth) {
@@ -183,7 +179,7 @@ function runPayoff(chainDepth) {
   rotateColorTheme();
   // Snapshot before registerJackpotStreak() overwrites lastJackpotAt/jackpotStreak,
   // so a jackpot landing inside the streak-reset warning window reads as a "save".
-  const wasAtRisk = jackpotStreak > 1 && (Date.now() - lastJackpotAt) >= (STREAK_RESET_MS - STREAK_WARNING_S * 1000);
+  const wasAtRisk = jackpotStreak > 1 && (Date.now() - lastJackpotAt) >= (TUNING.STREAK_RESET_MS - TUNING.STREAK_WARNING_S * 1000);
   const milestoneCount = registerMilestone();
   const tier = milestoneCount ? MILESTONE_TIER : resolveTier();
   const streak = registerJackpotStreak();
@@ -247,7 +243,6 @@ function applyPayoffEffects(tier, streak, milestoneCount, wasAtRisk, chainDepth,
 // either bank the win as-is or push for a second roll that can grant a
 // bonus or cost the current streak. Entirely optional - doing nothing
 // auto-banks, so there's no penalty for ignoring it.
-const PUSH_LUCK_WINDOW_MS = 6000;
 let pushLuckTimer = null;
 
 function showPushLuckPrompt() {
@@ -262,10 +257,10 @@ function showPushLuckPrompt() {
     fill.style.transition = 'none';
     fill.style.width = '100%';
     void fill.offsetWidth;
-    fill.style.transition = 'width ' + (PUSH_LUCK_WINDOW_MS / 1000) + 's linear';
+    fill.style.transition = 'width ' + (TUNING.PUSH_LUCK_WINDOW_MS / 1000) + 's linear';
     fill.style.width = '0%';
   }
-  pushLuckTimer = setTimeout(() => bankWin(), PUSH_LUCK_WINDOW_MS);
+  pushLuckTimer = setTimeout(() => bankWin(), TUNING.PUSH_LUCK_WINDOW_MS);
 }
 
 function hidePushLuckPrompt() {
@@ -445,7 +440,6 @@ function tickGoldenHour() {
 // Surge: a short, unscheduled surprise window (unlike Golden Hour's fixed
 // daily slot) that randomly doubles the same odds for a minute or two -
 // stacks unscheduled variable-ratio surprise on top of the scheduled one.
-const SURGE_CHECK_MS = 20000;
 const SURGE_DURATION_RANGE_MS = [60000, 90000];
 let surgeExpireAt = 0;
 
@@ -490,15 +484,14 @@ function oddsMultiplier() {
   return Math.min(3, raw);
 }
 
-const NEAR_MISS_COOLDOWN_MS = 20000;
 let lastNearMissAt = 0;
 
 function maybeTriggerFakeNearMiss() {
   if (!anticipationFxEnabled || !nearMissEnabled || anticipationActive) return;
   if (lastKnownBarrage > 0 || lastKnownJackpot) return; // don't step on a real one
-  if (Date.now() - lastNearMissAt < NEAR_MISS_COOLDOWN_MS) return; // even at max odds, leave breathing room
-  if (Math.random() < FAKE_NEAR_MISS_PROBABILITY * oddsMultiplier()) {
+  if (Date.now() - lastNearMissAt < TUNING.NEAR_MISS_COOLDOWN_MS) return; // even at max odds, leave breathing room
+  if (Math.random() < TUNING.FAKE_NEAR_MISS_PROBABILITY * oddsMultiplier()) {
     lastNearMissAt = Date.now();
-    runAnticipationBuildUp(FAKE_NEAR_MISS_BUILD_S, false);
+    runAnticipationBuildUp(TUNING.FAKE_NEAR_MISS_BUILD_S, false);
   }
 }

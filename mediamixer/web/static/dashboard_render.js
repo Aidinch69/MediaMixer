@@ -181,7 +181,7 @@ function chooseStartTime(path, duration) {
     delete pendingStartAt[path];
     return { t: Math.min(t, Math.max(0, duration - 3)), kind: 'callback' };
   }
-  const random = Math.random() * RANDOM_START_MAX_FRACTION * duration;
+  const random = Math.random() * TUNING.RANDOM_START_MAX_FRACTION * duration;
   if (Math.random() >= TUNING.BEST_START_CHANCE) return { t: random, kind: 'random' };
   const meta = videoMetaCache[path];
   if (!meta) return { t: random, kind: 'random' };
@@ -694,7 +694,7 @@ function rateScreen(i, dir, btn, strength) {
         const path = currentPaths[i];
         if (data.loop_anchor) loopAnchorCache[path] = data.loop_anchor;
         // This heart may have just pushed the clip's heart_count past
-        // FEATURED_HEART_THRESHOLD - keep the cache in sync so Featured
+        // TUNING.FEATURED_HEART_THRESHOLD - keep the cache in sync so Featured
         // Tile's highlight can pick that up right away instead of only
         // on the clip's next load.
         videoMetaCache[path] = Object.assign({}, videoMetaCache[path], { heart_count: data.heart.heart_count });

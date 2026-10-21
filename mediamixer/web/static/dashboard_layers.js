@@ -323,7 +323,6 @@ const MANTRA_DEFAULT_PHRASES = [
 ];
 const MANTRA_GAP_MS = [[25000, 45000], [9000, 20000], [3500, 8000]]; // low / medium / high
 const MANTRA_FREQ_LABELS = ['Low', 'Medium', 'High'];
-const MANTRA_MAX_ON_SCREEN = 8;
 let mantraEnabled = true;
 let mantraFrequency = 1;
 let mantraOpacity = 70;
@@ -380,7 +379,7 @@ function showMantra(style, text) {
   el.style.animationDuration = durS + 's';
   el.addEventListener('animationend', () => el.remove());
   layer.appendChild(el);
-  while (layer.children.length > MANTRA_MAX_ON_SCREEN) layer.firstChild.remove();
+  while (layer.children.length > TUNING.MANTRA_MAX_ON_SCREEN) layer.firstChild.remove();
 }
 
 function mantraBurst(count) {
@@ -480,7 +479,7 @@ function previewMantra() {
 // time; a second one on the same tile just waits its turn out.
 //
 // Every lasting kind is driven by fxEnvelope: a quick ease in, then its
-// last FX_FADE_OUT_MS eases back to the untouched video instead of
+// last TUNING.FX_FADE_OUT_MS eases back to the untouched video instead of
 // snapping off. Each one's ms includes that fade. They all live on the
 // tile (classes, CSS vars, an overlay) or read the tile's one <video>,
 // which is reused across clip changes - so an effect still running when
@@ -496,17 +495,15 @@ const TILE_FX_KINDS = {
   vhs: { label: '📼 VHS', ms: 7500 },
   shock: { label: '💥 Shockwave', ms: 900 },
 };
-const FX_FADE_IN_MS = 400;
-const FX_FADE_OUT_MS = 2500;
 
 function fxSmoothstep(x) { return x * x * (3 - 2 * x); }
 
 // 0 -> 1 over the fade-in, holds at 1, then 1 -> 0 over the last
-// FX_FADE_OUT_MS (or half the run, if it's ever shorter than that).
+// TUNING.FX_FADE_OUT_MS (or half the run, if it's ever shorter than that).
 function fxEnvelope(elapsed, ms) {
   if (elapsed <= 0 || elapsed >= ms) return 0;
-  const fadeOut = Math.min(FX_FADE_OUT_MS, ms / 2);
-  const fin = Math.min(1, elapsed / FX_FADE_IN_MS);
+  const fadeOut = Math.min(TUNING.FX_FADE_OUT_MS, ms / 2);
+  const fin = Math.min(1, elapsed / TUNING.FX_FADE_IN_MS);
   const left = ms - elapsed;
   return fxSmoothstep(fin) * fxSmoothstep(left < fadeOut ? left / fadeOut : 1);
 }
@@ -701,7 +698,7 @@ function startLightLeakFx(tile, ms) {
 // there when the class comes off. Driven through CSS vars on the tile so
 // it applies to whatever clip the tile's <video> is showing.
 function startPrismFx(tile, ms) {
-  const fadeMs = Math.min(FX_FADE_OUT_MS, ms / 2);
+  const fadeMs = Math.min(TUNING.FX_FADE_OUT_MS, ms / 2);
   const fadeStart = ms - fadeMs;
   // An ease-out quad covers half the distance a constant speed would.
   const turns = Math.max(1, Math.round((fadeStart + fadeMs / 2) / 3200));
@@ -761,7 +758,7 @@ function startVhsFx(tile, vid, ms) {
   tile.style.setProperty('--vhs-k', '0');
   tile.classList.add('fx-vhs');
   const start = performance.now();
-  const fadeStart = ms - Math.min(FX_FADE_OUT_MS, ms / 2);
+  const fadeStart = ms - Math.min(TUNING.FX_FADE_OUT_MS, ms / 2);
   function step(ts) {
     const elapsed = ts - start;
     if (elapsed >= ms || !tile.isConnected) {
@@ -1468,8 +1465,6 @@ function toggleFreshDrop() {
 // (autopilotTick steps aside) and hands them back when it ends. Rhythm
 // Mode rides along through build and peak. With Auto-Pilot on, it can
 // also offer itself once a session has run long (see maybeOfferFinale).
-const FINALE_BUILD_END = 0.55;
-const FINALE_CLIMAX_AT = 0.85;
 const FINALE_TICK_MS = 2000;
 const FINALE_OFFER_CHECK_MS = 60000;
 const FINALE_OFFER_MIN_SESSION_MS = 15 * 60000;
@@ -1496,30 +1491,30 @@ function finaleProgress() {
 function finalePhaseNow() {
   if (!finaleActive) return null;
   const p = finaleProgress();
-  return p < FINALE_BUILD_END ? 'build' : p < FINALE_CLIMAX_AT ? 'peak' : 'afterglow';
+  return p < TUNING.FINALE_BUILD_END ? 'build' : p < TUNING.FINALE_CLIMAX_AT ? 'peak' : 'afterglow';
 }
 
 function finaleSpeedMult() {
   if (!finaleActive) return 1;
   const p = finaleProgress();
-  if (p < FINALE_BUILD_END) { const t = p / FINALE_BUILD_END; return 1 + 0.12 * t * t; }
-  if (p < FINALE_CLIMAX_AT) return 1.12 + 0.16 * ((p - FINALE_BUILD_END) / (FINALE_CLIMAX_AT - FINALE_BUILD_END));
+  if (p < TUNING.FINALE_BUILD_END) { const t = p / TUNING.FINALE_BUILD_END; return 1 + 0.12 * t * t; }
+  if (p < TUNING.FINALE_CLIMAX_AT) return 1.12 + 0.16 * ((p - TUNING.FINALE_BUILD_END) / (TUNING.FINALE_CLIMAX_AT - TUNING.FINALE_BUILD_END));
   // Afterglow dips below normal (a real exhale), then settles back to 1x
   // by the end so handing control back doesn't jump.
-  const t = (p - FINALE_CLIMAX_AT) / (1 - FINALE_CLIMAX_AT);
+  const t = (p - TUNING.FINALE_CLIMAX_AT) / (1 - TUNING.FINALE_CLIMAX_AT);
   return t < 0.6 ? lerp(1.28, 0.85, t / 0.6) : lerp(0.85, 1, (t - 0.6) / 0.4);
 }
 
 function finaleAmbientBoost() {
   const phase = finalePhaseNow();
-  if (phase === 'build') return 0.6 * (finaleProgress() / FINALE_BUILD_END);
+  if (phase === 'build') return 0.6 * (finaleProgress() / TUNING.FINALE_BUILD_END);
   if (phase === 'peak') return 1.0;
   return 0;
 }
 
 function finaleMantraMult() {
   const phase = finalePhaseNow();
-  if (phase === 'build') return 1 + finaleProgress() / FINALE_BUILD_END;
+  if (phase === 'build') return 1 + finaleProgress() / TUNING.FINALE_BUILD_END;
   if (phase === 'peak') return 3;
   if (phase === 'afterglow') return 0.6;
   return 1;
@@ -1527,7 +1522,7 @@ function finaleMantraMult() {
 
 function finaleTempoMult() {
   const phase = finalePhaseNow();
-  if (phase === 'build') return 1 + 0.15 * (finaleProgress() / FINALE_BUILD_END);
+  if (phase === 'build') return 1 + 0.15 * (finaleProgress() / TUNING.FINALE_BUILD_END);
   if (phase === 'peak') return 1.2;
   return 1;
 }
@@ -1570,13 +1565,13 @@ function onFinalePhaseChange(phase) {
     maybeTriggerSpiralOverlay();
     // A Surge for the whole peak stretch - the badge and every odds roll
     // that already reads isSurgeActive() pick it up for free.
-    surgeExpireAt = Math.max(surgeExpireAt, finaleStartedAt + finaleDurationMs * FINALE_CLIMAX_AT);
+    surgeExpireAt = Math.max(surgeExpireAt, finaleStartedAt + finaleDurationMs * TUNING.FINALE_CLIMAX_AT);
     mantraBurst(3);
     fireColorSplashPiece('border');
   } else if (phase === 'afterglow') {
     const theater = document.getElementById('theater-box');
     if (theater) {
-      theater.style.setProperty('--afterglow-duration', Math.round(finaleDurationMs * (1 - FINALE_CLIMAX_AT) / 1000) + 's');
+      theater.style.setProperty('--afterglow-duration', Math.round(finaleDurationMs * (1 - TUNING.FINALE_CLIMAX_AT) / 1000) + 's');
       theater.classList.remove('afterglow');
       void theater.offsetWidth;
       theater.classList.add('afterglow');
@@ -1601,10 +1596,10 @@ function finaleTick() {
   const p = finaleProgress();
   const phase = finalePhaseNow();
   if (phase !== finaleLastPhase) { finaleLastPhase = phase; onFinalePhaseChange(phase); }
-  if (p >= FINALE_CLIMAX_AT && !finaleClimaxFired) finaleClimax();
+  if (p >= TUNING.FINALE_CLIMAX_AT && !finaleClimaxFired) finaleClimax();
   let barrage, jackpot, novelty, paceIdx, fxTarget;
   if (phase === 'build') {
-    const t = p / FINALE_BUILD_END;
+    const t = p / TUNING.FINALE_BUILD_END;
     barrage = lerp(0.03, 0.18, t);
     jackpot = lerp(0.06, 0.3, t);
     novelty = lerp(0.25, 0.05, t); // leans into favorites as it builds

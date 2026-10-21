@@ -56,7 +56,7 @@ function updateModeBadge() {
     text = pendingServerTier ? ('🎰 ' + pendingServerTier.toUpperCase() + ' building...') : '🎰 Building...';
   } else if (finaleActive) {
     text = finaleStatusText();
-  } else if (jackpotStreak > 1 && Date.now() - lastJackpotAt < STREAK_RESET_MS) {
+  } else if (jackpotStreak > 1 && Date.now() - lastJackpotAt < TUNING.STREAK_RESET_MS) {
     text = '🔥 Jackpot streak x' + jackpotStreak;
   } else if (heartMultiplier >= 2) {
     text = '❤️ Heart multiplier x' + Math.floor(heartMultiplier);

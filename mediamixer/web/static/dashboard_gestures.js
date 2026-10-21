@@ -6,8 +6,6 @@
 // keep their own behaviour, and a gesture never also counts as a tap on a
 // catch/bonus/locked tile.
 
-const GESTURE_LONG_PRESS_MS = 600;
-const GESTURE_SWIPE_MIN_PX = 70;
 const GESTURE_MOVE_SLOP_PX = 12;
 const TILE_SPEED_MIN = 0.25;
 const TILE_SPEED_MAX = 3;
@@ -42,7 +40,7 @@ document.addEventListener('pointerdown', (e) => {
     gesture = null;
     suppressTileClickUntil = Date.now() + 600;
     toggleTilePin(idx);
-  }, GESTURE_LONG_PRESS_MS);
+  }, TUNING.GESTURE_LONG_PRESS_MS);
 }, true);
 
 document.addEventListener('pointermove', (e) => {
@@ -63,7 +61,7 @@ document.addEventListener('pointerup', (e) => {
   const idx = gesture.idx;
   endGestureVisual();
   gesture = null;
-  if (quick && Math.abs(dx) >= GESTURE_SWIPE_MIN_PX && Math.abs(dy) < Math.abs(dx) * 0.6) {
+  if (quick && Math.abs(dx) >= TUNING.GESTURE_SWIPE_MIN_PX && Math.abs(dy) < Math.abs(dx) * 0.6) {
     suppressTileClickUntil = Date.now() + 500;
     swipeTile(idx, dx > 0 ? 1 : -1);
   }
