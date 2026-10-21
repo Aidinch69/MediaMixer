@@ -12,6 +12,7 @@ import os
 import random
 from typing import List, Optional
 
+from .. import sources
 from ..config import Config
 
 log = logging.getLogger(__name__)
@@ -25,10 +26,8 @@ class OverlayAudio:
         self.refresh()
 
     def refresh(self):
-        os.makedirs(self._config.audio_dir, exist_ok=True)
-        self.tracks = sorted(
-            f for f in os.listdir(self._config.audio_dir) if f.lower().endswith(self._config.audio_exts)
-        )
+        # Absolute paths, from every Audio Source folder (recursively).
+        self.tracks = [full for _root, full in sources.get(self._config).iter_files("audio", self._config.audio_exts)]
         if self.tracks:
             self.index = random.randrange(len(self.tracks))
 
@@ -45,4 +44,4 @@ class OverlayAudio:
     def current_path(self) -> Optional[str]:
         if not self.tracks:
             return None
-        return os.path.join(self._config.audio_dir, self.tracks[self.index])
+        return self.tracks[self.index]

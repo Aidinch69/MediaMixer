@@ -33,8 +33,13 @@ class JackpotTier(NamedTuple):
     hype_ticks: Tuple[int, int]  # 0.5s ticks the hype window runs before the reveal
 
 
+# Relative paths (the defaults, or relative env overrides) are anchored to the
+# project folder, not to wherever Python happened to be started from.
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def _env_path(name: str, default: str) -> str:
-    return os.path.abspath(os.environ.get(name, default))
+    return os.path.abspath(os.path.join(PROJECT_ROOT, os.environ.get(name, default)))
 
 
 @dataclass(frozen=True)
@@ -45,7 +50,7 @@ class Config:
     overlay_fx_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_OVERLAY_FX_DIR", "./overlay_fx"))
     spirals_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_SPIRALS_DIR", "./Spirals"))
     proxy_dir: str = field(default_factory=lambda: _env_path("MEDIAMIXER_PROXY_DIR", "./media_proxies"))
-    db_path: str = field(default_factory=lambda: os.environ.get("MEDIAMIXER_DB_PATH", "system_memory.db"))
+    db_path: str = field(default_factory=lambda: _env_path("MEDIAMIXER_DB_PATH", "system_memory.db"))
 
     video_exts: Tuple[str, ...] = (".mp4", ".mkv", ".avi", ".mov", ".webm")
     audio_exts: Tuple[str, ...] = (".mp3", ".wav", ".ogg")

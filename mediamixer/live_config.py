@@ -16,7 +16,10 @@ from typing import Dict, NamedTuple
 
 log = logging.getLogger(__name__)
 
-OVERRIDES_PATH = os.environ.get("MEDIAMIXER_CONFIG_OVERRIDES", "config_overrides.json")
+OVERRIDES_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    os.environ.get("MEDIAMIXER_CONFIG_OVERRIDES", "config_overrides.json"),
+)
 
 
 class LiveField(NamedTuple):

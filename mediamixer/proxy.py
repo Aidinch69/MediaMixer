@@ -4,7 +4,7 @@ Source clips are full 1080p+ H.264 at several Mbps - fine to decode one or
 two at a time, wasteful to decode 16-25x simultaneously into a tile that's
 rendering at a fraction of that resolution. ensure_proxy() kicks off a
 background transcode the first time a clip is needed for a dense layout and
-caches it to disk under config.proxy_dir, mirroring media_dir's folder
+caches it to disk under config.proxy_dir, mirroring its source folder's
 structure - but it never blocks the request that triggered it. A clip always
 plays immediately: full-res on the first pick (while its proxy transcodes
 in the background), the lighter cached proxy on every pick after that.
@@ -18,6 +18,8 @@ import shutil
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
+
+from . import sources
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +37,15 @@ def _find_ffmpeg() -> str | None:
     global _ffmpeg_path_cache
     if _ffmpeg_path_cache:
         return _ffmpeg_path_cache
+    # An explicit path, or a copy dropped into <project>/ffmpeg/ (or its
+    # bin/ subfolder, as the zip builds unpack), wins over PATH.
+    project = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    exe = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
+    for candidate in (os.environ.get("MEDIAMIXER_FFMPEG"),
+                      os.path.join(project, "ffmpeg", exe), os.path.join(project, "ffmpeg", "bin", exe)):
+        if candidate and os.path.isfile(candidate):
+            _ffmpeg_path_cache = candidate
+            return candidate
     found = shutil.which("ffmpeg")
     if not found:
         # The engine process may have started before ffmpeg was installed
@@ -98,24 +109,18 @@ def _generate(ffmpeg: str, source_path: str, proxy_path: str, config) -> None:
             _pending.discard(source_path)
 
 
-def ensure_proxy(source_path: str, config, base_dir: str | None = None, proxy_subdir: str = "") -> str | None:
+def ensure_proxy(source_path: str, config, kind: str = "tiles") -> str | None:
     """Return the path to a cached proxy for source_path if one already
     exists. If not, kick off a background transcode (unless one's already
     in flight for this file) and return None immediately - the caller falls
     back to the original for this request. Never blocks; a missing or slow
     proxy must never be the reason a clip won't play.
 
-    base_dir/proxy_subdir let a second library (e.g. the Spirals overlay
-    folder) share this same cache machinery under its own namespaced
-    corner of config.proxy_dir, instead of duplicating this whole module -
-    defaults to the main media library for every existing caller."""
-    base_dir = os.path.realpath(base_dir or config.media_dir)
-    source_path = os.path.realpath(source_path)
-    if not source_path.startswith(base_dir + os.sep) or not os.path.isfile(source_path):
+    Proxies live under config.proxy_dir/<root id>/, mirroring the layout of
+    the source folder the clip came from (see mediamixer.sources)."""
+    proxy_path = sources.get(config).proxy_path(source_path, kind)
+    if not proxy_path or not os.path.isfile(source_path):
         return None
-
-    rel = os.path.relpath(source_path, base_dir)
-    proxy_path = os.path.join(config.proxy_dir, proxy_subdir, os.path.splitext(rel)[0] + ".proxy.mp4")
     if os.path.isfile(proxy_path):
         return proxy_path
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import logging
 import threading
+import webbrowser
 from dataclasses import replace
 
 from waitress import serve
@@ -30,7 +31,7 @@ class MediaMixerApp:
         self.flask_app = create_app(self.ctx)
         self._stopped = threading.Event()
 
-    def run(self):
+    def run(self, open_browser: bool = False):
         library.sync_library(self.db, self.config)
         self.dna.start()
 
@@ -59,6 +60,8 @@ class MediaMixerApp:
             log.info("Tailscale (installable, HTTPS) -> %s", tailscale_url)
         log.info("Each device gets its own independent playback session")
         log.info("=" * 60)
+        if open_browser:
+            threading.Timer(1.0, webbrowser.open, args=(f"http://localhost:{self.config.port}",)).start()
 
         try:
             self.sessions.run_scheduler()
@@ -91,6 +94,7 @@ def main():
     parser.add_argument("--host", default=None, help="override the web server bind address")
     parser.add_argument("--port", type=int, default=None, help="override the web server port")
     parser.add_argument("--log-level", default="INFO")
+    parser.add_argument("--open", action="store_true", help="open the dashboard in the default browser once it's up")
     args = parser.parse_args()
 
     _configure_logging(args.log_level)
@@ -101,7 +105,7 @@ def main():
     if args.port:
         config = replace(config, port=args.port)
 
-    MediaMixerApp(config).run()
+    MediaMixerApp(config).run(open_browser=args.open)
 
 
 if __name__ == "__main__":

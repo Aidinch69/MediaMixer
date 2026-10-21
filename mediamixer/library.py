@@ -1,17 +1,20 @@
 """Filesystem discovery and reward-weighted picking of folders/videos."""
 from __future__ import annotations
 
+import json
 import math
 import os
 import random
+import threading
 import time
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, List, Optional, Tuple, Union
 
+from . import sources
 from .bandit import decayed_value, exploration_score, softmax_pick
 from .config import Config
 from .db import Database
 
-# Videos dropped directly in media_dir (not sorted into a category folder) are
+# Videos sitting directly in a source folder (not sorted into a category folder) are
 # grouped under this implicit folder, so the per-category rotation/weighting
 # system still works without forcing the user to pre-sort their library.
 GENERAL_FOLDER = "General"
@@ -26,44 +29,59 @@ GENERAL_FOLDER = "General"
 FAVORITES_FOLDER = "❤Favorites"
 
 
-def _loose_video_files(config: Config) -> List[str]:
-    return [
-        f
-        for f in os.listdir(config.media_dir)
-        if os.path.isfile(os.path.join(config.media_dir, f)) and f.lower().endswith(config.video_exts)
+_SCAN_TTL_S = 5.0
+_scan_cache: dict = {}
+_sync_lock = threading.Lock()
+
+
+def scan_videos(config: Config, max_age_s: float = _SCAN_TTL_S) -> List[Tuple[str, str, str]]:
+    """(root id, absolute path, category) for every clip under every Tile
+    Source folder, recursively. Cached briefly - the folder list is read on
+    every page load and a big library is a real walk."""
+    key = os.path.abspath(config.db_path)
+    now = time.monotonic()
+    hit = _scan_cache.get(key)
+    if hit and max_age_s > 0 and now - hit[0] < max_age_s:
+        return hit[1]
+    src = sources.get(config)
+    items = [
+        (root.id, path, src.category(root, path, GENERAL_FOLDER))
+        for root, path in src.iter_files("tiles", config.video_exts)
     ]
+    _scan_cache[key] = (now, items)
+    return items
 
 
 def sync_library(db: Database, config: Config) -> List[str]:
-    """Scan the media directory and register any new folders/videos with the DB."""
-    os.makedirs(config.media_dir, exist_ok=True)
-    os.makedirs(config.audio_dir, exist_ok=True)
-    folders = list_folders(config)
-    # The very first scan of an empty DB is the library itself, not a
-    # "drop" - only clips appearing after that count as fresh.
-    library_existed = db.video_count() > 0
-    for folder in folders:
-        db.ensure_folder(folder)
-        fdir = config.media_dir if folder == GENERAL_FOLDER else os.path.join(config.media_dir, folder)
-        for entry in os.listdir(fdir):
-            full = os.path.join(fdir, entry)
-            if os.path.isfile(full) and entry.lower().endswith(config.video_exts):
-                db.ensure_video(full, folder, fresh=library_existed)
-    db.commit()
-    return folders
+    """Scan the Tile Source folders and bring the DB in line: new clips are
+    registered, clips that are gone (or whose folder was removed) sit out."""
+    src = sources.get(config)
+    src.ensure_default_dirs()
+    with _sync_lock:
+        items = scan_videos(config, max_age_s=0)
+        # Fresh Drop is for clips that turn up later in a folder already in
+        # the library - not for the library itself on its first scan, and
+        # not for a whole folder that's just been added as a source.
+        scanned = set(json.loads(db.get_setting("scanned_roots") or "[]"))
+        library_existed = db.video_count() > 0
+        fresh = {path for rid, path, _cat in items if library_existed and rid in scanned}
+        folders = sorted({cat for _rid, _path, cat in items})
+        for folder in folders:
+            db.ensure_folder(folder)
+        db.sync_videos([(path, cat) for _rid, path, cat in items], fresh)
+        now_scanned = scanned | {r.id for r in src.roots("tiles") if os.path.isdir(r.path)}
+        if now_scanned != scanned:
+            db.set_setting("scanned_roots", json.dumps(sorted(now_scanned)))
+    return _ordered(folders)
+
+
+def _ordered(cats) -> List[str]:
+    cats = set(cats)
+    return ([GENERAL_FOLDER] if GENERAL_FOLDER in cats else []) + sorted(cats - {GENERAL_FOLDER})
 
 
 def list_folders(config: Config) -> List[str]:
-    if not os.path.isdir(config.media_dir):
-        return []
-    folders = sorted(
-        f
-        for f in os.listdir(config.media_dir)
-        if os.path.isdir(os.path.join(config.media_dir, f)) and not f.startswith("_")
-    )
-    if GENERAL_FOLDER not in folders and _loose_video_files(config):
-        folders.insert(0, GENERAL_FOLDER)
-    return folders
+    return _ordered(cat for _rid, _path, cat in scan_videos(config))
 
 
 def list_folders_with_favorites(db: Database, config: Config) -> List[str]:
@@ -78,20 +96,18 @@ def list_folders_with_favorites(db: Database, config: Config) -> List[str]:
 
 
 def list_all_videos(config: Config) -> List[str]:
-    """Flat list of every video in the library (all categories plus loose
-    top-level files), as paths relative to media_dir. Used by features that
-    just want "something from the library" - e.g. the floating overlay FX -
-    without the reward-weighted selection machinery."""
-    if not os.path.isdir(config.media_dir):
-        return []
-    results = []
-    for folder in list_folders(config):
-        fdir = config.media_dir if folder == GENERAL_FOLDER else os.path.join(config.media_dir, folder)
-        for entry in sorted(os.listdir(fdir)):
-            full = os.path.join(fdir, entry)
-            if os.path.isfile(full) and entry.lower().endswith(config.video_exts):
-                results.append(os.path.relpath(full, config.media_dir).replace("\\", "/"))
-    return results
+    """Flat list of every clip in the library, in the "<root id>/<path>"
+    form the browser uses. Used by features that just want "something from
+    the library" - e.g. the floating overlay FX - without the
+    reward-weighted selection machinery."""
+    return [rid + "/" + os.path.relpath(path, root_path).replace("\\", "/")
+            for rid, path, root_path in _with_root_paths(config)]
+
+
+def _with_root_paths(config: Config):
+    by_id = {r.id: r.path for r in sources.get(config).roots("tiles")}
+    for rid, path, _cat in scan_videos(config):
+        yield rid, path, by_id[rid]
 
 
 def pick_folder(db: Database, config: Config, exclude: Optional[str] = None) -> Optional[str]:

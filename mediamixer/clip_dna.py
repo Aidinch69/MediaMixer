@@ -27,6 +27,7 @@ import threading
 import time
 from typing import Optional
 
+from . import sources
 from .proxy import _find_ffmpeg
 
 log = logging.getLogger(__name__)
@@ -83,12 +84,8 @@ _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 def _proxy_for(path: str, config) -> Optional[str]:
-    try:
-        rel = os.path.relpath(path, config.media_dir)
-    except ValueError:
-        return None
-    proxy = os.path.join(config.proxy_dir, os.path.splitext(rel)[0] + ".proxy.mp4")
-    return proxy if os.path.isfile(proxy) else None
+    proxy = sources.get(config).proxy_path(path, "tiles")
+    return proxy if proxy and os.path.isfile(proxy) else None
 
 
 def _probe_duration(ffmpeg: str, path: str) -> Optional[float]:

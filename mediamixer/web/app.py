@@ -18,7 +18,7 @@ import qrcode
 import qrcode.image.svg
 from flask import Flask, Response, g, jsonify, render_template, request, send_from_directory
 
-from .. import insights, library, proxy
+from .. import insights, library, proxy, sources
 from ..clip_dna import DNA_VERSION
 from ..context import AppContext
 from ..live_config import SESSION_MIRRORED, LiveConfig
@@ -38,29 +38,17 @@ _NO_SESSION_PREFIXES = ("/media/", "/audio/", "/overlay_fx/", "/spirals/", "/ass
 
 
 def _relative_media_path(config, path: str) -> str:
-    if not path:
-        return ""
-    return os.path.relpath(path, config.media_dir).replace("\\", "/")
+    return sources.get(config).to_rel(path, "tiles")
 
 
 def _absolute_media_path(config, relative_path: str) -> str:
-    """Inverse of _relative_media_path - rebuilds the same absolute string
-    sync_library originally stored as video_path (a literal TEXT primary
-    key, so this has to reconstruct it exactly, not just resolve to the
-    same file on disk). Joins segment-by-segment rather than passing the
-    slash-joined relative path straight to os.path.join, so a subfolder
-    video's rebuilt path uses the OS's own separator throughout instead of
-    a forward slash in the middle that wouldn't string-match what's
-    actually stored."""
-    if not relative_path:
-        return ""
-    return os.path.join(config.media_dir, *relative_path.split("/"))
+    """Inverse of _relative_media_path - rebuilds the exact absolute string
+    sync_library stored as video_path (see Sources.to_abs)."""
+    return sources.get(config).to_abs("tiles", relative_path)
 
 
 def _relative_audio_path(config, path) -> str:
-    if not path:
-        return ""
-    return os.path.relpath(path, config.audio_dir).replace("\\", "/")
+    return sources.get(config).to_rel(path, "audio")
 
 
 def _layout_columns(config, name: str) -> int:
@@ -80,32 +68,28 @@ def _qr_svg(data: str) -> str:
 
 
 def _scan_overlay_fx_dir(config) -> list:
-    """Flat listing of the dedicated overlay-fx folder: video and image files,
-    each tagged with its kind so the client knows how to render it."""
-    os.makedirs(config.overlay_fx_dir, exist_ok=True)
+    """Every video and image under the Overlay Source folders, each tagged
+    with its kind so the client knows how to render it."""
+    src = sources.get(config)
     items = []
-    for name in sorted(os.listdir(config.overlay_fx_dir)):
-        full = os.path.join(config.overlay_fx_dir, name)
-        if not os.path.isfile(full):
-            continue
-        lower = name.lower()
-        if lower.endswith(config.video_exts):
-            items.append({"path": name, "kind": "video"})
-        elif lower.endswith(config.overlay_fx_image_exts):
-            items.append({"path": name, "kind": "image"})
+    for _root, full in src.iter_files("overlay", config.video_exts + config.overlay_fx_image_exts):
+        kind = "video" if full.lower().endswith(config.video_exts) else "image"
+        items.append({"path": src.to_rel(full, "overlay"), "kind": kind})
     return items
 
 
 def _scan_spirals_dir(config) -> list:
-    """Flat listing of the Spirals folder: video files only, for the
-    full-screen spiral overlay layer."""
-    os.makedirs(config.spirals_dir, exist_ok=True)
-    items = []
-    for name in sorted(os.listdir(config.spirals_dir)):
-        full = os.path.join(config.spirals_dir, name)
-        if os.path.isfile(full) and name.lower().endswith(config.video_exts):
-            items.append(name)
-    return items
+    """Every video under the Spiral Source folders, for the full-screen
+    spiral overlay layer."""
+    src = sources.get(config)
+    return [src.to_rel(full, "spirals") for _root, full in src.iter_files("spirals", config.video_exts)]
+
+
+def _send_file(path: str):
+    if not path or not os.path.isfile(path):
+        return Response(status=404)
+    directory, name = os.path.split(path)
+    return send_from_directory(directory, name, max_age=86400)
 
 
 def create_app(ctx: AppContext) -> Flask:
@@ -221,6 +205,8 @@ def create_app(ctx: AppContext) -> Flask:
             phone_qr_svg=_qr_svg(phone_url),
         )
 
+    # Files are addressed as <root id>/<path inside that source folder> -
+    # see mediamixer.sources. Unknown ids or ".." segments resolve to "".
     @app.route("/media/<path:filename>")
     def media(filename):
         # These files don't change once added, so let the browser skip even the
@@ -229,41 +215,73 @@ def create_app(ctx: AppContext) -> Flask:
         # fetched in the background).
         #
         # Always prefer the cached low-res proxy when one exists, regardless
-        # of tile count - this used to be gated to dense grids only
-        # (tiles > proxy_tile_threshold), back when proxies were generated
-        # lazily and sparsely. mediamixer/cache_warmer.py now keeps the
-        # whole library covered in the background, so there's no reason to
-        # withhold the win from small layouts: the full originals run
-        # several Mbps each (one measured sample was 8.2 Mbps vs the
-        # proxy's 1200kbps target, an ~85% reduction), a real cost even at
-        # just 2 simultaneous screens, not only at 25 or 64.
-        proxy_path = proxy.ensure_proxy(os.path.join(config.media_dir, filename), config)
-        if proxy_path:
-            directory, name = os.path.split(proxy_path)
-            return send_from_directory(directory, name, max_age=86400)
-        return send_from_directory(config.media_dir, filename, max_age=86400)
+        # of tile count: the full originals run several Mbps each (one
+        # measured sample was 8.2 Mbps vs the proxy's 1200kbps target), a
+        # real cost even at just 2 simultaneous screens.
+        path = sources.get(config).to_abs("tiles", filename)
+        return _send_file(path and (proxy.ensure_proxy(path, config, "tiles") or path))
 
     @app.route("/audio/<path:filename>")
     def audio_file(filename):
-        return send_from_directory(config.audio_dir, filename, max_age=86400)
+        return _send_file(sources.get(config).to_abs("audio", filename))
 
     @app.route("/overlay_fx/<path:filename>")
     def overlay_fx_file(filename):
-        return send_from_directory(config.overlay_fx_dir, filename, max_age=86400)
+        return _send_file(sources.get(config).to_abs("overlay", filename))
 
     @app.route("/spirals/<path:filename>")
     def spirals_file(filename):
         # Same cached-proxy machinery as /media/ - a full-screen overlay
         # played at 1080p+ full bitrate is just as wasteful as a tile
         # would be, even blended at low opacity.
-        proxy_path = proxy.ensure_proxy(
-            os.path.join(config.spirals_dir, filename), config,
-            base_dir=config.spirals_dir, proxy_subdir="_spirals",
-        )
-        if proxy_path:
-            directory, name = os.path.split(proxy_path)
-            return send_from_directory(directory, name, max_age=86400)
-        return send_from_directory(config.spirals_dir, filename, max_age=86400)
+        path = sources.get(config).to_abs("spirals", filename)
+        return _send_file(path and (proxy.ensure_proxy(path, config, "spirals") or path))
+
+    # -- source folders (menu: More -> Sources) --
+    @app.route("/api/sources")
+    def api_sources():
+        return jsonify(ok=True, sources=sources.get(config).describe(), proxy_dir=os.path.abspath(config.proxy_dir),
+                       prep=_prep_status())
+
+    @app.route("/api/sources/set", methods=["POST"])
+    def api_sources_set():
+        body = request.get_json(silent=True) or {}
+        kind = body.get("kind")
+        paths = body.get("folders")
+        if kind not in sources.KINDS or not isinstance(paths, list) or len(paths) > 50:
+            return jsonify(ok=False, error="expected {kind, folders: [...]}"), 400
+        try:
+            sources.get(config).set_chosen(kind, paths)
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        if kind == "tiles":
+            library.sync_library(db, config)
+        elif kind == "audio":
+            sessions.refresh_audio()
+        return jsonify(ok=True, sources=sources.get(config).describe(), prep=_prep_status())
+
+    @app.route("/api/sources/browse")
+    def api_sources_browse():
+        try:
+            return jsonify(ok=True, **sources.browse(request.args.get("path", "")))
+        except (ValueError, OSError) as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+
+    def _prep_status():
+        """How much of the library still needs a proxy or DNA."""
+        src = sources.get(config)
+        total = proxied = 0
+        for kind in ("tiles", "spirals"):
+            for _root, full in src.iter_files(kind, config.video_exts):
+                total += 1
+                pp = src.proxy_path(full, kind)
+                proxied += bool(pp and os.path.isfile(pp))
+        dna = db.dna_counts(DNA_VERSION)
+        return {
+            "videos": total, "proxied": proxied,
+            "dna_total": dna["total"], "dna_done": dna["analysed"] + dna["failed"],
+            "dna_running": bool(ctx.dna and getattr(ctx.dna, "current", None)),
+        }
 
     @app.route("/api/folders")
     def api_folders():

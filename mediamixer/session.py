@@ -81,6 +81,11 @@ class SessionManager:
     def get_or_create(self, session_id: Optional[str]) -> Session:
         return self.get(session_id) or self.create()
 
+    def refresh_audio(self):
+        """Re-read the Audio Source folders for every open viewer."""
+        for session in self.all():
+            session.overlay.refresh()
+
     def stop(self):
         self._stop_event.set()
 

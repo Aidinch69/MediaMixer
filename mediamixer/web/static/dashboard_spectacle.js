@@ -423,7 +423,7 @@ const MANUAL_SPIRAL_FADE_MS = 1500;
 const MANUAL_SPIRAL_SWAP_MS = 450;
 let manualSpiralEnabled = false;
 let manualSpiralOpacity = 0.25;
-let manualSpiralName = null; // stored by file name so a pick survives the folder changing
+let manualSpiralName = null; // "<source id>/<path>" as /api/spirals/list gives it
 let manualSpiralStallTimer = null;
 let manualSpiralLastTime = -1;
 let manualSpiralOffTimer = null;
@@ -547,7 +547,7 @@ function updateManualSpiralUi() {
     const list = spiralList || [];
     const idx = list.findIndex((it) => it.path === manualSpiralName);
     name.innerText = manualSpiralName
-      ? (idx >= 0 ? (idx + 1) + ' / ' + list.length + ' · ' : '') + manualSpiralName.replace(/\.[^.]+$/, '')
+      ? (idx >= 0 ? (idx + 1) + ' / ' + list.length + ' · ' : '') + manualSpiralName.replace(/^.*\//, '').replace(/\.[^.]+$/, '')
       : 'None picked yet - tap Next';
   }
 }

@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS video_weights (
     loop_anchor_min REAL,
     loop_anchor_max REAL,
     added_at    REAL NOT NULL DEFAULT 0,
-    debuted_at  REAL
+    debuted_at  REAL,
+    present     INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_video_weights_folder ON video_weights(folder_name);
 CREATE TABLE IF NOT EXISTS clip_dna (
@@ -120,6 +121,9 @@ class Database:
             # only clips that show up in a later sync get a real timestamp.
             ("added_at", "ALTER TABLE video_weights ADD COLUMN added_at REAL NOT NULL DEFAULT 0"),
             ("debuted_at", "ALTER TABLE video_weights ADD COLUMN debuted_at REAL"),
+            # 0 = the file is gone (or its source folder was removed/unplugged):
+            # its history is kept, it just isn't picked until it's back.
+            ("present", "ALTER TABLE video_weights ADD COLUMN present INTEGER NOT NULL DEFAULT 1"),
         ):
             if column not in existing:
                 conn.execute(ddl)
@@ -170,12 +174,40 @@ class Database:
             (path, folder, time.time() if fresh else 0),
         )
 
+    def sync_videos(self, found: list, fresh: set) -> None:
+        """Bring video_weights in line with a library scan: `found` is
+        (path, folder) for every file on disk now; paths in `fresh` are
+        stamped for Fresh Drop when first seen. Only rows that actually
+        change get written, so the frequent rescans stay cheap."""
+        conn = self._connect()
+        existing = {r["video_path"]: (r["folder_name"], r["present"])
+                    for r in conn.execute("SELECT video_path, folder_name, present FROM video_weights")}
+        now = time.time()
+        seen = set()
+        for path, folder in found:
+            seen.add(path)
+            row = existing.get(path)
+            if row is None:
+                conn.execute(
+                    "INSERT OR IGNORE INTO video_weights(video_path, folder_name, added_at) VALUES (?, ?, ?)",
+                    (path, folder, now if path in fresh else 0),
+                )
+            elif row != (folder, 1):
+                conn.execute("UPDATE video_weights SET folder_name=?, present=1 WHERE video_path=?", (folder, path))
+        gone = [(p,) for p, (_f, present) in existing.items() if present and p not in seen]
+        if gone:
+            conn.executemany("UPDATE video_weights SET present=0 WHERE video_path=?", gone)
+        conn.commit()
+
     def video_count(self) -> int:
         return self._connect().execute("SELECT COUNT(*) AS n FROM video_weights").fetchone()["n"]
 
     # -- selection --
     def folder_rewards(self):
-        return self._connect().execute("SELECT folder_name, ema_reward, updated_at FROM folder_weights").fetchall()
+        return self._connect().execute(
+            "SELECT folder_name, ema_reward, updated_at FROM folder_weights "
+            "WHERE folder_name IN (SELECT folder_name FROM video_weights WHERE present=1)"
+        ).fetchall()
 
     def video_rewards(self, folder: str, include_fresh: bool = False):
         """Fresh (not-yet-debuted) clips are left out by default so ordinary
@@ -185,14 +217,14 @@ class Database:
         fresh_clause = "" if include_fresh else " AND NOT " + _FRESH_CONDITION.replace("added_at", "v.added_at").replace("debuted_at", "v.debuted_at")
         return self._connect().execute(
             "SELECT v.video_path, v.ema_reward, v.play_count, v.updated_at, d.motion, d.brightness, d.warmth, d.saturation FROM video_weights v "
-            "LEFT JOIN clip_dna d ON d.video_path = v.video_path AND d.ok = 1 WHERE v.folder_name=?" + fresh_clause,
+            "LEFT JOIN clip_dna d ON d.video_path = v.video_path AND d.ok = 1 WHERE v.present=1 AND v.folder_name=?" + fresh_clause,
             (folder,),
         ).fetchall()
 
     def hearted_videos(self, folder: Optional[str] = None) -> list:
         """(video_path, heart_count) for every hearted, already-debuted clip,
         optionally limited to one folder - the jackpot draw pool."""
-        sql = "SELECT video_path, heart_count FROM video_weights WHERE heart_count > 0 AND NOT " + _FRESH_CONDITION
+        sql = "SELECT video_path, heart_count FROM video_weights WHERE present=1 AND heart_count > 0 AND NOT " + _FRESH_CONDITION
         args: tuple = ()
         if folder is not None:
             sql += " AND folder_name=?"
@@ -206,7 +238,7 @@ class Database:
         jackpot to the same alphabetically-first clips. Duplicate picks
         across screens are prevented by the caller's exclude set instead."""
         rows = self._connect().execute(
-            "SELECT video_path FROM video_weights WHERE folder_name=? AND NOT " + _FRESH_CONDITION +
+            "SELECT video_path FROM video_weights WHERE present=1 AND folder_name=? AND NOT " + _FRESH_CONDITION +
             " ORDER BY heart_count DESC, ema_reward DESC, RANDOM() LIMIT ?",
             (folder, limit),
         ).fetchall()
@@ -246,13 +278,13 @@ class Database:
 
     # -- self-building favorites --
     def has_favorites(self) -> bool:
-        return self._connect().execute("SELECT 1 FROM video_weights WHERE heart_count > 0 LIMIT 1").fetchone() is not None
+        return self._connect().execute("SELECT 1 FROM video_weights WHERE present=1 AND heart_count > 0 LIMIT 1").fetchone() is not None
 
     def favorite_video_rewards(self) -> list:
         """Every hearted video across every folder, shaped like video_rewards()
         so pick_video's scoring can treat it as just another folder."""
         return self._connect().execute(
-            "SELECT video_path, ema_reward, play_count, updated_at FROM video_weights WHERE heart_count > 0"
+            "SELECT video_path, ema_reward, play_count, updated_at FROM video_weights WHERE present=1 AND heart_count > 0"
         ).fetchall()
 
     def random_favorite_pair(self, exclude: set) -> Optional[list]:
@@ -262,7 +294,7 @@ class Database:
         top_videos_by_reward) so there's enough to skip past anything
         already showing elsewhere and still land on a real pair."""
         rows = self._connect().execute(
-            "SELECT video_path FROM video_weights WHERE heart_count > 0 ORDER BY RANDOM() LIMIT ?",
+            "SELECT video_path FROM video_weights WHERE present=1 AND heart_count > 0 ORDER BY RANDOM() LIMIT ?",
             (2 + len(exclude),),
         ).fetchall()
         candidates = [r["video_path"] for r in rows if r["video_path"] not in exclude]
@@ -270,7 +302,7 @@ class Database:
 
     def favorite_top_videos(self, limit: int) -> list:
         rows = self._connect().execute(
-            "SELECT video_path FROM video_weights WHERE heart_count > 0 "
+            "SELECT video_path FROM video_weights WHERE present=1 AND heart_count > 0 "
             "ORDER BY heart_count DESC, ema_reward DESC, RANDOM() LIMIT ?",
             (limit,),
         ).fetchall()
@@ -285,13 +317,13 @@ class Database:
         conn = self._connect()
         if folder:
             row = conn.execute(
-                "SELECT video_path FROM video_weights WHERE folder_name=? AND play_count=0 "
+                "SELECT video_path FROM video_weights WHERE present=1 AND folder_name=? AND play_count=0 "
                 "AND NOT " + _FRESH_CONDITION + " ORDER BY RANDOM() LIMIT 1",
                 (folder,),
             ).fetchone()
         else:
             row = conn.execute(
-                "SELECT video_path FROM video_weights WHERE play_count=0 AND NOT " + _FRESH_CONDITION +
+                "SELECT video_path FROM video_weights WHERE present=1 AND play_count=0 AND NOT " + _FRESH_CONDITION +
                 " ORDER BY RANDOM() LIMIT 1"
             ).fetchone()
         return row["video_path"] if row else None
@@ -299,7 +331,7 @@ class Database:
     # -- fresh drop --
     def fresh_video_paths(self) -> list:
         rows = self._connect().execute(
-            "SELECT video_path FROM video_weights WHERE " + _FRESH_CONDITION + " ORDER BY added_at ASC"
+            "SELECT video_path FROM video_weights WHERE present=1 AND " + _FRESH_CONDITION + " ORDER BY added_at ASC"
         ).fetchall()
         return [r["video_path"] for r in rows]
 
@@ -307,7 +339,7 @@ class Database:
     def paths_missing_dna(self, version: int) -> list:
         rows = self._connect().execute(
             "SELECT v.video_path FROM video_weights v LEFT JOIN clip_dna d ON d.video_path = v.video_path "
-            "WHERE d.video_path IS NULL OR d.version < ? ORDER BY v.play_count DESC",
+            "WHERE v.present=1 AND (d.video_path IS NULL OR d.version < ?) ORDER BY v.play_count DESC",
             (version,),
         ).fetchall()
         return [r["video_path"] for r in rows]
@@ -329,7 +361,7 @@ class Database:
 
     def dna_rows(self, folder: Optional[str] = None) -> list:
         """Analysed, playable (debuted) clips with their DNA."""
-        sql = ("SELECT d.* FROM clip_dna d JOIN video_weights v ON v.video_path = d.video_path WHERE d.ok = 1 AND NOT "
+        sql = ("SELECT d.* FROM clip_dna d JOIN video_weights v ON v.video_path = d.video_path WHERE d.ok = 1 AND v.present = 1 AND NOT "
                + _FRESH_CONDITION.replace("added_at", "v.added_at").replace("debuted_at", "v.debuted_at"))
         args: tuple = ()
         if folder is not None:
@@ -350,9 +382,10 @@ class Database:
     def dna_counts(self, version: int = 0) -> dict:
         """Progress at `version`: older analyses still count as usable, just not as done."""
         conn = self._connect()
-        total = conn.execute("SELECT COUNT(*) AS n FROM video_weights").fetchone()["n"]
-        ok = conn.execute("SELECT COUNT(*) AS n FROM clip_dna WHERE ok=1 AND version>=?", (version,)).fetchone()["n"]
-        failed = conn.execute("SELECT COUNT(*) AS n FROM clip_dna WHERE ok=0 AND version>=?", (version,)).fetchone()["n"]
+        total = conn.execute("SELECT COUNT(*) AS n FROM video_weights WHERE present=1").fetchone()["n"]
+        live = " AND video_path IN (SELECT video_path FROM video_weights WHERE present=1)"
+        ok = conn.execute("SELECT COUNT(*) AS n FROM clip_dna WHERE ok=1 AND version>=?" + live, (version,)).fetchone()["n"]
+        failed = conn.execute("SELECT COUNT(*) AS n FROM clip_dna WHERE ok=0 AND version>=?" + live, (version,)).fetchone()["n"]
         return {"total": total, "analysed": ok, "failed": failed}
 
     # -- scenes (saved looks, shared by every device) --
