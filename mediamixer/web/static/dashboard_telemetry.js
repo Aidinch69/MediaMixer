@@ -201,6 +201,7 @@ function initTelemetry() {
   // After window.onload (dashboard_boot.js) has loaded saved prefs and built the tiles.
   addEventListener('load', () => setTimeout(() => logEvent('session.open', {
     w: window.innerWidth, h: window.innerHeight,
+    automated: !!navigator.webdriver || /HeadlessChrome/.test(navigator.userAgent), // test runs - left out of Insights
     // What this browser has changed from the shipped defaults, so the data
     // can be read against the settings actually in use.
     tuning: tuningOverridesNow(),

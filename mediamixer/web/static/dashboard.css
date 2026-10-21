@@ -685,6 +685,12 @@ button:hover{background:#251538;border-color:#b84dff;box-shadow:0 0 10px rgba(18
 .recap-row{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.04);font-size:.85rem}
 .recap-icon{text-align:center}
 .recap-label{color:#c9b6e8}
+#session-recap-highlights{display:flex;flex-direction:column;gap:6px}
+#session-recap-highlights:empty{display:none}
+.recap-subtitle{font-size:.75rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b84dff;margin-top:2px}
+.recap-buttons{display:flex;gap:8px}
+.recap-buttons button{flex:1}
+.insight-row{display:grid;grid-template-columns:22px 1fr;gap:8px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.04);font-size:.8rem;line-height:1.35;margin-bottom:5px}
 .recap-value{font-weight:bold;color:#ffd43b}
 
 /* Clip transitions: a frozen still of the outgoing clip over the tile,

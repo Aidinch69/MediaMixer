@@ -81,7 +81,7 @@ setInterval(() => {
     brainwaveMode = 'theta'; // temporary - not saved; Keep going restores the real setting
     if (lastSynthParams) updateSynthParams(lastSynthParams);
   }
-  if (k >= 1 && !windDown.finished) { windDown.finished = true; toast('🌙 All wound down - Keep going whenever you want back in'); }
+  if (k >= 1 && !windDown.finished) { windDown.finished = true; toast('🌙 All wound down - Keep going whenever you want back in'); showSessionRecap('🌙 Wound down - your session'); }
   updateSessionUi();
 }, 2000);
 

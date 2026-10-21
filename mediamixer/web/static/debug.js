@@ -456,6 +456,14 @@ function loadDnaTaste() {
   }).catch(() => {});
 }
 
+function loadInsights() {
+  fetch('/api/insights').then((r) => r.json()).then((d) => {
+    $('insights').innerHTML = d.items.length
+      ? d.items.map((it) => '<div class="insight"><span>' + it.icon + '</span><span>' + esc(it.text) + '</span></div>').join('')
+      : '<div class="muted">Not enough yet - a few longer sessions and this fills in.</div>';
+  }).catch(() => {});
+}
+
 // ---- wiring ----
 $('session').addEventListener('change', () => { sessionId = $('session').value; fetchEvents(true); });
 $('window').addEventListener('change', () => fetchEvents(true));
@@ -465,6 +473,7 @@ addEventListener('resize', render);
 
 (async () => {
   loadDnaTaste();
+  loadInsights();
   sessionId = await loadSessions();
   await fetchEvents(true);
   setInterval(() => { if (live) fetchEvents(false); }, 3000);

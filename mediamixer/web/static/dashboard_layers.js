@@ -1608,11 +1608,44 @@ function showSessionRecap(title) {
   document.getElementById('session-recap-grid').innerHTML = rows.map(([icon, label, value]) =>
     '<div class="recap-row"><span class="recap-icon">' + icon + '</span><span class="recap-label">' + label + '</span><span class="recap-value">' + value + '</span></div>'
   ).join('');
+  const extra = document.getElementById('session-recap-highlights');
+  extra.innerHTML = '';
+  loadRecapHighlights(extra);
   box.style.display = 'flex';
   void box.offsetWidth;
   box.classList.add('show');
   clearTimeout(recapHideTimer);
   recapHideTimer = setTimeout(hideSessionRecap, RECAP_AUTO_HIDE_MS);
+}
+
+// The engine reads this visit back from the event log: favourite clip, the
+// busiest stretch, the effect and the moments that landed.
+function loadRecapHighlights(el) {
+  fetch('/api/recap?since=' + Math.floor(sessionStartedAt / 1000)).then((r) => r.json()).then((d) => {
+    if (!d.lines || !d.lines.length) return;
+    el.innerHTML = '<div class="recap-subtitle">Highlights</div>' + d.lines.map((l) =>
+      '<div class="recap-row"><span class="recap-icon">' + l.icon + '</span><span class="recap-label">' + l.label + '</span><span class="recap-value">' + escapeSceneText(l.value) + '</span></div>'
+    ).join('');
+  }).catch(() => {});
+}
+
+function saveRecapAsScene() {
+  const d = new Date();
+  const part = d.getHours() < 5 || d.getHours() >= 22 ? 'Late night' : d.getHours() < 12 ? 'Morning' : d.getHours() < 17 ? 'Afternoon' : 'Evening';
+  const suggested = part + ' ' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const name = (window.prompt('Save how things are set up now as a Scene:', suggested) || '').trim();
+  if (!name) return;
+  sceneRequest('/api/scenes', { name, data: captureScene() })
+    .then(() => { activeSceneName = name; renderScenesUi(); toast('🎬 Saved "' + name + '"'); })
+    .catch((e) => toast('🎬 ' + e.message, true));
+}
+
+function loadDashboardInsights() {
+  fetch('/api/insights').then((r) => r.json()).then((d) => {
+    document.getElementById('dashboard-insights').innerHTML = d.items.length
+      ? d.items.map((it) => '<div class="insight-row"><span>' + it.icon + '</span><span>' + escapeSceneText(it.text) + '</span></div>').join('')
+      : 'Not enough yet - a few longer sessions and this fills in.';
+  }).catch(() => {});
 }
 
 function hideSessionRecap() {

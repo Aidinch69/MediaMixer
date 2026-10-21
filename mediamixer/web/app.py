@@ -18,7 +18,7 @@ import qrcode
 import qrcode.image.svg
 from flask import Flask, Response, g, jsonify, render_template, request, send_from_directory
 
-from .. import library, proxy
+from .. import insights, library, proxy
 from ..clip_dna import DNA_VERSION
 from ..context import AppContext
 from ..live_config import SESSION_MIRRORED, LiveConfig
@@ -126,7 +126,7 @@ def create_app(ctx: AppContext) -> Flask:
             return
         # The debug view (often opened on a second device) only reads the
         # event log - it shouldn't spin up a viewer session of its own.
-        if request.method == "GET" and (request.path == "/debug" or request.path.startswith("/api/events")):
+        if request.method == "GET" and (request.path == "/debug" or request.path.startswith("/api/events") or request.path == "/api/insights"):
             return
         session_id = request.cookies.get(config.session_cookie_name)
         session = sessions.get(session_id)
@@ -823,6 +823,17 @@ def create_app(ctx: AppContext) -> Flask:
             session=session_id,
             events=[{"id": r["id"], "t": r["ts"], "k": r["kind"], "d": json.loads(r["data"]) if r["data"] else None} for r in rows],
         )
+
+    @app.route("/api/recap")
+    def api_recap():
+        """This visit, from the event log: favourite clip, peak, the effect
+        and moments that landed."""
+        since = request.args.get("since", time.time() - 3 * 3600, type=float)
+        return jsonify(insights.session_recap(db, g.session.id, since))
+
+    @app.route("/api/insights")
+    def api_insights():
+        return jsonify(items=insights.insights(db, days=request.args.get("days", 14, type=float)))
 
     @app.route("/debug")
     def debug_view():

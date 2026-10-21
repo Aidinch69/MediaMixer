@@ -59,7 +59,8 @@
   <div class="session-recap-card">
     <div id="session-recap-title">📊 Session Recap</div>
     <div id="session-recap-grid"></div>
-    <button onclick="hideSessionRecap()">Keep going</button>
+    <div id="session-recap-highlights"></div>
+    <div class="recap-buttons"><button onclick="saveRecapAsScene()">🎬 Save as Scene</button><button onclick="hideSessionRecap()">Keep going</button></div>
   </div>
 </div>
 <div id="push-luck-prompt">
@@ -511,6 +512,7 @@
       <div class="settings-section-body">
         <div class="metric" id="personal-best"></div>
         <button class="badge" onclick="showSessionRecap()">📊 This Session's Recap</button>
+        <details class="hint-details" ontoggle="if (this.open) loadDashboardInsights()"><summary>💡 Insights - what lifts your hearts</summary><div id="dashboard-insights" class="metric">Loading…</div></details>
         <div class="metric" id="quest-list"></div>
         <div class="metric" id="weekly-arc"></div>
         <div class="metric" id="visit-calendar"></div>

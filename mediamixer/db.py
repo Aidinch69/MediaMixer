@@ -395,6 +395,13 @@ class Database:
             (session, after_id, since_ts, limit),
         ).fetchall()
 
+    def events_since(self, since_ts: float, session: str = None) -> list:
+        if session:
+            return self._connect().execute(
+                "SELECT session, ts, kind, data FROM events WHERE session=? AND ts>=? ORDER BY ts, id", (session, since_ts)
+            ).fetchall()
+        return self._connect().execute("SELECT session, ts, kind, data FROM events WHERE ts>=? ORDER BY session, ts, id", (since_ts,)).fetchall()
+
     def event_sessions(self, since_ts: float) -> list:
         return self._connect().execute(
             "SELECT session, COUNT(*) AS n, MIN(ts) AS first_ts, MAX(ts) AS last_ts FROM events "

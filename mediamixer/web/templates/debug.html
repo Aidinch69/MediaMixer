@@ -40,6 +40,8 @@
   #feed td:first-child { color: var(--muted); }
   #empty { padding: 40px; text-align: center; color: var(--muted); grid-column: 1 / -1; }
   @media (max-width: 600px) { main { padding: 10px; } header { padding: 8px 10px; } }
+  .insights{display:flex;flex-direction:column;gap:6px}
+  .insight{display:grid;grid-template-columns:24px 1fr;gap:8px;padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.04);font-size:13px;line-height:1.35}
 </style>
 </head>
 <body>
@@ -77,6 +79,11 @@
     <h2>What gets liked</h2>
     <div class="scroll"><table id="likes"></table></div>
     <p class="muted" style="margin:8px 0 0;font-size:12px">Likes per tile-minute while each thing was on screen, compared with the rest of the time - so things that run a lot don't look better just for being around more. <b>×1.5</b> = 50% more likes than usual. Faded rows have too few likes to trust yet.</p>
+  </section>
+  <section>
+    <h2>Insights (last 14 days)</h2>
+    <div id="insights" class="insights"></div>
+    <p class="muted" style="margin:8px 0 0;font-size:12px">Plain-language findings from every session with enough in it (5+ active minutes, 10+ hearts). Hearts are compared per active minute (per tile-minute for tile effects), so things that are simply on a lot don't look better just for that.</p>
   </section>
   <section>
     <h2>Clip traits you heart (all time)</h2>
