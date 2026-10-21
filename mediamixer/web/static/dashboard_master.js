@@ -4,17 +4,17 @@
 // engine's shared settings) in one searchable list, grouped like the menu
 // tabs, with changed markers, per-setting reset and a "lock it in" export.
 
-const MASTER_AREAS = ['Screen', 'Flow', 'Rewards', 'Sound'];
+const MASTER_AREAS = ['Look', 'Sound', 'Flow', 'Rewards', 'Home'];
 // TUNING_GROUPS label -> menu area.
 const MASTER_AREA_OF_GROUP = {
-  'Spiral': 'Screen', 'Layout Fade / Dynamic Mosaic': 'Screen', 'Clip Transitions': 'Screen', 'Spotlight Takeover': 'Screen',
-  'Floater Barrage': 'Screen', 'Custom Loop Point': 'Screen', 'Living Screen': 'Screen', 'Visual Textures': 'Screen', 'Hooks & Tease': 'Screen', 'Replays & Callbacks': 'Rewards', 'Gravity': 'Screen',
+  'Spiral': 'Look', 'Layout Fade / Dynamic Mosaic': 'Look', 'Clip Transitions': 'Look', 'Spotlight Takeover': 'Look',
+  'Floater Barrage': 'Look', 'Custom Loop Point': 'Look', 'Living Screen': 'Look', 'Visual Textures': 'Look', 'Hooks & Tease': 'Look', 'Replays & Callbacks': 'Rewards', 'Gravity': 'Look',
   'Auto-Pilot': 'Flow', 'Rhythm & Pulse': 'Flow', 'Rhythm FX': 'Flow', 'Content Pulse': 'Flow', 'Moments': 'Rewards', 'Taste Learning': 'Flow', 'Surges': 'Flow', 'Fresh Drops': 'Flow',
-  'Audio-Reactive': 'Sound', 'Spatial Sound': 'Sound',
-  'Floater Motion': 'Screen', 'Auto-Pilot Zones': 'Flow', 'Living Screen Timing': 'Screen', 'Tile FX & Mantras': 'Screen', 'Tiles & Gestures': 'Screen', 'Session & Finale': 'Flow', 'Performance (Auto)': 'Screen', 'Brainwave': 'Sound',
+  'Audio-Reactive': 'Sound', 'Spatial Sound': 'Sound', 'Progress & Prestige': 'Home',
+  'Floater Motion': 'Look', 'Auto-Pilot Zones': 'Flow', 'Living Screen Timing': 'Look', 'Tile FX & Mantras': 'Look', 'Tiles & Gestures': 'Look', 'Session & Finale': 'Flow', 'Performance (Auto)': 'Look', 'Brainwave': 'Sound',
 };
 // Engine field group -> menu area (everything else lands in Rewards).
-const MASTER_AREA_OF_ENGINE_GROUP = { 'Tension Curve': 'Screen', 'Selection (Bandit)': 'Flow' };
+const MASTER_AREA_OF_ENGINE_GROUP = { 'Tension Curve': 'Look', 'Selection (Bandit)': 'Flow' };
 let masterFilter = 'all';
 const masterOpenGroups = new Set(); // keeps groups open across rebuilds
 

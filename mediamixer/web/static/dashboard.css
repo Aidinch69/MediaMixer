@@ -479,7 +479,7 @@ button.badge.switch.on::after{transform:translateX(22px);background:#fff}
 .scene-zone-links{display:flex;flex-direction:column;gap:4px;width:100%}
 .scene-zone-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.78rem}
 .scene-zone-row select{background:#1a0f2b;color:#e6d4ff;border:1px solid #361e52;border-radius:6px;padding:3px 6px;max-width:58%}
-.panel-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;position:sticky;top:0;z-index:1;background:inherit;padding-bottom:2px}
+.panel-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;position:sticky;top:0;z-index:1;background:inherit;padding-bottom:2px}
 .panel-tab-btn{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:0;text-transform:none !important;font-size:.66rem !important;padding:9px 2px !important;background:linear-gradient(180deg,#1a0f2b,#140a22);border:1px solid #361e52;color:#9a7ab8;padding:9px 4px;border-radius:8px;cursor:pointer;font-weight:bold;text-transform:uppercase;font-size:.68rem;transition:.15s}
 .panel-tab-btn:hover{border-color:#b84dff;color:#d6a3ff}
 .panel-tab-btn.active{background:linear-gradient(180deg,#3a1d5c,#241038);border-color:#d699ff;color:#fff;box-shadow:0 0 10px rgba(184,77,255,.35)}
@@ -780,3 +780,55 @@ body.perf-light #film-grain,body.perf-light #edge-bleed,body.perf-light #beat-ve
 /* A feathered mask on a moving, playing <video> costs the GPU an extra off-screen pass every frame - by far the heaviest
    single thing measured on a weak GPU. Light mode trades the soft edge for rounded corners. */
 body.perf-light .fx-sprite{-webkit-mask-image:none;mask-image:none;border-radius:16px;overflow:hidden}
+/* ---- Menu: Now Playing, search, per-option help (dashboard_menu.js) ---- */
+.now-playing{background:#0e081f;padding:10px;border-radius:10px;border:1px solid #221435;display:flex;flex-direction:column;gap:7px}
+.np-status{display:flex;align-items:center;font-size:.7rem;color:#8e8e93}
+.np-chip{margin:0 0 0 auto;width:auto;padding:3px 8px;border-radius:999px;background:#140a22;border:1px solid #2a1540;color:#9fd7ff;font-size:.66rem;cursor:pointer}
+.np-chip.np-chip-light{color:#ffd27a;border-color:#5a4520}
+.np-track{display:flex;align-items:center;gap:6px;min-width:0}
+.np-track .audio-name{flex:1;min-width:0}
+.np-icon{font-size:.85rem}
+.np-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.np-btn{margin:0;width:auto;padding:6px 8px;border-radius:8px;background:#1a0f2b;border:1px solid #3a2257;color:#d9c8ff;font-size:.7rem;font-weight:bold;cursor:pointer;white-space:nowrap}
+.np-btn:hover{border-color:#b98cff}
+.np-sub{color:#aaa;font-size:11px}
+.np-sub:empty{display:none}
+.np-barrage{color:#ff668c;font-weight:bold}
+.menu-search{position:relative}
+.menu-search input{width:100%;box-sizing:border-box;padding:7px 10px;border-radius:8px;background:#140a22;border:1px solid #2a1540;color:#eee;font-size:.78rem}
+.menu-search input:focus{outline:none;border-color:#b98cff}
+.menu-search-results{display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;max-height:320px;overflow-y:auto;background:#120a20;border:1px solid #3a2257;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.6)}
+.menu-search-hit{padding:7px 10px;cursor:pointer;display:flex;flex-direction:column;gap:1px;border-bottom:1px solid #1e1230}
+.menu-search-hit:hover{background:#1e1233}
+.msh-where{font-size:.64rem;color:#8a7aa8}
+.msh-label{font-size:.78rem;color:#eee}
+.menu-search-empty{padding:10px;font-size:.75rem;color:#8a8a96}
+.search-flash{animation:search-flash 1.8s ease}
+@keyframes search-flash{0%,40%{box-shadow:0 0 0 2px #b98cff;background:rgba(185,140,255,.12)}100%{box-shadow:0 0 0 0 transparent}}
+.opt-help-btn{margin:0 0 0 6px;width:auto;padding:0 5px;border:none;background:none;color:#8a7aa8;font-size:.8rem;cursor:pointer;vertical-align:middle;line-height:1}
+.opt-help-btn:hover{color:#d9c8ff}
+.opt-help{font-size:.7rem;color:#b9b0cc;line-height:1.45;background:rgba(185,140,255,.07);border-left:2px solid #6e4fa0;padding:6px 9px;border-radius:0 6px 6px 0;margin-top:-6px}
+/* ---- Home: play time + level & prestige ---- */
+.playtime-totals{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pt-total{background:#0e081f;border:1px solid #221435;border-radius:8px;padding:7px 4px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.pt-total span{font-size:.6rem;color:#8a8a96;text-transform:uppercase;letter-spacing:.04em}
+.pt-total b{font-size:.9rem;color:#fff}
+.playtime-calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.pt-head{font-size:.6rem;color:#6e6680;text-align:center}
+.pt-day{height:24px;border-radius:5px;background:#140a22;border:1px solid #1e1230;font-size:.52rem;color:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.pt-blank{visibility:hidden}
+.pt-l1{background:#2b1a4a}.pt-l2{background:#46277a}.pt-l3{background:#6a35b0}.pt-l4{background:#9a52ea}
+.pt-today{border-color:#ffd27a}
+.playtime-streak{font-size:.72rem}
+.prestige-tracker{display:flex;flex-direction:column;gap:6px}
+.pr-row{display:flex;justify-content:space-between;align-items:baseline}
+.pr-level{font-size:1rem;font-weight:bold;color:#fff}
+.pr-stars{font-size:.8rem;color:#ffd27a}
+.pr-bar{height:8px;border-radius:999px;background:#1a0f2b;overflow:hidden}
+.pr-bar div{height:100%;background:linear-gradient(90deg,#7a3fd0,#ffd27a)}
+.pr-sub{font-size:.68rem;color:#8a8a96;line-height:1.4}
+.pr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pr-grid div{background:#0e081f;border:1px solid #221435;border-radius:8px;padding:6px 4px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.pr-grid span{font-size:.58rem;color:#8a8a96;text-transform:uppercase}
+.pr-grid b{font-size:.8rem;color:#fff}
+.playtime-streak{display:block}

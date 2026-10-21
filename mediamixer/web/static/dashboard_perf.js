@@ -97,7 +97,17 @@ function perfCheck() {
   toast('⚡ Light mode on - this device was dropping video frames. Change it in Screen → Layout & Pace.');
 }
 
+function cyclePerfMode() {
+  setPerfMode({ auto: 'full', full: 'light', light: 'auto' }[perfMode] || 'auto');
+  toast('⚡ Performance: ' + { auto: 'Auto', full: 'Full', light: 'Light' }[perfMode]);
+}
+
 function updatePerfUi() {
+  const chip = document.getElementById('np-perf');
+  if (chip) {
+    chip.textContent = '⚡ ' + (perfMode === 'auto' ? 'Auto · ' + (perfAutoLight ? 'Light' : 'Full') : perfMode === 'full' ? 'Full' : 'Light');
+    chip.classList.toggle('np-chip-light', perfLite());
+  }
   ['auto', 'full', 'light'].forEach((m) => {
     const b = document.getElementById('perf-' + m);
     if (b) b.classList.toggle('active', perfMode === m);

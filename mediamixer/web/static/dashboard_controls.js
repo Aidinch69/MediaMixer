@@ -135,9 +135,9 @@ function restorePanelState() {
   document.getElementById('panel-toggle').innerText = collapsed ? '☰' : '✕';
 }
 
-const PANEL_TAB_NAMES = ['screen', 'flow', 'rewards', 'sound', 'controls', 'more'];
+const PANEL_TAB_NAMES = ['home', 'look', 'sound', 'flow', 'rewards', 'scenes', 'controls', 'system'];
 // Tabs from before the regroup, so a remembered tab still opens somewhere sensible.
-const PANEL_TAB_RENAMES = { display: 'screen', autopilot: 'flow', engagement: 'rewards', audio: 'sound', tuning: 'controls' };
+const PANEL_TAB_RENAMES = { display: 'look', screen: 'look', autopilot: 'flow', engagement: 'rewards', audio: 'sound', tuning: 'controls', more: 'system' };
 
 function switchPanelTab(name) {
   name = PANEL_TAB_RENAMES[name] || name;
@@ -146,6 +146,7 @@ function switchPanelTab(name) {
   document.querySelectorAll('.panel-tab-btn').forEach(el => el.classList.toggle('active', el.dataset.tab === name));
   try { localStorage.setItem('mm_panel_tab', name); } catch (e) {}
   if (name === 'controls') loadEngineConfig();
+  if (name === 'home' && typeof loadPlaytime === 'function') { loadPlaytime(); renderPrestigeTracker(); }
 }
 
 function restorePanelTab() {

@@ -106,35 +106,91 @@
     <button class="offline-badge unlock-badge" id="audio-unlock" onclick="enableAudio()">🔈 Tap to Enable Audio</button>
     <span id="session-timer-readout" class="session-timer-readout"></span>
   </div>
-  <div class="metric">
-    <div style="display:flex;align-items:center;font-size:.7rem;color:#8e8e93">
+  <div class="now-playing">
+    <div class="np-status">
       <span class="status-dot" id="conn-dot"></span><span id="conn-label">Connected</span>
+      <button class="np-chip" id="np-perf" onclick="cyclePerfMode()" title="Performance mode - tap to switch Auto / Full / Light">⚡ Auto</button>
     </div>
-    <div style="font-weight:bold;color:#ff9999;font-size:.7rem;margin-top:6px">🎵 CURRENT AUDIO</div>
-    <div class="audio-name" id="t-audio" data-val="">…</div>
-    <div style="margin-top:4px;color:#aaa;font-size:11px" id="t-lock">…</div>
-    <div style="margin-top:4px;color:#ff668c;font-size:11px;font-weight:bold" id="t-barrage"></div>
-  </div>
-  <div class="scene-bar">
-    <div class="scene-bar-title">🎬 Scenes</div>
-    <div class="scene-chips" id="scene-chips"></div>
-  </div>
-  <div class="quick-switches" id="quick-switches">
+    <div class="np-track" title="The overlay audio track playing now">
+      <span class="np-icon">🎵</span><div class="audio-name" id="t-audio" data-val="">…</div>
+      <button class="np-btn" onclick="nextAudio()" title="Next audio track">⏭ Next</button>
+    </div>
+    <div class="np-actions">
+      <button class="np-btn" onclick="lock(); uiFlare();" title="Hold every tile on its clip for 60 seconds">🔒 Lock 60s</button>
+      <button class="np-btn" onclick="skip()" title="Change every tile now">⏩ Skip all</button>
+    </div>
+    <div class="np-sub" id="t-lock">…</div>
+    <div class="np-sub np-barrage" id="t-barrage"></div>
+    <div class="quick-switches" id="quick-switches">
     <button class="quick-switch" data-quick="autopilot" onclick="toggleAutopilot()">🤖 Auto-Pilot</button>
     <button class="quick-switch" data-quick="pulse" onclick="toggleSharedPulse()">🌊 Pulse</button>
     <button class="quick-switch" data-quick="rhythm" onclick="toggleRhythm()">🥁 Rhythm</button>
     <button class="quick-switch" data-quick="spiral" onclick="toggleManualSpiral()">🌀 Spiral</button>
+    </div>
+    <div class="menu-search">
+      <input id="menu-search" type="search" placeholder="🔍 Search every setting…" autocomplete="off" oninput="menuSearch(this.value)" onkeydown="if (event.key === 'Escape') { this.value = ''; menuSearch(''); }">
+      <div id="menu-search-results" class="menu-search-results"></div>
+    </div>
   </div>
   <div class="panel-tabs" id="panel-tabs">
-    <button class="panel-tab-btn" data-tab="screen" onclick="switchPanelTab('screen')">🖥️ Screen</button>
-    <button class="panel-tab-btn" data-tab="flow" onclick="switchPanelTab('flow')">🌊 Flow</button>
-    <button class="panel-tab-btn" data-tab="rewards" onclick="switchPanelTab('rewards')">🎰 Rewards</button>
+    <button class="panel-tab-btn" data-tab="home" onclick="switchPanelTab('home')">🏠 Home</button>
+    <button class="panel-tab-btn" data-tab="look" onclick="switchPanelTab('look')">🖥️ Look</button>
     <button class="panel-tab-btn" data-tab="sound" onclick="switchPanelTab('sound')">🎵 Sound</button>
+    <button class="panel-tab-btn" data-tab="flow" onclick="switchPanelTab('flow')">🎬 Flow</button>
+    <button class="panel-tab-btn" data-tab="rewards" onclick="switchPanelTab('rewards')">🎰 Rewards</button>
+    <button class="panel-tab-btn" data-tab="scenes" onclick="switchPanelTab('scenes')">🎞️ Scenes</button>
     <button class="panel-tab-btn" data-tab="controls" onclick="switchPanelTab('controls')">🔧 Master</button>
-    <button class="panel-tab-btn" data-tab="more" onclick="switchPanelTab('more')">⚙️ More</button>
+    <button class="panel-tab-btn" data-tab="system" onclick="switchPanelTab('system')">⚙️ System</button>
   </div>
 
-  <div class="panel-tab" data-tab="screen">
+  <div class="panel-tab" data-tab="home">
+    <details class="settings-section" open>
+      <summary><span class="section-title">⏱️ Play Time</span><span class="settings-section-desc">Time spent watching on this install - today, this week, this month.</span></summary>
+      <div class="settings-section-body">
+        <div class="playtime-totals" id="playtime-totals">Loading…</div>
+        <div class="playtime-calendar" id="playtime-calendar"></div>
+        <div class="metric playtime-streak" id="playtime-streak"></div>
+      </div>
+    </details>
+    <details class="settings-section" open>
+      <summary><span class="section-title">⭐ Level &amp; Prestige</span><span class="settings-section-desc">Your level, XP to the next one, and your permanent prestige bonus.</span></summary>
+      <div class="settings-section-body">
+        <div class="prestige-tracker" id="prestige-tracker"></div>
+        <button class="badge" id="prestige-btn" onclick="prestige()" style="display:none">⭐ Prestige now</button>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🧭 Session</span><span class="settings-section-desc">Start how you want, and wind down gently at the end.</span></summary>
+      <div class="settings-section-body">
+        <div class="metric" id="session-status">Open-ended session</div>
+        <div class="grid">
+          <button class="badge" onclick="openSessionIntent()">🧭 Start a session…</button>
+          <button class="badge" onclick="startWindDown()">🌙 Wind down (5 min)</button>
+        </div>
+        <button class="badge" id="session-keep-going" onclick="cancelWindDown()" style="display:none">🌊 Keep going</button>
+        <div class="slider"><label>Ask at the start of a session</label><button class="badge" id="session-ask-toggle" onclick="toggleSessionAsk()">ON</button></div>
+        <div class="slider">
+          <label>Session Timer (opt-in)</label>
+          <button class="badge" id="session-timer-toggle" onclick="toggleSessionTimer()">OFF</button>
+        </div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">When you come back after 30+ minutes away, a card asks how you want this session: Drift (calm, Theta, breathing tiles), Ride (Auto-Pilot with the beat on Mood) or Chaos (rapid, punchy, Beta), or one of your Scenes - plus an optional length. With a length set, the wind-down starts 5 minutes before the end. Wind-down eases everything toward calm over about 5 minutes: energy and tempo settle, clips play longer, floaters thin out, barrage and jackpot odds fall, build-ups and slow-mo/double exposure pause, the binaural beat moves to Theta and the screen dims a little. Nothing stops, nothing you've saved changes, and Keep going restores it all.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🏆 Bests &amp; Challenges</span><span class="settings-section-desc">Lifetime bests, daily quests, and the trophy case.</span></summary>
+      <div class="settings-section-body">
+        <div class="metric" id="personal-best"></div>
+        <button class="badge" onclick="showSessionRecap()">📊 This Session's Recap</button>
+        <details class="hint-details" ontoggle="if (this.open) loadDashboardInsights()"><summary>💡 Insights - what lifts your hearts</summary><div id="dashboard-insights" class="metric">Loading…</div></details>
+        <div class="metric" id="quest-list"></div>
+        <div class="metric" id="weekly-arc"></div>
+        <div class="trophy-case" id="trophy-case"></div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Lifetime bests and two daily quests that re-roll each day and auto-claim XP on completion. The Weekly Arc is a longer chain that runs Monday to Sunday: its stages unlock one after another, each pays XP, and finishing all of them pays a bigger bonus - a different arc each week. The calendar marks every day you've opened MediaMixer in the last three weeks; coming back on consecutive days builds a visit streak with XP at 3, 7, 14, 30 days and beyond. Everything is stored on this device, nothing leaves it. The trophy case unlocks permanent badges as lifetime stats cross thresholds (hearts, jackpots, chase chains, prestige, Finales, weekly arcs, visit streaks, in-sync runs, Overdrive, Spotlight) - once earned, a trophy stays forever.</p></details>
+      </div>
+    </details>
+  </div>
+
+  <div class="panel-tab" data-tab="look">
     <details class="settings-section">
       <summary><span class="section-title">🖥️ Layout &amp; Pace</span><span class="section-live" data-live="layout"></span><span class="settings-section-desc">Tile count, preload, Mosaic Fit, and a manual speed override.</span></summary>
       <div class="settings-section-body">
@@ -161,9 +217,9 @@
         </div>
         <div class="metric" id="perf-status" style="font-size:.72rem"></div>
         <div class="metric" style="font-size:.72rem">👉 Swipe a tile to swap it · ✋ long-press to 📌 pin it (keeps its clip) · 👆👆 double-tap for ✨ More like this · 🖱 scroll over it to change its speed</div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Sizes tiles by each clip's own aspect ratio to cut down on black bars, instead of a uniform grid. Reflows every few seconds, not on every clip change, to stay calm. Performance: laptops and other PCs with built-in graphics can't draw every effect at once - the videos drop frames and stall. Light leaves out the heaviest effects (film grain, edge bleed, the beat veil, the colour filter on every tile, split frames, slow-mo, double exposures, stutter and cascade, and the bloom/leak/duotone/RGB split tile effects), keeps floaters to one and gives them rounded corners instead of a soft feathered edge. Auto (the default) switches this device to Light by itself if it keeps dropping frames, and remembers that; pick Auto again to re-test, or Full to keep everything on.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Sizes tiles by each clip's own aspect ratio to cut down on black bars, instead of a uniform grid. Reflows every few seconds, not on every clip change, to stay calm. Performance: laptops and other PCs with built-in graphics can't draw every effect at once - the videos drop frames and stall. Light leaves out the heaviest effects (film grain, edge bleed, the beat veil, the colour filter on every tile, split frames, slow-mo, double exposures, stutter and cascade, and the bloom/leak/duotone/RGB split tile effects), keeps floaters to one and gives them rounded corners instead of a soft feathered edge. Auto (the default) switches this device to Light by itself if it keeps dropping frames, and remembers that; pick Auto again to re-test, or Full to keep everything on.</p></details>
         <div class="slider"><label>Playback Speed: <b><span id="l-manual-speed">1.00x</span></b></label><input type="range" id="manual-speed-input" min="0.25" max="2" step="0.05" value="1" oninput="setManualSpeed(this.value)"></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">A baseline speed multiplier for every tile, on top of whatever the server's own tension/barrage speed is doing - 1.00x leaves that untouched. Saved on this device, applies to every layout.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">A baseline speed multiplier for every tile, on top of whatever the server's own tension/barrage speed is doing - 1.00x leaves that untouched. Saved on this device, applies to every layout.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -184,7 +240,57 @@
             <input type="number" id="dynamic-mosaic-max-input" min="1" max="64" value="16" onchange="setDynamicMosaicRange(document.getElementById('dynamic-mosaic-min-input').value, this.value)" placeholder="max">
           </div>
         </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Lets the layout (tile count) change itself instead of only ever being a manual pick. Zone-Driven reads Auto-Pilot's current zone - each zone has its own hand-picked feel (Vault stays low/focused, Color and Jackpot go wide for spectacle) rather than one formula trying to guess a single right direction. Ambient Drift just wanders within your range on its own on a timer, with or without Auto-Pilot. Both stay inside the Tile Range below, and every change dips through the layout fade - and now respects a minimum cooldown between automatic changes so several can't land back to back.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Lets the layout (tile count) change itself instead of only ever being a manual pick. Zone-Driven reads Auto-Pilot's current zone - each zone has its own hand-picked feel (Vault stays low/focused, Color and Jackpot go wide for spectacle) rather than one formula trying to guess a single right direction. Ambient Drift just wanders within your range on its own on a timer, with or without Auto-Pilot. Both stay inside the Tile Range below, and every change dips through the layout fade - and now respects a minimum cooldown between automatic changes so several can't land back to back.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🧲 Crop Focus &amp; Gravity</span><span class="settings-section-desc">Mosaic crops toward the action; the liveliest tile swells a little.</span></summary>
+      <div class="settings-section-body">
+        <div class="metric" id="mosaic-crop-status"></div>
+        <div class="slider"><label>Crop Focus (Mosaic)</label><button class="badge" id="gravity-cropFocus-toggle" onclick="toggleGravityPref('cropFocus')">ON</button></div>
+        <div class="slider"><label>Gravity</label><button class="badge" id="gravity-gravity-toggle" onclick="toggleGravityPref('gravity')">ON</button></div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Mosaic Fit now tries every way of splitting the tiles into rows (not just even rows) and keeps the one that needs the least cropping - the line above shows how much is cut now versus the old way. Crop Focus: what Mosaic does have to cut off is taken from the empty side, not the action - each tile's crop slides toward where the movement is (from Clip DNA), gently. Gravity: the tile where the most is happening swells a little over its neighbours. It follows the movement in the clips; a heart only nudges it slightly and that fades in seconds, so hearting a run of tiles won't shuffle anything - one tile leads at a time and holds it for a while. It steps aside for Spotlight, barrages, build-ups and the Finale. Fine-tune in Master Controls → Gravity.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🌬️ Living Screen</span><span class="settings-section-desc">Breathing tiles, slow-motion moments, double exposures, audio-reactive spirals.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider"><label>Breathing Tiles</label><button class="badge" id="living-breathe-toggle" onclick="toggleLiving('breathe')">ON</button></div>
+        <div class="slider"><label>Slow-Mo Moments</label><button class="badge" id="living-slowmo-toggle" onclick="toggleLiving('slowmo')">ON</button></div>
+        <div class="slider"><label>Double Exposure</label><button class="badge" id="living-double-toggle" onclick="toggleLiving('double')">ON</button></div>
+        <div class="slider"><label>Spirals React to Audio</label><button class="badge" id="living-spiral-audio-toggle" onclick="toggleLiving('spiralAudio')">ON</button></div>
+        <div class="slider"><label>Smart Framing</label><button class="badge" id="living-framing-toggle" onclick="toggleLiving('smartFraming')">ON</button></div>
+        <div class="slider"><label>Colour Mood</label><button class="badge" id="living-mood-toggle" onclick="toggleLiving('colorMood')">ON</button></div>
+        <div class="grid">
+          <button class="badge" onclick="startSlowmo(pickAmbientTarget())">⏱ Preview Slow-Mo</button>
+          <button class="badge" onclick="startDoubleExposure(pickAmbientTarget())">👥 Preview Double</button>
+        </div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Breathing Tiles: every tile slowly drifts and zooms a few percent on its own cycle, faster or slower with the Shared Pulse. Slow-Mo Moments: at high-energy moments one tile eases into slow motion for a couple of seconds with a motion-trail ghost, a soft push-in and a vignette, then eases back - it only picks a tile with plenty already buffered, so it never coincides with a real stall. Double Exposure: now and then a second clip fades in over a tile as a light blend, then separates. Smart Framing: each tile pans gently toward where the movement is in its clip (from Clip DNA), following it as it moves, with a slight zoom for room - like a slow camera operator. Colour Mood: the screen-edge glow, Light Leaks and Duotone palettes follow how warm or cool the clips on screen are (from Clip DNA), shifting gradually - jackpot flashes keep their own rotating colours. Spirals React to Audio: hits in the overlay track (or tile audio) give the spirals a quick swell - needs Audio-Reactive FX on. Fine-tune amounts and timing in Master Controls → Living Screen.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🎞️ Visual Textures</span><span class="settings-section-desc">Split frames, film grain &amp; dust, edge bleed.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider"><label>Split Frames</label><button class="badge" id="texture-split-toggle" onclick="toggleTexture('split')">ON</button></div>
+        <div class="slider"><label>Film Grain &amp; Dust</label><button class="badge" id="texture-grain-toggle" onclick="toggleTexture('grain')">ON</button></div>
+        <div class="slider"><label>Edge Bleed</label><button class="badge" id="texture-bleed-toggle" onclick="toggleTexture('bleed')">ON</button></div>
+        <div class="grid">
+          <button class="badge" onclick="startSplitFrames(-1, 2) || toast('🎞️ No tile free for a split right now', true)">🎞️ Preview Split</button>
+          <button class="badge" onclick="startSplitFrames(-1, 4) || toast('🎞️ No tile free for a split right now', true)">🎞️ Preview Quad</button>
+        </div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Split Frames: now and then one tile splits into two or four panes, each showing the same clip at a different moment, for a few seconds - the panes only appear once they're all loaded and in place, so it never looks like buffering. Film Grain &amp; Dust: a light film grain over the screens with the odd speck of dust - barely there normally, stronger in calm moments (Vault zone, a Drift session, a wind-down, a Breath). Edge Bleed: each tile's colour glows softly into the gaps around it, so the grid feels like one picture. Fine-tune in Master Controls → Visual Textures.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🪝 Hooks &amp; Tease</span><span class="settings-section-desc">A clip's best bit repeats like a song's hook; some clips arrive pushed in close.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider"><label>Hooks</label><button class="badge" id="hooks-hooks-toggle" onclick="toggleHookPref('hooks')">ON</button></div>
+        <div class="slider"><label>Tease Reveal</label><button class="badge" id="hooks-tease-toggle" onclick="toggleHookPref('tease')">ON</button></div>
+        <div class="grid">
+          <button class="badge" onclick="previewHook() || toast('🪝 No tile free for a hook right now', true)">🪝 Preview Hook</button>
+          <button class="badge" onclick="previewTease()">🔎 Preview Tease</button>
+        </div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Hooks: when a clip reaches its best bit - where you've hearted it, or the strongest repeating stretch Clip DNA found - that couple of seconds plays three times before the clip carries on, the way a song repeats its hook. If the clip has a steady rhythm, the stretch is a whole number of its own beats so it repeats in time. Each repeat is ready before it's shown, so it never looks like buffering. Tease Reveal: now and then a new clip arrives pushed in close on where the action is, holds there a moment, then slowly pulls back to the full frame. Fine-tune in Master Controls → Hooks &amp; Tease.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -204,57 +310,7 @@
         </div>
         <div class="slider"><label>Floating Count: <b><span id="l-fx-count">3</span></b></label><input type="range" id="fx-count-input" min="0" max="10" step="1" value="3" oninput="setFxCount(this.value)"></div>
         <div class="slider"><label>Opacity: <b><span id="l-fx-opacity">60%</span></b></label><input type="range" id="fx-opacity-input" min="10" max="100" value="60" oninput="setFxOpacity(this.value)"></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Floating clips drift and fade across the screen, like a DVD logo. "Overlay Folder" pulls from your Overlay Source folders (More → Sources); put videos or images there to use it.</p></details>
-      </div>
-    </details>
-    <details class="settings-section">
-      <summary><span class="section-title">🌬️ Living Screen</span><span class="settings-section-desc">Breathing tiles, slow-motion moments, double exposures, audio-reactive spirals.</span></summary>
-      <div class="settings-section-body">
-        <div class="slider"><label>Breathing Tiles</label><button class="badge" id="living-breathe-toggle" onclick="toggleLiving('breathe')">ON</button></div>
-        <div class="slider"><label>Slow-Mo Moments</label><button class="badge" id="living-slowmo-toggle" onclick="toggleLiving('slowmo')">ON</button></div>
-        <div class="slider"><label>Double Exposure</label><button class="badge" id="living-double-toggle" onclick="toggleLiving('double')">ON</button></div>
-        <div class="slider"><label>Spirals React to Audio</label><button class="badge" id="living-spiral-audio-toggle" onclick="toggleLiving('spiralAudio')">ON</button></div>
-        <div class="slider"><label>Smart Framing</label><button class="badge" id="living-framing-toggle" onclick="toggleLiving('smartFraming')">ON</button></div>
-        <div class="slider"><label>Colour Mood</label><button class="badge" id="living-mood-toggle" onclick="toggleLiving('colorMood')">ON</button></div>
-        <div class="grid">
-          <button class="badge" onclick="startSlowmo(pickAmbientTarget())">⏱ Preview Slow-Mo</button>
-          <button class="badge" onclick="startDoubleExposure(pickAmbientTarget())">👥 Preview Double</button>
-        </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Breathing Tiles: every tile slowly drifts and zooms a few percent on its own cycle, faster or slower with the Shared Pulse. Slow-Mo Moments: at high-energy moments one tile eases into slow motion for a couple of seconds with a motion-trail ghost, a soft push-in and a vignette, then eases back - it only picks a tile with plenty already buffered, so it never coincides with a real stall. Double Exposure: now and then a second clip fades in over a tile as a light blend, then separates. Smart Framing: each tile pans gently toward where the movement is in its clip (from Clip DNA), following it as it moves, with a slight zoom for room - like a slow camera operator. Colour Mood: the screen-edge glow, Light Leaks and Duotone palettes follow how warm or cool the clips on screen are (from Clip DNA), shifting gradually - jackpot flashes keep their own rotating colours. Spirals React to Audio: hits in the overlay track (or tile audio) give the spirals a quick swell - needs Audio-Reactive FX on. Fine-tune amounts and timing in Master Controls → Living Screen.</p></details>
-      </div>
-    </details>
-    <details class="settings-section">
-      <summary><span class="section-title">🎞️ Visual Textures</span><span class="settings-section-desc">Split frames, film grain &amp; dust, edge bleed.</span></summary>
-      <div class="settings-section-body">
-        <div class="slider"><label>Split Frames</label><button class="badge" id="texture-split-toggle" onclick="toggleTexture('split')">ON</button></div>
-        <div class="slider"><label>Film Grain &amp; Dust</label><button class="badge" id="texture-grain-toggle" onclick="toggleTexture('grain')">ON</button></div>
-        <div class="slider"><label>Edge Bleed</label><button class="badge" id="texture-bleed-toggle" onclick="toggleTexture('bleed')">ON</button></div>
-        <div class="grid">
-          <button class="badge" onclick="startSplitFrames(-1, 2) || toast('🎞️ No tile free for a split right now', true)">🎞️ Preview Split</button>
-          <button class="badge" onclick="startSplitFrames(-1, 4) || toast('🎞️ No tile free for a split right now', true)">🎞️ Preview Quad</button>
-        </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Split Frames: now and then one tile splits into two or four panes, each showing the same clip at a different moment, for a few seconds - the panes only appear once they're all loaded and in place, so it never looks like buffering. Film Grain &amp; Dust: a light film grain over the screens with the odd speck of dust - barely there normally, stronger in calm moments (Vault zone, a Drift session, a wind-down, a Breath). Edge Bleed: each tile's colour glows softly into the gaps around it, so the grid feels like one picture. Fine-tune in Master Controls → Visual Textures.</p></details>
-      </div>
-    </details>
-    <details class="settings-section">
-      <summary><span class="section-title">🪝 Hooks &amp; Tease</span><span class="settings-section-desc">A clip's best bit repeats like a song's hook; some clips arrive pushed in close.</span></summary>
-      <div class="settings-section-body">
-        <div class="slider"><label>Hooks</label><button class="badge" id="hooks-hooks-toggle" onclick="toggleHookPref('hooks')">ON</button></div>
-        <div class="slider"><label>Tease Reveal</label><button class="badge" id="hooks-tease-toggle" onclick="toggleHookPref('tease')">ON</button></div>
-        <div class="grid">
-          <button class="badge" onclick="previewHook() || toast('🪝 No tile free for a hook right now', true)">🪝 Preview Hook</button>
-          <button class="badge" onclick="previewTease()">🔎 Preview Tease</button>
-        </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Hooks: when a clip reaches its best bit - where you've hearted it, or the strongest repeating stretch Clip DNA found - that couple of seconds plays three times before the clip carries on, the way a song repeats its hook. If the clip has a steady rhythm, the stretch is a whole number of its own beats so it repeats in time. Each repeat is ready before it's shown, so it never looks like buffering. Tease Reveal: now and then a new clip arrives pushed in close on where the action is, holds there a moment, then slowly pulls back to the full frame. Fine-tune in Master Controls → Hooks &amp; Tease.</p></details>
-      </div>
-    </details>
-    <details class="settings-section">
-      <summary><span class="section-title">🧲 Crop Focus &amp; Gravity</span><span class="settings-section-desc">Mosaic crops toward the action; the liveliest tile swells a little.</span></summary>
-      <div class="settings-section-body">
-        <div class="metric" id="mosaic-crop-status"></div>
-        <div class="slider"><label>Crop Focus (Mosaic)</label><button class="badge" id="gravity-cropFocus-toggle" onclick="toggleGravityPref('cropFocus')">ON</button></div>
-        <div class="slider"><label>Gravity</label><button class="badge" id="gravity-gravity-toggle" onclick="toggleGravityPref('gravity')">ON</button></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Mosaic Fit now tries every way of splitting the tiles into rows (not just even rows) and keeps the one that needs the least cropping - the line above shows how much is cut now versus the old way. Crop Focus: what Mosaic does have to cut off is taken from the empty side, not the action - each tile's crop slides toward where the movement is (from Clip DNA), gently. Gravity: the tile where the most is happening swells a little over its neighbours. It follows the movement in the clips; a heart only nudges it slightly and that fades in seconds, so hearting a run of tiles won't shuffle anything - one tile leads at a time and holds it for a while. It steps aside for Spotlight, barrages, build-ups and the Finale. Fine-tune in Master Controls → Gravity.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Floating clips drift and fade across the screen, like a DVD logo. "Overlay Folder" pulls from your Overlay Source folders (More → Sources); put videos or images there to use it.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -270,7 +326,7 @@
           <button class="badge" onclick="stepManualSpiral(1)">Next ▶</button>
         </div>
         <div class="slider"><label>Opacity: <b><span id="l-manual-spiral-opacity">25%</span></b></label><input type="range" id="manual-spiral-opacity-input" min="5" max="80" step="1" value="25" oninput="setManualSpiralOpacity(this.value)"></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Plays one spiral from your Spirals folder over the whole screen for as long as it's on - with Auto-Pilot on or off. Prev/Next step through the folder (and switch it on if it's off), and the opacity slider sets how strong it is. When a regular spiral moment fires (a big jackpot, hearts, Overdrive), that one fades in on top of yours with a different spiral, then fades back out leaving yours where it was.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Plays one spiral from your Spirals folder over the whole screen for as long as it's on - with Auto-Pilot on or off. Prev/Next step through the folder (and switch it on if it's off), and the opacity slider sets how strong it is. When a regular spiral moment fires (a big jackpot, hearts, Overdrive), that one fades in on top of yours with a different spiral, then fades back out leaving yours where it was.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -306,80 +362,37 @@
             <button class="badge" onclick="previewMantra()">👁 Preview</button>
           </div>
         </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Short phrases from your list appear over the whole screen - above the spiral, below the controls. Drift floats a phrase up and away somewhere on screen; Flash is a brief centered word; On the Beat pops one on a strong hit in the audio or a Rhythm Mode downbeat. While a spiral is up, phrases also slow into a centered "trance" breathe. Frequency is a baseline - it rises on its own during a spiral, a Surge, Auto-Pilot's climax, and a Finale's build and peak, and a burst of phrases rides along with mega jackpots.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Short phrases from your list appear over the whole screen - above the spiral, below the controls. Drift floats a phrase up and away somewhere on screen; Flash is a brief centered word; On the Beat pops one on a strong hit in the audio or a Rhythm Mode downbeat. While a spiral is up, phrases also slow into a centered "trance" breathe. Frequency is a baseline - it rises on its own during a spiral, a Surge, Auto-Pilot's climax, and a Finale's build and peak, and a burst of phrases rides along with mega jackpots.</p></details>
       </div>
     </details>
   </div>
 
-  <div class="panel-tab" data-tab="flow">
+  <div class="panel-tab" data-tab="sound">
     <details class="settings-section">
-      <summary><span class="section-title">🫀 Content Pulse</span><span class="settings-section-desc">The movement in the clips on screen leads the energy, glow and (optionally) the beat.</span></summary>
+      <summary><span class="section-title">🔊 Device Audio</span><span class="section-live" data-live="sound"></span><span class="settings-section-desc">Binaural tone and beat, the overlay track, and this device's volume levels.</span></summary>
       <div class="settings-section-body">
-        <div class="metric" id="content-status"></div>
-        <div class="slider"><label>Energy Follows the Clips</label><button class="badge" id="content-energy-toggle" onclick="toggleContent('energy')">ON</button></div>
-        <div class="slider"><label>Glow on Clip Peaks</label><button class="badge" id="content-peaks-toggle" onclick="toggleContent('peaks')">ON</button></div>
-        <div class="slider"><label>Cuts Wait for Clip Peaks</label><button class="badge" id="content-peakCuts-toggle" onclick="toggleContent('peakCuts')">ON</button></div>
-        <div class="slider"><label>Beat-Matching (Rhythm Mode)</label><button class="badge" id="content-beatMatch-toggle" onclick="toggleContent('beatMatch')">ON</button></div>
-        <div class="slider"><label>Visual Tone (Rhythm Mode)</label><button class="badge" id="content-visualTone-toggle" onclick="toggleContent('visualTone')">ON</button></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Every clip has its own movement curve from Clip DNA (clips not analysed yet are read live from tiny frames). Energy Follows the Clips: when the clips on screen move more than usual, the session energy lifts with them - and the binaural beat, spirals and everything else on the Shared Pulse follow - then settles as they calm. Glow on Clip Peaks: when a clip reaches one of its own motion peaks, its tile and the screen edge glow with it. Cuts Wait for Clip Peaks: about half the time, when a tile is about to change and its clip has a peak coming within a few seconds, the change waits until just after it - so you don't leave a clip mid-build. Beat-Matching: while Rhythm Mode runs, clips that have a steady rhythm of their own (about a quarter of them, from Clip DNA) are nudged up to 12% faster or slower (or matched at double or half speed) so their movement falls in time with the beat - only ever a small nudge, glided in; clips far off the beat are left alone. Visual Tone: the screen breathes with the beat - a soft light and the edge glow swell on each beat with the same shape as the Tone beat sound. For the beat itself, pick Tempo Source → Follow Clips in Rhythm Mode: the beat takes the rhythm of the clip that's moving most (when it has a steady one), gliding as the lead clip changes. Fine-tune in Master Controls → Content Pulse.</p></details>
-      </div>
-    </details>
-    <details class="settings-section">
-      <summary><span class="section-title">🧭 Session</span><span class="settings-section-desc">Start how you want, and wind down gently at the end.</span></summary>
-      <div class="settings-section-body">
-        <div class="metric" id="session-status">Open-ended session</div>
-        <div class="grid">
-          <button class="badge" onclick="openSessionIntent()">🧭 Start a session…</button>
-          <button class="badge" onclick="startWindDown()">🌙 Wind down (5 min)</button>
-        </div>
-        <button class="badge" id="session-keep-going" onclick="cancelWindDown()" style="display:none">🌊 Keep going</button>
-        <div class="slider"><label>Ask at the start of a session</label><button class="badge" id="session-ask-toggle" onclick="toggleSessionAsk()">ON</button></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">When you come back after 30+ minutes away, a card asks how you want this session: Drift (calm, Theta, breathing tiles), Ride (Auto-Pilot with the beat on Mood) or Chaos (rapid, punchy, Beta), or one of your Scenes - plus an optional length. With a length set, the wind-down starts 5 minutes before the end. Wind-down eases everything toward calm over about 5 minutes: energy and tempo settle, clips play longer, floaters thin out, barrage and jackpot odds fall, build-ups and slow-mo/double exposure pause, the binaural beat moves to Theta and the screen dims a little. Nothing stops, nothing you've saved changes, and Keep going restores it all.</p></details>
-      </div>
-    </details>
-    <details class="settings-section">
-      <summary><span class="section-title">🎬 Auto-Pilot<span class="experimental-pill">Experimental</span></span><span class="section-live" data-live="autopilot"></span><span class="settings-section-desc">Scripts pace, odds, and content novelty through a repeating calm-to-climax arc.</span></summary>
-      <div class="settings-section-body">
+        <div class="slider"><label>Carrier: <b><span id="l-freq">{{ tone_hz }} Hz</span></b></label><button onclick="cycleTone()">Cycle Frequency</button></div>
+        <div class="slider"><label>Binaural Beat: <b><span id="l-beat">{{ beat_knob }}</span></b></label><input type="range" id="beat-input" min="0" max="1" step="0.01" value="{{ beat_knob }}" oninput="vec('binaural',this.value);document.getElementById('l-beat').innerText=this.value"></div>
         <div class="slider">
-          <label>Enabled</label>
-          <button class="badge" id="autopilot-toggle" onclick="toggleAutopilot()">OFF</button>
+          <label>Brainwave</label>
+          <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+            <button class="badge" id="brainwave-free" onclick="setBrainwaveMode('free')">Free</button>
+            <button class="badge" id="brainwave-mood" onclick="setBrainwaveMode('mood')">🧭 Mood</button>
+            <button class="badge" id="brainwave-delta" onclick="setBrainwaveMode('delta')">Delta 2.5</button>
+            <button class="badge" id="brainwave-theta" onclick="setBrainwaveMode('theta')">Theta 6</button>
+            <button class="badge" id="brainwave-alpha" onclick="setBrainwaveMode('alpha')">Alpha 10</button>
+            <button class="badge" id="brainwave-beta" onclick="setBrainwaveMode('beta')">Beta 15</button>
+            <button class="badge" id="brainwave-gamma" onclick="setBrainwaveMode('gamma')">Gamma 40</button>
+          </div>
+          <div class="metric" id="brainwave-status" style="font-size:.72rem"></div>
         </div>
-        <div class="slider"><label>Typical Pace: <b><span id="l-autopilot-minutes">~6 min</span></b></label><input type="range" id="autopilot-minutes-input" min="2" max="15" step="1" value="6" oninput="setAutopilotMinutes(this.value)"></div>
-        <div class="slider" id="autopilot-zone-row" style="display:none">
-          <label>Current Zone</label>
-          <span id="l-autopilot-zone" class="zone-readout"></span>
-        </div>
-        <button class="badge" onclick="switchItUp()">🔀 Switch It Up</button>
-        <div class="slider">
-          <label>Zone Scenes</label>
-          <div id="scene-zone-links" class="scene-zone-links"></div>
-        </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Scripts pace, barrage/jackpot odds, floater count, and content novelty through a calm -&gt; building -&gt; climax -&gt; cooldown arc, instead of those staying wherever you last set them. "Typical Pace" is a baseline, not a fixed timer - each zone actually extends itself for as long as you're genuinely engaged with it (up to a cap) and cuts short if you're not, so a real cycle can run noticeably shorter or longer than this number depending on how the session's actually going. Each cycle also picks a fresh "zone" (Chase/Color/Jackpot/Vault) that leans the climax toward a different mix of the passive stuff above - one cycle's climax might be chase-flash heavy, the next a Color Rush, the next sealed tiles - instead of every climax looking the same. Turns Floating Overlay on if it's off. Does not touch Mosaic Fit - that stays exactly wherever you set it manually. "Switch It Up" forces an immediate zone change plus a fresh novelty push, for whenever the satiation logic's own timing isn't fast enough for you. Zone Scenes: link a zone to one of your Scenes (or Auto, for any of them at random) and it blends in whenever that zone starts - Auto-Pilot keeps steering pace and floater count itself, and the layout too while zone-driven Dynamic Mosaic is on.</p></details>
-      </div>
-    </details>
-    <details class="settings-section">
-      <summary><span class="section-title">🧬 Clip DNA</span><span class="settings-section-desc">What each clip looks like - brightness, motion, colour - used to pick and pair clips.</span></summary>
-      <div class="settings-section-body">
-        <div class="metric" id="dna-status">🧬 Checking…</div>
-        <div class="slider"><label>Gradient Moments</label><button class="badge" id="dna-gradient-toggle" onclick="toggleLiving('gradient')">ON</button></div>
-        <div class="slider"><label>Colour-Matched Double Exposure</label><button class="badge" id="dna-match-toggle" onclick="toggleLiving('doubleMatch')">ON</button></div>
-        <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
-          <button class="badge" onclick="startGradient('brightness')">Dark → Light</button>
-          <button class="badge" onclick="startGradient('warmth')">Cool → Warm</button>
-          <button class="badge" onclick="startGradient('motion')">Calm → Wild</button>
-        </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">The engine looks at every clip once, in the background (a few seconds of each, at low priority): how bright it is, how much moves, how warm or cool it is, and any accent colour beyond skin tones. Then: picks lean toward livelier clips when the session's energy is up and calmer ones when it's settled (strength in Master Controls → "Clip DNA: energy-aware picking"); double exposures pair clips that look alike; and Gradient moments fill the grid with clips arranged dark → light, cool → warm or calm → wild - with Rhythm Mode on they reveal one tile per beat. New clips get analysed automatically.</p></details>
-      </div>
-    </details>
-    <details class="settings-section">
-      <summary><span class="section-title">🌊 Shared Pulse</span><span class="section-live" data-live="pulse"></span><span class="settings-section-desc">Spirals, binaural and glow flow with the session's energy.</span></summary>
-      <div class="settings-section-body">
-        <div class="slider">
-          <label>Enabled</label>
-          <button class="badge" id="pulse-toggle" onclick="toggleSharedPulse()">ON</button>
-        </div>
-        <div class="metric" id="pulse-status"></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">One energy signal - built from your engagement, build-ups and fresh jackpots, surges, Overdrive and the Auto-Pilot zone, glided over a few seconds - that several layers follow together: spirals (yours and the event ones) play faster or slower with it and brighten a touch on each downbeat, the binaural beat rises and settles with it, and floaters and the screen edge get a soft kick on the beat. Rhythm Mode's tempo can follow the same energy (Tempo Follows Energy). Turn this off to let each layer keep its own pace.</p></details>
+        <div class="slider"><label>Binaural Tone: <b><span id="l-binaural-vol">80%</span></b></label><input type="range" id="binaural-vol-input" min="0" max="100" value="80" oninput="setBinauralVolume(this.value)"></div>
+        <div class="slider"><label>Overlay Track: <b><span id="l-overlay-vol">85%</span></b></label><input type="range" id="overlay-vol-input" min="0" max="100" value="85" oninput="setOverlayVolume(this.value)"></div>
+        <div class="slider"><label>Beat Sound volume: <b><span id="l-rhythm-volume-sound">70%</span></b></label><input type="range" id="rhythm-volume-input-sound" min="0" max="100" step="5" value="70" oninput="setRhythmVolume(this.value)"></div>
+        <div class="slider"><label>Tile Audio: <b><span id="l-tile-audio-vol">0%</span></b></label><input type="range" id="tile-audio-vol-input" min="0" max="100" value="0" oninput="setTileAudioVolume(this.value)"></div>
+        <div class="slider"><label>🎧 Spatial Sound</label><button class="badge" id="spatial-sound-toggle" onclick="toggleSpatialSound()">ON</button></div>
+        <div class="slider"><label>SFX Volume: <b><span id="l-sfx-vol">70%</span></b></label><input type="range" id="sfx-vol-input" min="0" max="100" value="70" oninput="setSfxVolume(this.value)"></div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Brainwave locks the binaural beat (the difference between the two ears) exactly onto a brainwave band - Delta 2.5 Hz deep, Theta 6 Hz dreamy/trance, Alpha 10 Hz relaxed flow, Beta 15 Hz alert, Gamma 40 Hz peak - instead of drifting with the Binaural Beat slider, clip tension and the Shared Pulse (Free). Mood picks Theta, Alpha or Beta from the Auto-Pilot zone and the session's energy, changing only after a mood has held for 15 seconds, gliding across over a few seconds and then sitting exactly on the new band. Headphones needed for the binaural effect itself. Volume (binaural/overlay/tile) is just for this device. The beat/carrier are the one exception - those stay in sync with every device watching the same session. Tile Audio is every tile's own clip audio, all at once, at this one shared level - 0% keeps every tile muted (the default). There's no per-tile solo; turning it up means every visible tile plays together at the same volume. Spatial Sound places each tile's audio where the tile sits - left tiles in your left ear, right tiles in your right - gliding as tiles move, so with headphones the grid sounds like a room around you rather than one mixed wall. Spread width is in Master Controls -> Spatial Sound.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -442,20 +455,52 @@
             <button class="badge" id="rhythm-voice-tone" onclick="setRhythmVoice('tone')">〰️ Tone</button>
           </div>
         </div>
-        <div class="slider"><label>Beat Volume: <b><span id="l-rhythm-volume">70%</span></b></label><input type="range" id="rhythm-volume-input" min="0" max="100" step="5" value="70" oninput="setRhythmVolume(this.value)"></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Beat Sound gives the beat something to hear, with its own volume: Kick (a soft thump with a click on top), Tick (a light bright tick), Heart (lub-dub), or Tone - no new sound, the binaural tone itself swells on each beat. Picking one plays a sample. Each beat lights tiles in a pattern - a snake through the grid, a ping-pong, random scatter, ripples out from the centre, or a whole-grid heartbeat (Mix rotates between them every few bars) - and every downbeat (1 of 4) kicks the screen-edge glow. Tempo Waves speed the beat up over about 70 seconds, then drop back to base - and with Speed Follows Tempo on, every tile's playback speed rides the same wave (about 0.95x at base up to 1.25x at the top), so each wave builds and releases. Follow Audio tries to lock onto a steady beat in what's playing; spoken-word tracks often don't have one, so it falls back to your manual tempo and says so above. Every unbroken minute in sync earns XP (every other minute a tile FX too), and hearting a tile right on the beat charges Overdrive double. Stutter Edits: now and then on a downbeat a tile replays the same half-beat two or three times in rhythm, then snaps back (replayed from captured frames, so the clip itself never stalls). Cascades: rarely, one clip ripples across the grid a beat at a time - each tile a beat behind the last, along the beat path or outward in rings - holds a few bars, then hands back one beat at a time. Cut on the Beat holds each clip change until the next beat (and automatic layout changes until the next downbeat), so the grid cuts in time like a music video. Tempo Follows Energy lets the beat quicken with engagement, build-ups, jackpots, surges and Overdrive, and settle in the Vault zone or a Floater Barrage. Auto-Pilot's Rhythm Zone and a Finale's build/peak switch this on by themselves while they run.</p></details>
+        <div class="slider"><label>Beat-Matching</label><button class="badge" id="content-beatMatch-toggle" onclick="toggleContent('beatMatch')">ON</button></div>
+        <div class="slider"><label>Visual Tone</label><button class="badge" id="content-visualTone-toggle" onclick="toggleContent('visualTone')">ON</button></div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Beat Sound gives the beat something to hear, with its own volume: Kick (a soft thump with a click on top), Tick (a light bright tick), Heart (lub-dub), or Tone - no new sound, the binaural tone itself swells on each beat. Picking one plays a sample. Each beat lights tiles in a pattern - a snake through the grid, a ping-pong, random scatter, ripples out from the centre, or a whole-grid heartbeat (Mix rotates between them every few bars) - and every downbeat (1 of 4) kicks the screen-edge glow. Tempo Waves speed the beat up over about 70 seconds, then drop back to base - and with Speed Follows Tempo on, every tile's playback speed rides the same wave (about 0.95x at base up to 1.25x at the top), so each wave builds and releases. Follow Audio tries to lock onto a steady beat in what's playing; spoken-word tracks often don't have one, so it falls back to your manual tempo and says so above. Every unbroken minute in sync earns XP (every other minute a tile FX too), and hearting a tile right on the beat charges Overdrive double. Stutter Edits: now and then on a downbeat a tile replays the same half-beat two or three times in rhythm, then snaps back (replayed from captured frames, so the clip itself never stalls). Cascades: rarely, one clip ripples across the grid a beat at a time - each tile a beat behind the last, along the beat path or outward in rings - holds a few bars, then hands back one beat at a time. Cut on the Beat holds each clip change until the next beat (and automatic layout changes until the next downbeat), so the grid cuts in time like a music video. Tempo Follows Energy lets the beat quicken with engagement, build-ups, jackpots, surges and Overdrive, and settle in the Vault zone or a Floater Barrage. Auto-Pilot's Rhythm Zone and a Finale's build/peak switch this on by themselves while they run.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🎚️ Audio-Reactive FX</span><span class="settings-section-desc">Edge glow and tile pulses that move with what you're hearing.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider">
+          <label>Enabled</label>
+          <button class="badge" id="audio-react-toggle" onclick="toggleAudioReact()">ON</button>
+        </div>
+        <div class="slider"><label>Reactivity: <b><span id="l-audio-react">60%</span></b></label><input type="range" id="audio-react-input" min="0" max="100" value="60" oninput="setAudioReactivity(this.value)"></div>
+        <div class="audio-react-meter"><div id="audio-react-meter-fill"></div></div>
+        <div class="metric" id="audio-react-status"></div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Listens to the mix of everything you can hear - the overlay track, plus every tile's own audio whenever Tile Audio is above 0% - and drives a soft screen-edge glow from the loudness, with a quick glow flash on a tile whenever there's a real hit (a jump above the recent baseline, not just loud audio). It's tapped after each volume slider, so it follows what's actually audible. The binaural tone and sound effects are deliberately left out: one is a steady drone that would flatten every reading, the other would make effects trigger off their own sounds. The same hits also drive "On the Beat" mantras, Zoom Pulse kicks, and Rhythm Mode's Follow Audio tempo.</p></details>
+      </div>
+    </details>
+  </div>
+
+  <div class="panel-tab" data-tab="flow">
+    <details class="settings-section">
+      <summary><span class="section-title">🎬 Auto-Pilot<span class="experimental-pill">Experimental</span></span><span class="section-live" data-live="autopilot"></span><span class="settings-section-desc">Scripts pace, odds, and content novelty through a repeating calm-to-climax arc.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider">
+          <label>Enabled</label>
+          <button class="badge" id="autopilot-toggle" onclick="toggleAutopilot()">OFF</button>
+        </div>
+        <div class="slider"><label>Typical Pace: <b><span id="l-autopilot-minutes">~6 min</span></b></label><input type="range" id="autopilot-minutes-input" min="2" max="15" step="1" value="6" oninput="setAutopilotMinutes(this.value)"></div>
+        <div class="slider" id="autopilot-zone-row" style="display:none">
+          <label>Current Zone</label>
+          <span id="l-autopilot-zone" class="zone-readout"></span>
+        </div>
+        <button class="badge" onclick="switchItUp()">🔀 Switch It Up</button>
+        <div class="slider">
+          <label>Zone Scenes</label>
+          <div id="scene-zone-links" class="scene-zone-links"></div>
+        </div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Scripts pace, barrage/jackpot odds, floater count, and content novelty through a calm -&gt; building -&gt; climax -&gt; cooldown arc, instead of those staying wherever you last set them. "Typical Pace" is a baseline, not a fixed timer - each zone actually extends itself for as long as you're genuinely engaged with it (up to a cap) and cuts short if you're not, so a real cycle can run noticeably shorter or longer than this number depending on how the session's actually going. Each cycle also picks a fresh "zone" (Chase/Color/Jackpot/Vault) that leans the climax toward a different mix of the passive stuff above - one cycle's climax might be chase-flash heavy, the next a Color Rush, the next sealed tiles - instead of every climax looking the same. Turns Floating Overlay on if it's off. Does not touch Mosaic Fit - that stays exactly wherever you set it manually. "Switch It Up" forces an immediate zone change plus a fresh novelty push, for whenever the satiation logic's own timing isn't fast enough for you. Zone Scenes: link a zone to one of your Scenes (or Auto, for any of them at random) and it blends in whenever that zone starts - Auto-Pilot keeps steering pace and floater count itself, and the layout too while zone-driven Dynamic Mosaic is on.</p></details>
       </div>
     </details>
     <details class="settings-section">
       <summary><span class="section-title">🧭 Discovery Vibe</span><span class="settings-section-desc">How much selection favors familiar favorites vs. fresh content.</span></summary>
       <div class="settings-section-body">
         <div class="slider"><label>Familiar ↔ Discovery: <b><span id="l-vibe-dial">Balanced</span></b></label><input type="range" id="vibe-dial-input" min="0" max="2.5" step="0.05" value="0.5" oninput="setVibeDial(this.value)"></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Low = selection sticks closer to clips that already score well (familiar). High = lightly-played clips get a real shot even against established favorites (discovery). Auto-Pilot's own arc blends this automatically while it's running (see the Auto-Pilot tab) and hands control back to this dial the moment you turn it off.</p></details>
-        <div class="slider">
-          <label>Session Timer (opt-in)</label>
-          <button class="badge" id="session-timer-toggle" onclick="toggleSessionTimer()">OFF</button>
-        </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Just a quiet elapsed-time readout up top, off by default - no reminders, just there if you want it.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Low = selection sticks closer to clips that already score well (familiar). High = lightly-played clips get a real shot even against established favorites (discovery). Auto-Pilot's own arc blends this automatically while it's running (see the Auto-Pilot tab) and hands control back to this dial the moment you turn it off.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -464,7 +509,42 @@
         <div class="slider"><label>Strength: <b><span id="l-taste-strength">25%</span></b></label><input type="range" id="taste-strength-input" min="0" max="100" step="5" value="25" oninput="setTasteStrength(this.value)"></div>
         <div class="metric" id="taste-status" style="white-space:pre-line"></div>
         <button class="badge" onclick="resetTaste()">Reset what it learned</button>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Watches how often you heart tiles while each tile FX or beat pattern is showing, compared with your usual rate, and nudges the random picks toward the ones you like - never away from variety: at 25% something you like 3x more gets picked about 1.3x as often, and something you like less still shows up. It leans twice as hard while your engagement is dipping, and older sessions count a bit less each time, so it follows your taste as it changes. The same strength also leans clip picks toward the kinds of clips (Clip DNA: brighter/darker, warmer/cooler, more vivid/muted, calmer/livelier) you heart most per play across all your history. 0% turns it off.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Watches how often you heart tiles while each tile FX or beat pattern is showing, compared with your usual rate, and nudges the random picks toward the ones you like - never away from variety: at 25% something you like 3x more gets picked about 1.3x as often, and something you like less still shows up. It leans twice as hard while your engagement is dipping, and older sessions count a bit less each time, so it follows your taste as it changes. The same strength also leans clip picks toward the kinds of clips (Clip DNA: brighter/darker, warmer/cooler, more vivid/muted, calmer/livelier) you heart most per play across all your history. 0% turns it off.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🫀 Content Pulse</span><span class="settings-section-desc">The movement in the clips on screen leads the energy, glow and (optionally) the beat.</span></summary>
+      <div class="settings-section-body">
+        <div class="metric" id="content-status"></div>
+        <div class="slider"><label>Energy Follows the Clips</label><button class="badge" id="content-energy-toggle" onclick="toggleContent('energy')">ON</button></div>
+        <div class="slider"><label>Glow on Clip Peaks</label><button class="badge" id="content-peaks-toggle" onclick="toggleContent('peaks')">ON</button></div>
+        <div class="slider"><label>Cuts Wait for Clip Peaks</label><button class="badge" id="content-peakCuts-toggle" onclick="toggleContent('peakCuts')">ON</button></div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Every clip has its own movement curve from Clip DNA (clips not analysed yet are read live from tiny frames). Energy Follows the Clips: when the clips on screen move more than usual, the session energy lifts with them - and the binaural beat, spirals and everything else on the Shared Pulse follow - then settles as they calm. Glow on Clip Peaks: when a clip reaches one of its own motion peaks, its tile and the screen edge glow with it. Cuts Wait for Clip Peaks: about half the time, when a tile is about to change and its clip has a peak coming within a few seconds, the change waits until just after it - so you don't leave a clip mid-build. Beat-Matching: while Rhythm Mode runs, clips that have a steady rhythm of their own (about a quarter of them, from Clip DNA) are nudged up to 12% faster or slower (or matched at double or half speed) so their movement falls in time with the beat - only ever a small nudge, glided in; clips far off the beat are left alone. Visual Tone: the screen breathes with the beat - a soft light and the edge glow swell on each beat with the same shape as the Tone beat sound. For the beat itself, pick Tempo Source → Follow Clips in Rhythm Mode: the beat takes the rhythm of the clip that's moving most (when it has a steady one), gliding as the lead clip changes. Fine-tune in Master Controls → Content Pulse.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🧬 Clip DNA</span><span class="settings-section-desc">What each clip looks like - brightness, motion, colour - used to pick and pair clips.</span></summary>
+      <div class="settings-section-body">
+        <div class="metric" id="dna-status">🧬 Checking…</div>
+        <div class="slider"><label>Gradient Moments</label><button class="badge" id="dna-gradient-toggle" onclick="toggleLiving('gradient')">ON</button></div>
+        <div class="slider"><label>Colour-Matched Double Exposure</label><button class="badge" id="dna-match-toggle" onclick="toggleLiving('doubleMatch')">ON</button></div>
+        <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+          <button class="badge" onclick="startGradient('brightness')">Dark → Light</button>
+          <button class="badge" onclick="startGradient('warmth')">Cool → Warm</button>
+          <button class="badge" onclick="startGradient('motion')">Calm → Wild</button>
+        </div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">The engine looks at every clip once, in the background (a few seconds of each, at low priority): how bright it is, how much moves, how warm or cool it is, and any accent colour beyond skin tones. Then: picks lean toward livelier clips when the session's energy is up and calmer ones when it's settled (strength in Master Controls → "Clip DNA: energy-aware picking"); double exposures pair clips that look alike; and Gradient moments fill the grid with clips arranged dark → light, cool → warm or calm → wild - with Rhythm Mode on they reveal one tile per beat. New clips get analysed automatically.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🌊 Shared Pulse</span><span class="section-live" data-live="pulse"></span><span class="settings-section-desc">Spirals, binaural and glow flow with the session's energy.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider">
+          <label>Enabled</label>
+          <button class="badge" id="pulse-toggle" onclick="toggleSharedPulse()">ON</button>
+        </div>
+        <div class="metric" id="pulse-status"></div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">One energy signal - built from your engagement, build-ups and fresh jackpots, surges, Overdrive and the Auto-Pilot zone, glided over a few seconds - that several layers follow together: spirals (yours and the event ones) play faster or slower with it and brighten a touch on each downbeat, the binaural beat rises and settles with it, and floaters and the screen edge get a soft kick on the beat. Rhythm Mode's tempo can follow the same energy (Tempo Follows Energy). Turn this off to let each layer keep its own pace.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -476,7 +556,7 @@
         </div>
         <div class="metric" id="fresh-drop-status"></div>
         <button class="badge" onclick="runFreshDrop(true)">🆕 Drop One Now</button>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Clips you add to a Tile Source folder later on are held back from normal rotation (and from the floaters and mystery tiles) until each gets its own debut: a tile dims under a "fresh drop" shimmer with a riser, then the new clip lands with a reveal. They're rationed so a new batch isn't burned through in one sitting - none in the first ~90 seconds, at least ~3 minutes apart, and at most 4 per session (all adjustable in Tuning → Fresh Drops); the rest wait for next time. Only a handful are ever kept waiting: add a big batch and all but 6 join normal rotation right away. New files are picked up within a couple of minutes, no reload needed. Once a clip has debuted it joins normal rotation, where being lightly played already earns it extra discovery weight for a while. Everything already in your library before this feature counts as old, not fresh.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Clips you add to a Tile Source folder later on are held back from normal rotation (and from the floaters and mystery tiles) until each gets its own debut: a tile dims under a "fresh drop" shimmer with a riser, then the new clip lands with a reveal. They're rationed so a new batch isn't burned through in one sitting - none in the first ~90 seconds, at least ~3 minutes apart, and at most 4 per session (all adjustable in Tuning → Fresh Drops); the rest wait for next time. Only a handful are ever kept waiting: add a big batch and all but 6 join normal rotation right away. New files are picked up within a couple of minutes, no reload needed. Once a clip has debuted it joins normal rotation, where being lightly played already earns it extra discovery weight for a while. Everything already in your library before this feature counts as old, not fresh.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -489,7 +569,7 @@
           <label>Offer one on long Auto-Pilot sessions</label>
           <button class="badge" id="finale-offer-toggle" onclick="toggleFinaleOffer()">ON</button>
         </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Auto-Pilot's arc repeats calm → climax → cooldown for as long as it runs. A Finale is one longer climb that goes further than any single cycle, actually lands, and then ends. Build (first ~55%): pace quickens, jackpot odds and floaters climb, selection leans toward your favorites, playback speed eases up, mantras pick up, and Rhythm Mode joins in. Peak (to ~85%): the spiral fades in, a Surge runs the whole stretch, and color splashes and tile FX keep firing. Climax: a guaranteed MEGA jackpot, a full Color Rush, and a mantra flood all at once. Afterglow: everything eases below normal and settles, then a recap of the session. While it runs it takes over the controls Auto-Pilot normally drives, then gives them back (or restores your manual settings if Auto-Pilot is off). With the offer option on, a long Auto-Pilot session suggests one once - ignoring it just lets it fade.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Auto-Pilot's arc repeats calm → climax → cooldown for as long as it runs. A Finale is one longer climb that goes further than any single cycle, actually lands, and then ends. Build (first ~55%): pace quickens, jackpot odds and floaters climb, selection leans toward your favorites, playback speed eases up, mantras pick up, and Rhythm Mode joins in. Peak (to ~85%): the spiral fades in, a Surge runs the whole stretch, and color splashes and tile FX keep firing. Climax: a guaranteed MEGA jackpot, a full Color Rush, and a mantra flood all at once. Afterglow: everything eases below normal and settles, then a recap of the session. While it runs it takes over the controls Auto-Pilot normally drives, then gives them back (or restores your manual settings if Auto-Pilot is off). With the offer option on, a long Auto-Pilot session suggests one once - ignoring it just lets it fade.</p></details>
       </div>
     </details>
   </div>
@@ -499,19 +579,21 @@
       <summary><span class="section-title">🎯 Barrages</span><span class="settings-section-desc">How often the barrage hype (a few tiles highlighted, the rest dimmed) comes up.</span></summary>
       <div class="settings-section-body">
         <div class="slider"><label>Barrage odds: <b><span id="l-barrage-odds">-</span></b></label><input type="range" id="barrage-odds-input" min="0" max="0.15" step="0.005" value="0.04" oninput="setBarrageOdds(this.value)"></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">The engine rolls for a barrage about every 3 seconds; this is the chance per roll (default 4%, lowered from 5%). After one ends there's always a rest (Master Controls → Barrage / Jackpot). Shared by every device and kept across restarts. While Auto-Pilot is on it sets the odds itself from its zone, so this applies with Auto-Pilot off.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">The engine rolls for a barrage about every 3 seconds; this is the chance per roll (default 4%, lowered from 5%). After one ends there's always a rest (Master Controls → Barrage / Jackpot). Shared by every device and kept across restarts. While Auto-Pilot is on it sets the odds itself from its zone, so this applies with Auto-Pilot off.</p></details>
       </div>
     </details>
     <details class="settings-section">
-      <summary><span class="section-title">↺ Replays &amp; Callbacks</span><span class="settings-section-desc">Your hearts brought back: instant replays and earlier favourites returning.</span></summary>
+      <summary><span class="section-title">⚡ Anticipation<span class="experimental-pill">Experimental</span></span><span class="settings-section-desc">Build-up/payoff FX, bonus &amp; sealed tiles, chase flashes, jackpots, and more.</span></summary>
       <div class="settings-section-body">
-        <div class="slider"><label>Heart Replay</label><button class="badge" id="replay-replay-toggle" onclick="toggleReplayPref('replay')">ON</button></div>
-        <div class="slider"><label>Callbacks</label><button class="badge" id="replay-callbacks-toggle" onclick="toggleReplayPref('callbacks')">ON</button></div>
-        <div class="grid">
-          <button class="badge" onclick="previewReplay() || toast('↺ No tile free for a replay right now', true)">↺ Preview Replay</button>
-          <button class="badge" onclick="previewCallback()">↩ Preview Callback</button>
+        <div class="slider">
+          <label>Build-up &amp; Payoff FX</label>
+          <button class="badge" id="anticipation-toggle" onclick="toggleAnticipationFx()">OFF</button>
         </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Heart Replay: now and then, a moment after you heart a tile, the three seconds you just hearted play again once, slightly slowed, with a small REPLAY tag - like an instant replay - then it's back to live. It's lined up out of sight first, so it never looks like buffering, and rests at least 30s between replays. Callbacks: a clip you hearted earlier this session (at least 3 minutes ago) comes back for about 12 seconds on another tile, starting just before the spot you hearted, marked "Callback" - at most every couple of minutes, and no clip more than twice. Fine-tune in Master Controls → Replays &amp; Callbacks.</p></details>
+        <div class="slider">
+          <label>Fake Near-Misses</label>
+          <button class="badge" id="near-miss-toggle" onclick="toggleNearMiss()">OFF</button>
+        </div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Tension builds (visual pulse, heartbeat, panned riser) when a jackpot is really incoming, with a tier reveal (small/big/mega) and a flash/chime/bass/floater-burst payoff + lingering afterglow when it lands. Milestone jackpot counts get an even bigger one. Near-misses play the same build-up with nothing behind it. Also enables occasional golden "bonus" tiles - rate one 👍 while it's glowing for a quick bonus - and rarer "sealed" tiles, dimmed and playing slower while locked, where the reward itself (xp, a speed kick, a heat bump, or nothing) is only decided the moment you open it. Jackpots and bonuses earn XP toward a level that only ever goes up (top right), each one shifts the color theme, and a daily ~20min "Golden Hour" boosts the odds of all of the above if you happen to be around for it. Near-miss/bonus odds also creep up the longer a single session runs. The thin bar at the very top is an always-on charge meter; quiet tiles get a faint "due" aura; a build-up opens with a quick flash of the next color theme; mega/milestone jackpots can chain into a re-spin; and landing one gives you a few seconds to bank it or push your luck for a bonus (or lose the streak). Occasional "mystery tiles" blur and un-blur on their own - most of the time with nothing behind them, just curiosity, but sometimes it's a genuine swap to something never shown before. A chase flash occasionally hops between tiles - tap it before it moves on to build a chain (missing it by a hair still gets acknowledged right on the tile, not just silently reset). Mega+ and milestone jackpots can also fade in a full-screen spiral for a while, at low opacity (sometimes gently breathing wider/narrower as it holds), pulled from a local Spirals/ folder. A small gold badge up top names the jackpot state itself (a build-up's tier, a live streak, or which Auto-Pilot zone is running) separately from the status bar's own rotating notifications just below it. Hearting tiles builds a heart multiplier that nudges the odds of all of the above (bigger jackpots, spirals, speed kicks, xp) a bit further - it decays if you stop, so it rewards staying engaged rather than one single heart early on. A rare "Color Rush" occasionally sweeps through - falling color streaks, a hue-cycling glow around the edge, every tile pulsing its own color on its own beat, and a confetti burst, all at once; smaller standalone pieces of the same effects (just confetti, just the tiles, etc.) can also show up on their own tied to a streak, an unlock, a bonus, or a jackpot. Every so often there's also a genuinely hidden window where rewards are secretly worth double - nothing announces it, you only find out from the "(hidden x2!)" tag on whatever you happened to win while it was running. Spin itself rolls visibly through its possible outcomes before landing, and can land "so close" to a jackpot and say so, instead of that almost-miss going unmentioned. Rarely (at most every ~8 minutes, never on top of another event) a Spotlight Takeover grows one tile - often a favorite - to most of the screen for 15-20 seconds while the rest dim; hearting it then pays extra. The 🔥 Overdrive meter bottom-left fills as you heart, catch, and claim (hearts on a Rhythm Mode beat count double) and never drains on its own - release it (tap it or press O) whenever you want a peak: every tile speeds up, the odds of barrages and jackpots spike, a Surge and a spiral kick in, a favorite gets the Spotlight, and FX fire. Clip changes crossfade, zoom-wipe, or glitch-cut instead of hard cutting (mix and length in Tuning → Clip Transitions).</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -536,21 +618,19 @@
           <button class="badge" onclick="heartBurst(Math.floor(tileElements.length / 2))">💖 Burst</button>
           <button class="badge" onclick="heartEchoLastAt = 0; heartEcho(Math.floor(Math.random() * tileElements.length))">💗 Echo</button>
         </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">The Drop (needs Rhythm Mode): at high energy the beat drops out for a bar - pulses stop, the grid dims - then on the next downbeat everything hits at once: every tile cuts to a new clip together, a flash, a shockwave, and the energy jumps. Breath: the quiet counterpart - ten seconds where every tile slows, the screen softly dims and the beat settles to Theta, then it all releases. Countdown Reveal: before a big jackpot lands, three tiles go dark and light back up 3, 2, 1 on the beat. Focus Pull: every tile goes softly out of focus except one, and the focus moves to a new tile each bar, favouring clips you've hearted. Call &amp; Response: two neighbouring tiles trade the beat for two bars. Echo Trails: at peak energy every tile briefly leaves motion trails. Favourite Takeover: a clip you heart three times in one session gets the screen to itself for a few seconds, once per clip. Heart Echo: every heart sends a soft warm ripple out across the screen from that tile, and each tile glows faintly as it passes - nothing moves or resizes. Heart Burst: two quick hearts on a tile send hearts flying into its neighbours, and for 30s some picks lean toward that clip's look - nothing on screen is swapped. Moments never overlap each other or other big events; tune them in Master Controls → Moments.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">The Drop (needs Rhythm Mode): at high energy the beat drops out for a bar - pulses stop, the grid dims - then on the next downbeat everything hits at once: every tile cuts to a new clip together, a flash, a shockwave, and the energy jumps. Breath: the quiet counterpart - ten seconds where every tile slows, the screen softly dims and the beat settles to Theta, then it all releases. Countdown Reveal: before a big jackpot lands, three tiles go dark and light back up 3, 2, 1 on the beat. Focus Pull: every tile goes softly out of focus except one, and the focus moves to a new tile each bar, favouring clips you've hearted. Call &amp; Response: two neighbouring tiles trade the beat for two bars. Echo Trails: at peak energy every tile briefly leaves motion trails. Favourite Takeover: a clip you heart three times in one session gets the screen to itself for a few seconds, once per clip. Heart Echo: every heart sends a soft warm ripple out across the screen from that tile, and each tile glows faintly as it passes - nothing moves or resizes. Heart Burst: two quick hearts on a tile send hearts flying into its neighbours, and for 30s some picks lean toward that clip's look - nothing on screen is swapped. Moments never overlap each other or other big events; tune them in Master Controls → Moments.</p></details>
       </div>
     </details>
     <details class="settings-section">
-      <summary><span class="section-title">⚡ Anticipation<span class="experimental-pill">Experimental</span></span><span class="settings-section-desc">Build-up/payoff FX, bonus &amp; sealed tiles, chase flashes, jackpots, and more.</span></summary>
+      <summary><span class="section-title">↺ Replays &amp; Callbacks</span><span class="settings-section-desc">Your hearts brought back: instant replays and earlier favourites returning.</span></summary>
       <div class="settings-section-body">
-        <div class="slider">
-          <label>Build-up &amp; Payoff FX</label>
-          <button class="badge" id="anticipation-toggle" onclick="toggleAnticipationFx()">OFF</button>
+        <div class="slider"><label>Heart Replay</label><button class="badge" id="replay-replay-toggle" onclick="toggleReplayPref('replay')">ON</button></div>
+        <div class="slider"><label>Callbacks</label><button class="badge" id="replay-callbacks-toggle" onclick="toggleReplayPref('callbacks')">ON</button></div>
+        <div class="grid">
+          <button class="badge" onclick="previewReplay() || toast('↺ No tile free for a replay right now', true)">↺ Preview Replay</button>
+          <button class="badge" onclick="previewCallback()">↩ Preview Callback</button>
         </div>
-        <div class="slider">
-          <label>Fake Near-Misses</label>
-          <button class="badge" id="near-miss-toggle" onclick="toggleNearMiss()">OFF</button>
-        </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Tension builds (visual pulse, heartbeat, panned riser) when a jackpot is really incoming, with a tier reveal (small/big/mega) and a flash/chime/bass/floater-burst payoff + lingering afterglow when it lands. Milestone jackpot counts get an even bigger one. Near-misses play the same build-up with nothing behind it. Also enables occasional golden "bonus" tiles - rate one 👍 while it's glowing for a quick bonus - and rarer "sealed" tiles, dimmed and playing slower while locked, where the reward itself (xp, a speed kick, a heat bump, or nothing) is only decided the moment you open it. Jackpots and bonuses earn XP toward a level that only ever goes up (top right), each one shifts the color theme, and a daily ~20min "Golden Hour" boosts the odds of all of the above if you happen to be around for it. Near-miss/bonus odds also creep up the longer a single session runs. The thin bar at the very top is an always-on charge meter; quiet tiles get a faint "due" aura; a build-up opens with a quick flash of the next color theme; mega/milestone jackpots can chain into a re-spin; and landing one gives you a few seconds to bank it or push your luck for a bonus (or lose the streak). Occasional "mystery tiles" blur and un-blur on their own - most of the time with nothing behind them, just curiosity, but sometimes it's a genuine swap to something never shown before. A chase flash occasionally hops between tiles - tap it before it moves on to build a chain (missing it by a hair still gets acknowledged right on the tile, not just silently reset). Mega+ and milestone jackpots can also fade in a full-screen spiral for a while, at low opacity (sometimes gently breathing wider/narrower as it holds), pulled from a local Spirals/ folder. A small gold badge up top names the jackpot state itself (a build-up's tier, a live streak, or which Auto-Pilot zone is running) separately from the status bar's own rotating notifications just below it. Hearting tiles builds a heart multiplier that nudges the odds of all of the above (bigger jackpots, spirals, speed kicks, xp) a bit further - it decays if you stop, so it rewards staying engaged rather than one single heart early on. A rare "Color Rush" occasionally sweeps through - falling color streaks, a hue-cycling glow around the edge, every tile pulsing its own color on its own beat, and a confetti burst, all at once; smaller standalone pieces of the same effects (just confetti, just the tiles, etc.) can also show up on their own tied to a streak, an unlock, a bonus, or a jackpot. Every so often there's also a genuinely hidden window where rewards are secretly worth double - nothing announces it, you only find out from the "(hidden x2!)" tag on whatever you happened to win while it was running. Spin itself rolls visibly through its possible outcomes before landing, and can land "so close" to a jackpot and say so, instead of that almost-miss going unmentioned. Rarely (at most every ~8 minutes, never on top of another event) a Spotlight Takeover grows one tile - often a favorite - to most of the screen for 15-20 seconds while the rest dim; hearting it then pays extra. The 🔥 Overdrive meter bottom-left fills as you heart, catch, and claim (hearts on a Rhythm Mode beat count double) and never drains on its own - release it (tap it or press O) whenever you want a peak: every tile speeds up, the odds of barrages and jackpots spike, a Surge and a spiral kick in, a favorite gets the Spotlight, and FX fire. Clip changes crossfade, zoom-wipe, or glitch-cut instead of hard cutting (mix and length in Tuning → Clip Transitions).</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Heart Replay: now and then, a moment after you heart a tile, the three seconds you just hearted play again once, slightly slowed, with a small REPLAY tag - like an instant replay - then it's back to live. It's lined up out of sight first, so it never looks like buffering, and rests at least 30s between replays. Callbacks: a clip you hearted earlier this session (at least 3 minutes ago) comes back for about 12 seconds on another tile, starting just before the spot you hearted, marked "Callback" - at most every couple of minutes, and no clip more than twice. Fine-tune in Master Controls → Replays &amp; Callbacks.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -574,66 +654,20 @@
             <button class="badge" onclick="previewTileFx('shock')">💥 Shock</button>
           </div>
         </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">A new kind of thing to win: a few seconds of visual effect on the tile a reward landed on, which also pulls your eye to that video. They can ride along with a bonus tap, a sealed-tile open, or a chase catch (odds in Tuning → Visual FX Rewards); catch-streak milestones always get one; medium+ jackpots light up a couple of tiles; Spin has a new "FX Burst" result; and a long in-sync run in Rhythm Mode earns one too. Zoom Pulse kicks in time with the audio (or Rhythm Mode's beat) when there's something to follow.</p></details>
-      </div>
-    </details>
-    <details class="settings-section">
-      <summary><span class="section-title">🏆 Progress &amp; Challenges</span><span class="settings-section-desc">Lifetime bests, daily quests, and the trophy case.</span></summary>
-      <div class="settings-section-body">
-        <div class="metric" id="personal-best"></div>
-        <button class="badge" onclick="showSessionRecap()">📊 This Session's Recap</button>
-        <details class="hint-details" ontoggle="if (this.open) loadDashboardInsights()"><summary>💡 Insights - what lifts your hearts</summary><div id="dashboard-insights" class="metric">Loading…</div></details>
-        <div class="metric" id="quest-list"></div>
-        <div class="metric" id="weekly-arc"></div>
-        <div class="metric" id="visit-calendar"></div>
-        <button class="badge" id="prestige-btn" onclick="prestige()" style="display:none">⭐ Prestige (reset level for a rank)</button>
-        <div class="trophy-case" id="trophy-case"></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Lifetime bests and two daily quests that re-roll each day and auto-claim XP on completion. The Weekly Arc is a longer chain that runs Monday to Sunday: its stages unlock one after another, each pays XP, and finishing all of them pays a bigger bonus - a different arc each week. The calendar marks every day you've opened MediaMixer in the last three weeks; coming back on consecutive days builds a visit streak with XP at 3, 7, 14, 30 days and beyond. Everything is stored on this device, nothing leaves it. The trophy case unlocks permanent badges as lifetime stats cross thresholds (hearts, jackpots, chase chains, prestige, Finales, weekly arcs, visit streaks, in-sync runs, Overdrive, Spotlight) - once earned, a trophy stays forever.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">A new kind of thing to win: a few seconds of visual effect on the tile a reward landed on, which also pulls your eye to that video. They can ride along with a bonus tap, a sealed-tile open, or a chase catch (odds in Tuning → Visual FX Rewards); catch-streak milestones always get one; medium+ jackpots light up a couple of tiles; Spin has a new "FX Burst" result; and a long in-sync run in Rhythm Mode earns one too. Zoom Pulse kicks in time with the audio (or Rhythm Mode's beat) when there's something to follow.</p></details>
       </div>
     </details>
   </div>
 
-  <div class="panel-tab" data-tab="sound">
-    <details class="settings-section">
-      <summary><span class="section-title">🔊 Device Audio</span><span class="section-live" data-live="sound"></span><span class="settings-section-desc">Binaural tone and beat, the overlay track, and this device's volume levels.</span></summary>
+  <div class="panel-tab" data-tab="scenes">
+    <details class="settings-section" open>
+      <summary><span class="section-title">🎞️ Your Scenes</span><span class="settings-section-desc">Saved looks - layout, flow and sound settings in one tap.</span></summary>
       <div class="settings-section-body">
-        <div class="grid"><button class="up" onclick="rateAudio('up')">🔊 Audio Up</button><button class="down" onclick="rateAudio('down')">🔇 Audio Down</button></div>
-        <button onclick="nextAudio()">⏭️ Next Audio</button>
-        <div class="slider"><label>Carrier: <b><span id="l-freq">{{ tone_hz }} Hz</span></b></label><button onclick="cycleTone()">Cycle Frequency</button></div>
-        <div class="slider"><label>Binaural Beat: <b><span id="l-beat">{{ beat_knob }}</span></b></label><input type="range" id="beat-input" min="0" max="1" step="0.01" value="{{ beat_knob }}" oninput="vec('binaural',this.value);document.getElementById('l-beat').innerText=this.value"></div>
-        <div class="slider">
-          <label>Brainwave</label>
-          <div class="grid" style="grid-template-columns:repeat(4,1fr)">
-            <button class="badge" id="brainwave-free" onclick="setBrainwaveMode('free')">Free</button>
-            <button class="badge" id="brainwave-mood" onclick="setBrainwaveMode('mood')">🧭 Mood</button>
-            <button class="badge" id="brainwave-delta" onclick="setBrainwaveMode('delta')">Delta 2.5</button>
-            <button class="badge" id="brainwave-theta" onclick="setBrainwaveMode('theta')">Theta 6</button>
-            <button class="badge" id="brainwave-alpha" onclick="setBrainwaveMode('alpha')">Alpha 10</button>
-            <button class="badge" id="brainwave-beta" onclick="setBrainwaveMode('beta')">Beta 15</button>
-            <button class="badge" id="brainwave-gamma" onclick="setBrainwaveMode('gamma')">Gamma 40</button>
-          </div>
-          <div class="metric" id="brainwave-status" style="font-size:.72rem"></div>
+        <div class="scene-bar">
+    <div class="scene-bar-title">🎬 Scenes</div>
+    <div class="scene-chips" id="scene-chips"></div>
         </div>
-        <div class="slider"><label>Binaural Tone: <b><span id="l-binaural-vol">80%</span></b></label><input type="range" id="binaural-vol-input" min="0" max="100" value="80" oninput="setBinauralVolume(this.value)"></div>
-        <div class="slider"><label>Overlay Track: <b><span id="l-overlay-vol">85%</span></b></label><input type="range" id="overlay-vol-input" min="0" max="100" value="85" oninput="setOverlayVolume(this.value)"></div>
-        <div class="slider"><label>Rhythm Beat: <b><span id="l-rhythm-volume-sound">70%</span></b></label><input type="range" id="rhythm-volume-input-sound" min="0" max="100" step="5" value="70" oninput="setRhythmVolume(this.value)"></div>
-        <div class="slider"><label>Tile Audio: <b><span id="l-tile-audio-vol">0%</span></b></label><input type="range" id="tile-audio-vol-input" min="0" max="100" value="0" oninput="setTileAudioVolume(this.value)"></div>
-        <div class="slider"><label>🎧 Spatial Sound</label><button class="badge" id="spatial-sound-toggle" onclick="toggleSpatialSound()">ON</button></div>
-        <div class="slider"><label>SFX Volume: <b><span id="l-sfx-vol">70%</span></b></label><input type="range" id="sfx-vol-input" min="0" max="100" value="70" oninput="setSfxVolume(this.value)"></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Brainwave locks the binaural beat (the difference between the two ears) exactly onto a brainwave band - Delta 2.5 Hz deep, Theta 6 Hz dreamy/trance, Alpha 10 Hz relaxed flow, Beta 15 Hz alert, Gamma 40 Hz peak - instead of drifting with the Binaural Beat slider, clip tension and the Shared Pulse (Free). Mood picks Theta, Alpha or Beta from the Auto-Pilot zone and the session's energy, changing only after a mood has held for 15 seconds, gliding across over a few seconds and then sitting exactly on the new band. Headphones needed for the binaural effect itself. Volume (binaural/overlay/tile) is just for this device. The beat/carrier are the one exception - those stay in sync with every device watching the same session. Tile Audio is every tile's own clip audio, all at once, at this one shared level - 0% keeps every tile muted (the default). There's no per-tile solo; turning it up means every visible tile plays together at the same volume. Spatial Sound places each tile's audio where the tile sits - left tiles in your left ear, right tiles in your right - gliding as tiles move, so with headphones the grid sounds like a room around you rather than one mixed wall. Spread width is in Master Controls -> Spatial Sound.</p></details>
-      </div>
-    </details>
-    <details class="settings-section">
-      <summary><span class="section-title">🎚️ Audio-Reactive FX</span><span class="settings-section-desc">Edge glow and tile pulses that move with what you're hearing.</span></summary>
-      <div class="settings-section-body">
-        <div class="slider">
-          <label>Enabled</label>
-          <button class="badge" id="audio-react-toggle" onclick="toggleAudioReact()">ON</button>
-        </div>
-        <div class="slider"><label>Reactivity: <b><span id="l-audio-react">60%</span></b></label><input type="range" id="audio-react-input" min="0" max="100" value="60" oninput="setAudioReactivity(this.value)"></div>
-        <div class="audio-react-meter"><div id="audio-react-meter-fill"></div></div>
-        <div class="metric" id="audio-react-status"></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Listens to the mix of everything you can hear - the overlay track, plus every tile's own audio whenever Tile Audio is above 0% - and drives a soft screen-edge glow from the loudness, with a quick glow flash on a tile whenever there's a real hit (a jump above the recent baseline, not just loud audio). It's tapped after each volume slider, so it follows what's actually audible. The binaural tone and sound effects are deliberately left out: one is a steady drone that would flatten every reading, the other would make effects trigger off their own sounds. The same hits also drive "On the Beat" mantras, Zoom Pulse kicks, and Rhythm Mode's Follow Audio tempo.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Tap a scene to apply it. ＋ Save current stores how things are set up right now (screen, flow and sound settings, including the binaural tone) under a name; 💾 on a scene overwrites it with the current setup, ✏️ renames and 🗑️ deletes. Scenes are shared by every device on this install. To have a scene blend in when an Auto-Pilot zone starts, link it in Flow → Auto-Pilot → Zone Scenes.</p></details>
       </div>
     </details>
   </div>
@@ -658,17 +692,17 @@
       <button class="badge" onclick="resetTuningToDefaults()">⟲ Reset dashboard settings</button>
       <button class="badge" onclick="resetEngineConfig()">⟲ Reset engine settings</button>
     </div>
-    <details class="hint-details"><summary>What does this do?</summary><p class="hint">Every adjustable number in one place - the dashboard's own settings (this device) and the engine's (🖧 shared by every device, kept across restarts) - grouped by the same areas as the menu tabs. Search by name or area, or show only what you've changed: a ● marks anything off its default, with ↺ to put it back. "Check interval" is how often a system rolls the dice and the odds next to it are the chance per roll, so both control how often something happens. "Copy everything I've changed" lists your changes with their defaults - paste it to Claude to make the ones that feel right the new defaults. Save Backup snapshots your dashboard settings so you can experiment and come back.</p></details>
+    <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Every adjustable number in one place - the dashboard's own settings (this device) and the engine's (🖧 shared by every device, kept across restarts) - grouped by the same areas as the menu tabs. Search by name or area, or show only what you've changed: a ● marks anything off its default, with ↺ to put it back. "Check interval" is how often a system rolls the dice and the odds next to it are the chance per roll, so both control how often something happens. "Copy everything I've changed" lists your changes with their defaults - paste it to Claude to make the ones that feel right the new defaults. Save Backup snapshots your dashboard settings so you can experiment and come back.</p></details>
   </div>
 
-  <div class="panel-tab" data-tab="more">
+  <div class="panel-tab" data-tab="system">
     <details class="settings-section" id="sources-section">
       <summary><span class="section-title">📁 Sources</span><span class="settings-section-desc">Which folders clips, spirals, overlays and audio come from - subfolders included.</span></summary>
       <div class="settings-section-body">
         <div class="metric" id="sources-prep">Checking library prep…</div>
         <div id="sources-list"></div>
         <div id="sources-browser" class="sources-browser" style="display:none"></div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Pick one or more folders for each source. Every folder is searched all the way down, so you can pick a parent folder of a whole library. For tile clips, each top-level folder inside a source is a category the engine learns your taste over (anything deeper counts toward it), and loose files are "General". Removing a folder doesn't forget its hearts - its clips just sit out until it's added back. Proxies (lighter copies for smooth playback) are kept in the proxy folder shown above, never inside your source folders. New clips get their proxy and Clip DNA in the background; run Prepare.bat to do the whole library in one go.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Pick one or more folders for each source. Every folder is searched all the way down, so you can pick a parent folder of a whole library. For tile clips, each top-level folder inside a source is a category the engine learns your taste over (anything deeper counts toward it), and loose files are "General". Removing a folder doesn't forget its hearts - its clips just sit out until it's added back. Proxies (lighter copies for smooth playback) are kept in the proxy folder shown above, never inside your source folders. New clips get their proxy and Clip DNA in the background; run Prepare.bat to do the whole library in one go.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -678,7 +712,7 @@
           <div class="qr-box">{{ phone_qr_svg | safe }}</div>
           <div class="phone-url" id="phone-url" onclick="copyPhoneUrl()" title="Click to copy">{{ phone_url }}</div>
         </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Same Wi-Fi network only. Scan with your phone's camera, or type the address above.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Same Wi-Fi network only. Scan with your phone's camera, or type the address above.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -687,13 +721,7 @@
         <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(110px,1fr))">
           {% for f in folders %}<div class="badge" id="folder-{{ f }}" onclick="cat('{{ f }}')">{{ f }}</div>{% endfor %}
         </div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Hover any tile for 👍/👎 rating controls.</p></details>
-      </div>
-    </details>
-    <details class="settings-section">
-      <summary><span class="section-title">🕹️ Overrides</span><span class="settings-section-desc">Manual lock/skip, bypassing normal rotation.</span></summary>
-      <div class="settings-section-body">
-        <div class="grid"><button class="lock" onclick="lock(); uiFlare();">⬆️ Lock 60s</button><button class="skip" onclick="skip()">⬇️ Skip All</button></div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Hover any tile for 👍/👎 rating controls.</p></details>
       </div>
     </details>
     <details class="settings-section">
@@ -762,6 +790,7 @@
 <script src="{{ url_for('static', filename='dashboard_master.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_events.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_sources.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_menu.js') }}"></script>
 <script src="{{ url_for('static', filename='browser_info.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_telemetry.js') }}"></script>
 </body>

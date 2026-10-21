@@ -34,7 +34,7 @@ It runs on your PC as a small local server. Open the dashboard in a browser on t
 
 1. **Get the code.** Clone the repo or download it as a ZIP and unzip it anywhere.
 2. **Run `Setup.bat`.** It checks Python, installs the packages (`flask`, `waitress`, `qrcode`) and checks for ffmpeg, offering to download anything missing (no winget or admin rights needed). It also asks whether to turn on **background prep** and whether to add a **MediaMixer shortcut** to the Desktop and Start menu (see [below](#library-prep-proxies-and-clip-dna)).
-3. **Start it** with the **MediaMixer shortcut** or `Run.bat`. The shortcut opens the dashboard in its own app window (Chrome or Edge, with no tabs or address bar). `Run.bat` opens it in a browser tab at <http://localhost:5000>. Either way, a black console window runs the engine; the shortcut starts it minimized. Closing that window stops MediaMixer.
+3. **Start it** with the **MediaMixer shortcut** or `Run.bat`. The shortcut opens the dashboard in its own app window (Chrome or Edge, with no tabs or address bar). `Run.bat` opens it in a browser tab at <http://localhost:5000>. Either way, a black console window runs the engine. The shortcut starts it minimized, and closing the MediaMixer app window stops the engine too (after about 45 seconds, so a reload or a phone reconnecting doesn't). With `Run.bat`, closing the console window stops MediaMixer.
 4. **Choose your folders.** In the dashboard menu (✕ / ☰ at the top right), open the **⚙️ More** tab → **📁 Sources** and add the folders your clips are in (see [Sources](#your-media-sources-and-folders)). Alternatively, drop clips into the `media_assets` folder that appears next to `Run.bat`.
 5. *(Optional)* **Run `Prepare.bat`** once to build proxies and Clip DNA for the whole library up front. Otherwise this happens gradually in the background.
 
@@ -130,10 +130,15 @@ All of these can run together safely. Files are written to a temporary name and 
 
 - **🎰 Spin:** pull for a chance at a bonus (FX bursts, XP, charges). Spins have a cooldown.
 - **Overdrive meter:** fills as you heart, catch and claim. Release it (click, or press **O**) when you want a peak.
-- **🎬 Scenes bar:** a Scene is a saved look (screen, flow and sound settings). **＋ Save current** saves one; tap a scene to apply it, 💾 updates it. Scenes are shared by every device.
-- **Quick switches:** one-tap toggles for 🤖 Auto-Pilot, 🌊 Shared Pulse, 🥁 Rhythm and 🌀 Spiral.
-- **Top bar:** an always-on charge meter for jackpots. XP and level are shown top right.
+- **Top bar:** an always-on charge meter for jackpots. Your level and XP are shown top right.
 - **Session card:** when you come back after 30+ minutes, choose 🌊 Drift, 🎢 Ride, ⚡ Chaos or one of your Scenes, plus an optional length. With a length set, the session winds down gently over its last 5 minutes.
+
+**Top of the menu (always there)**
+
+- **Now Playing:** the current audio track with **⏭ Next**, plus **🔒 Lock 60s** (every tile keeps its clip for a minute) and **⏩ Skip all** (every tile changes now).
+- **⚡ Performance chip:** shows Auto, Full or Light; tap it to switch.
+- **Quick switches:** one-tap toggles for 🤖 Auto-Pilot, 🌊 Shared Pulse, 🥁 Rhythm and 🌀 Spiral.
+- **🔍 Search every setting:** type a few letters (for example *spiral*, *volume* or *odds*) and pick a result to jump straight to it, including settings in Master Controls.
 
 **Auto-Pilot** runs the session in repeating calm → building → climax → cooldown cycles. Each cycle leans into a different zone:
 
@@ -151,61 +156,68 @@ Zones last longer while you're engaged and end sooner if you're not. You can lin
 
 ## Menu reference
 
-Every section in the menu has a **"What does this do?"** link with the full details. In brief:
+Every control has a small **ⓘ**: tap it for a one- or two-sentence explanation of just that option. Each section also keeps a longer **📖 Full details** at the bottom.
 
-**🖥️ Screen**
+**🏠 Home**
 
-- **Layout & Pace:** tile count (2 up to 64), preload, Mosaic Fit (sizes tiles to each clip's shape), a speed override, and **Performance**. Performance is Auto by default: on a device that keeps dropping video frames, typically a laptop with built-in graphics, it switches to Light by itself. Light drops the heaviest effects and gives floaters rounded corners instead of a feathered edge.
+- **⏱️ Play Time:** minutes watched today, this week, this month and in all, plus a five-week calendar and your visit streak. Time counts while the dashboard is visible and you've used it in the last 3 minutes (adjustable in Master → Session & Finale). Several devices watching at once count once. It's kept per install, so your phone adds to the PC it connects to.
+- **⭐ Level & Prestige:** your level, XP to the next one, prestige stars and your permanent XP bonus. At level 20 you can prestige: your level resets and every star adds +5% to all XP you earn, up to +50%. The level, bonus and cap are adjustable in Master → Progress & Prestige.
+- **🧭 Session:** the session card, the opt-in session timer, and wind-down.
+- **🏆 Bests & Challenges:** lifetime bests, this session's recap, insights, daily quests, the weekly arc and trophies.
+
+**🖥️ Look**
+
+- **Layout & Pace:** tile count (2 up to 64), preload, Mosaic Fit (tiles shaped to each clip), tile gestures, a speed override, and **Performance**. Performance is Auto by default: on a device that keeps dropping video frames, typically a laptop with built-in graphics, it switches to Light by itself. Light drops the heaviest effects and gives floaters rounded corners instead of a feathered edge.
 - **Dynamic Mosaic:** the tile count changes by itself, driven by zone or drifting freely, within a range you set.
-- **Floating Overlay:** clips that drift across the screen like a DVD logo, either from the library or your Overlay Source.
+- **Crop Focus & Gravity:** Mosaic crops toward the action; the liveliest tile can swell slightly.
 - **Living Screen:** breathing tiles, slow-mo moments, double exposures, smart framing, colour mood.
 - **Visual Textures:** split frames, film grain, edge bleed.
 - **Hooks & Tease:** a clip's best moment repeats like a song's hook; some clips arrive pushed in close.
-- **Crop Focus & Gravity:** Mosaic crops toward the action; the liveliest tile can swell slightly.
+- **Floating Overlay:** clips that drift across the screen like a DVD logo, from your Overlay Source, the library, or both.
 - **Manual Spiral:** keep a spiral of your choice up, at your own opacity.
 - **Mantra Text:** your own phrases drifting, flashing or pulsing on the beat.
 
-**🌊 Flow**
+**🎵 Sound**
 
-- **Content Pulse:** movement in the clips drives energy, glow and (optionally) the beat; cuts wait for a clip's peak.
-- **Session:** the session card and wind-down.
-- **Auto-Pilot:** cycle length, zones and zone Scenes.
-- **Clip DNA:** progress, plus Gradient moments (dark → light, cool → warm, calm → wild).
-- **Shared Pulse:** spirals, binaural and glow follow one energy signal.
-- **Rhythm Mode:** a beat the grid moves to, with beat sounds, patterns, tempo waves, Follow Audio / Follow Clips, stutter edits and beat-matching.
+- **Device Audio:** binaural tone and beat, with Brainwave presets (Delta 2.5 / Theta 6 / Alpha 10 / Beta 15 / Gamma 40 Hz, or Mood), and every volume in one place: binaural tone, overlay track, beat sound, tile audio and sound effects. Also Spatial Sound. Use headphones for the binaural effect.
+- **Rhythm Mode:** everything to do with the beat: tempo and where it comes from, tempo waves, the beat pattern and sound, stutter edits, cascades, cut on the beat, beat-matching and Visual Tone.
+- **Audio-Reactive FX:** edge glow and tile pulses from what you hear.
+
+**🎬 Flow**
+
+- **Auto-Pilot:** cycle length, the current zone and zone Scenes.
 - **Discovery Vibe:** familiar favourites versus fresh clips.
-- **Taste Learning:** leans FX, beat patterns and clip picks toward what you heart, never away from variety.
-- **Fresh Drops:** new clips debut one at a time.
+- **Taste Learning:** leans effects, beat patterns and clip picks toward what you heart, never away from variety.
+- **Content Pulse:** movement in the clips drives energy and glow; cuts wait for a clip's peak.
+- **Clip DNA:** analysis progress, plus Gradient moments (dark → light, cool → warm, calm → wild).
+- **Shared Pulse:** spirals, the binaural beat and glows follow one energy signal.
+- **Fresh Drops:** new clips debut one at a time (only 6 wait for this; the rest of a big batch plays straight away).
 - **Finale:** see above.
 
 **🎰 Rewards**
 
 - **Barrages:** how often a few tiles get highlighted with the rest dimmed.
-- **Replays & Callbacks:** instant replays of what you just hearted, and earlier favourites returning.
-- **Moments:** The Drop, Breath, Countdown, Focus Pull, Call & Response, Echo Trails, Favourite Takeover, Heart Echo, Heart Burst.
 - **Anticipation:** build-ups and payoffs, bonus and sealed tiles, chase flashes, jackpots, Golden Hour.
+- **Moments:** The Drop, Breath, Countdown, Focus Pull, Call & Response, Echo Trails, Favourite Takeover, Heart Echo, Heart Burst.
+- **Replays & Callbacks:** instant replays of what you just hearted, and earlier favourites returning.
 - **Visual FX Rewards:** prism, bloom, duotone, light leak, zoom, RGB split, VHS, shockwave.
-- **Progress & Challenges:** lifetime bests, daily quests, weekly arcs, visit streaks, trophies.
 
-**🎵 Sound**
+**🎞️ Scenes:** your saved looks. Tap one to apply it, **＋ Save current** to add one, 💾 to update it, ✏️ to rename and 🗑️ to delete. Scenes are shared by every device on the install. To have a scene blend in when an Auto-Pilot zone starts, link it in Flow → Auto-Pilot → Zone Scenes.
 
-- **Device Audio:** binaural tone and beat, with Brainwave presets (Delta 2.5 / Theta 6 / Alpha 10 / Beta 15 / Gamma 40 Hz, or Mood). Also the overlay track, Tile Audio and Spatial Sound. Use headphones for the binaural effect.
-- **Audio-Reactive FX:** edge glow and tile pulses from what you hear.
-
-**🔧 Master:** every adjustable number in one searchable list.
+**🔧 Master:** every adjustable number in one searchable list, grouped by the same tabs.
 
 - **Changed only** shows what you've changed.
 - **↺** resets one setting.
 - **Save Backup** and **Restore Backup** snapshot your settings.
 - **📋 Copy everything I've changed** lists your changes, which is useful for making them the new defaults.
 - Settings marked 🖧 belong to the engine: they're shared by every device and kept across restarts. Everything else is saved per device.
+- Settings marked *(reload to apply)* take effect after the page is reloaded.
 
-**⚙️ More**
+**⚙️ System**
 
 - **📁 Sources:** your folders (see above).
 - **📱 Phone Access:** a QR code for your phone.
 - **📂 Categories:** jump to a category.
-- **🕹️ Overrides:** lock or skip manually.
 - **🛰️ Observability:** Auto-Pilot's live state, plus a link to the **/debug** page (event timeline, hit rates, what gets liked, and a **Playback** line counting clips that failed to play or stalled).
 
 ---

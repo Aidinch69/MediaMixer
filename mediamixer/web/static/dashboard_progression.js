@@ -48,6 +48,7 @@ function updateLevelUi() {
   }
   const btn = document.getElementById('prestige-btn');
   if (btn) btn.style.display = xpLevel >= TUNING.PRESTIGE_LEVEL_CAP ? 'inline-block' : 'none';
+  if (typeof renderPrestigeTracker === 'function') renderPrestigeTracker();
 }
 
 // Prestige Legacy Carry-over: each star is a permanent +5% XP bonus (capped
@@ -56,7 +57,7 @@ function updateLevelUi() {
 // a cosmetic star.
 
 function legacyBonusMultiplier() {
-  return 1 + Math.min(prestigeCount, 10) * TUNING.LEGACY_BONUS_PER_STAR;
+  return 1 + Math.min(prestigeCount * TUNING.LEGACY_BONUS_PER_STAR, TUNING.LEGACY_BONUS_CAP);
 }
 
 function awardXp(amount) {
