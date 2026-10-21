@@ -176,16 +176,22 @@
         <details class="hint-details"><summary>📖 Full details</summary><p class="hint">When you come back after 30+ minutes away, a card asks how you want this session: Drift (calm, Theta, breathing tiles), Ride (Auto-Pilot with the beat on Mood) or Chaos (rapid, punchy, Beta), or one of your Scenes - plus an optional length. With a length set, the wind-down starts 5 minutes before the end. Wind-down eases everything toward calm over about 5 minutes: energy and tempo settle, clips play longer, floaters thin out, barrage and jackpot odds fall, build-ups and slow-mo/double exposure pause, the binaural beat moves to Theta and the screen dims a little. Nothing stops, nothing you've saved changes, and Keep going restores it all.</p></details>
       </div>
     </details>
-    <details class="settings-section">
-      <summary><span class="section-title">🏆 Bests &amp; Challenges</span><span class="settings-section-desc">Lifetime bests, daily quests, and the trophy case.</span></summary>
+    <details class="settings-section" open>
+      <summary><span class="section-title">🎯 Challenges</span><span class="settings-section-desc">Three daily and three weekly goals, plus this week's arc.</span></summary>
       <div class="settings-section-body">
+        <div class="challenge-list" id="challenge-list"></div>
+        <div class="metric" id="weekly-arc"></div>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Every day you get three daily challenges and every Monday three weekly ones, picked at random from a bigger pool so no two share a goal. Weekly picks always include a play-time goal (2 to 50 hours a week). Each pays XP the moment it's done; clearing all three dailies pays a sweep bonus and finishing all three weeklies pays a Perfect Week bonus. Don't like a daily? 🎲 swaps it for another (once a day). Play-time goals count the same time as the Play Time card. The Weekly Arc runs alongside: its stages unlock one after another and finishing all of them pays a bigger bonus. Everything is stored on this install.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
+      <summary><span class="section-title">🏆 Achievements &amp; Bests</span><span class="settings-section-desc">Badges earned and the ones closest to unlocking, plus lifetime bests.</span></summary>
+      <div class="settings-section-body">
+        <div class="trophy-case" id="trophy-case"></div>
         <div class="metric" id="personal-best"></div>
         <button class="badge" onclick="showSessionRecap()">📊 This Session's Recap</button>
         <details class="hint-details" ontoggle="if (this.open) loadDashboardInsights()"><summary>💡 Insights - what lifts your hearts</summary><div id="dashboard-insights" class="metric">Loading…</div></details>
-        <div class="metric" id="quest-list"></div>
-        <div class="metric" id="weekly-arc"></div>
-        <div class="trophy-case" id="trophy-case"></div>
-        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Lifetime bests and two daily quests that re-roll each day and auto-claim XP on completion. The Weekly Arc is a longer chain that runs Monday to Sunday: its stages unlock one after another, each pays XP, and finishing all of them pays a bigger bonus - a different arc each week. The calendar marks every day you've opened MediaMixer in the last three weeks; coming back on consecutive days builds a visit streak with XP at 3, 7, 14, 30 days and beyond. Everything is stored on this device, nothing leaves it. The trophy case unlocks permanent badges as lifetime stats cross thresholds (hearts, jackpots, chase chains, prestige, Finales, weekly arcs, visit streaks, in-sync runs, Overdrive, Spotlight) - once earned, a trophy stays forever.</p></details>
+        <details class="hint-details"><summary>📖 Full details</summary><p class="hint">Achievements are permanent badges for play time (lifetime hours, a long day, a big week, days played), levels and prestige, lifetime hearts, jackpots, MEGAs, catches and spins, and challenges completed. Locked ones show how close you are, closest first. Coming back on consecutive days builds a visit streak with XP at 3, 7, 14, 30 days and beyond. Everything is stored on this install, nothing leaves it. The badge list unlocks permanent badges as lifetime stats cross thresholds (hearts, jackpots, chase chains, prestige, Finales, weekly arcs, visit streaks, in-sync runs, Overdrive, Spotlight) - once earned, a trophy stays forever.</p></details>
       </div>
     </details>
   </div>
@@ -791,6 +797,7 @@
 <script src="{{ url_for('static', filename='dashboard_events.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_sources.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_menu.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_challenges.js') }}"></script>
 <script src="{{ url_for('static', filename='browser_info.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_telemetry.js') }}"></script>
 </body>

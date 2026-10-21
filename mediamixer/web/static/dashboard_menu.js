@@ -345,12 +345,12 @@ function renderPrestigeTracker() {
   const perStar = Math.round(TUNING.LEGACY_BONUS_PER_STAR * 100);
   const toCap = Math.max(0, xpForLevel(cap - 1) - xpTotal);
   el.innerHTML =
-    '<div class="pr-row"><span class="pr-level">Level ' + xpLevel + '</span><span class="pr-stars">' + (prestigeCount ? '★'.repeat(Math.min(prestigeCount, 10)) + (prestigeCount > 10 ? ' ×' + prestigeCount : '') : 'No prestige yet') + '</span></div>' +
+    '<div class="pr-row"><span class="pr-level">Level ' + xpLevel + '</span><span class="pr-stars">' + (prestigeCount ? '🌟 Prestige <b>' + prestigeCount + '</b>' : 'No prestige yet') + '</span></div>' +
     '<div class="pr-bar"><div style="width:' + pct.toFixed(1) + '%"></div></div>' +
-    '<div class="pr-sub">' + (xpTotal - floor) + ' / ' + (ceil - floor) + ' XP to level ' + (xpLevel + 1) + '</div>' +
+    '<div class="pr-sub">' + (xpTotal - floor).toLocaleString() + ' / ' + (ceil - floor).toLocaleString() + ' XP to level ' + (xpLevel + 1) + '</div>' +
     '<div class="pr-grid">' +
+    '<div><span>Prestige</span><b>' + prestigeCount + '</b></div>' +
     '<div><span>XP bonus</span><b>+' + bonus + '%</b></div>' +
-    '<div><span>Bonus cap</span><b>+' + bonusCap + '%</b></div>' +
     '<div><span>Prestige at</span><b>Level ' + cap + '</b></div>' +
     '<div><span>' + (xpLevel >= cap ? 'Ready' : 'XP to go') + '</span><b>' + (xpLevel >= cap ? '⭐ now' : toCap.toLocaleString()) + '</b></div>' +
     '</div>' +

@@ -12,8 +12,9 @@ let xpLevel = 1;
 let prestigeCount = 0;
 
 function xpForLevel(level) {
-  // Gentle escalating curve: level N needs 100*N^1.4 cumulative XP.
-  return Math.round(100 * Math.pow(level, 1.4));
+  // Level N+1 needs BASE * N^EXPONENT cumulative XP. With the defaults
+  // (2000, 1.9) level 5 is a couple of hours in and level 20 about a day.
+  return Math.round(TUNING.XP_LEVEL_BASE * Math.pow(level, TUNING.XP_LEVEL_EXPONENT));
 }
 
 function loadXpState() {
@@ -42,13 +43,14 @@ function updateLevelUi() {
     const curFloor = xpLevel > 1 ? xpForLevel(xpLevel - 1) : 0;
     const nextCeil = xpForLevel(xpLevel);
     const pct = Math.min(100, Math.round(((xpTotal - curFloor) / (nextCeil - curFloor)) * 100));
-    const stars = prestigeCount > 0 ? '★'.repeat(Math.min(prestigeCount, 5)) + ' ' : '';
+    const rank = prestigeCount > 0 ? '🌟P' + prestigeCount + ' · ' : '';
     const legacyTag = prestigeCount > 0 ? ' +' + Math.round((legacyBonusMultiplier() - 1) * 100) + '%xp' : '';
-    el.innerText = stars + 'LV ' + xpLevel + ' · ' + xpTotal + 'xp (' + pct + '% to ' + (xpLevel + 1) + ')' + legacyTag;
+    el.innerText = rank + 'LV ' + xpLevel + ' · ' + xpTotal.toLocaleString() + 'xp (' + pct + '% to ' + (xpLevel + 1) + ')' + legacyTag;
   }
   const btn = document.getElementById('prestige-btn');
   if (btn) btn.style.display = xpLevel >= TUNING.PRESTIGE_LEVEL_CAP ? 'inline-block' : 'none';
   if (typeof renderPrestigeTracker === 'function') renderPrestigeTracker();
+  if (typeof noteLevelReached === 'function') noteLevelReached(xpLevel);
 }
 
 // Prestige Legacy Carry-over: each star is a permanent +5% XP bonus (capped
@@ -253,12 +255,7 @@ function checkTrophies() {
 }
 
 function updateTrophyUi() {
-  const el = document.getElementById('trophy-case');
-  if (!el) return;
-  el.innerHTML = TROPHY_DEFS.map((t) => {
-    const got = !!unlockedTrophies[t.id];
-    return '<span class="trophy-chip' + (got ? ' earned' : '') + '" title="' + t.desc + '">' + (got ? t.label : '🔒 ???') + '</span>';
-  }).join('');
+  if (typeof renderAchievements === 'function') renderAchievements();
 }
 
 function recordPayoffStats(streak, milestoneCount) {
@@ -284,70 +281,16 @@ function updateStatsUi() {
     ' · Hearts: ' + statsLifetimeHearts + ' · Best chain: ' + statsBestChaseChain;
 }
 
-// Daily quests: a couple of lightweight in-app checklist items, re-rolled
-// once per real day, claimed automatically for XP the moment a counter
-// hits its target. Entirely self-contained - nothing reminds you of these
-// outside an open tab.
-const QUEST_STORAGE_KEY = 'mm_quests';
-const QUEST_DEFS = [
-  { id: 'rate15', desc: 'Rate 15 clips', target: 15, metric: 'rates', xp: 30 },
-  { id: 'rate40', desc: 'Rate 40 clips', target: 40, metric: 'rates', xp: 70 },
-  { id: 'bonus3', desc: 'Catch 3 bonus windows', target: 3, metric: 'bonuses', xp: 40 },
-  { id: 'jackpot2', desc: 'Land 2 jackpots', target: 2, metric: 'jackpots', xp: 50 },
-  { id: 'jackpot5', desc: 'Land 5 jackpots', target: 5, metric: 'jackpots', xp: 90 },
-];
-let questState = { day: '', quests: [], counters: {} };
-
+// Daily quests grew into the Challenges system (dashboard_challenges.js).
+// These names stay because other files call them.
 function loadQuests() {
-  const today = new Date().toDateString();
-  try {
-    const saved = JSON.parse(localStorage.getItem(QUEST_STORAGE_KEY) || '{}');
-    if (saved.day === today && Array.isArray(saved.quests)) {
-      questState = saved;
-      updateQuestUi();
-      return;
-    }
-  } catch (e) {}
-  const shuffled = QUEST_DEFS.slice().sort(() => Math.random() - 0.5);
-  questState = {
-    day: today,
-    quests: shuffled.slice(0, 2).map(q => ({ id: q.id, progress: 0, claimed: false })),
-    counters: { rates: 0, bonuses: 0, jackpots: 0 },
-  };
-  saveQuests();
-  updateQuestUi();
-}
-
-function saveQuests() {
-  try { localStorage.setItem(QUEST_STORAGE_KEY, JSON.stringify(questState)); } catch (e) {}
+  if (typeof loadChallenges === 'function') loadChallenges();
 }
 
 function incrementQuestMetric(metric, amount) {
-  questState.counters[metric] = (questState.counters[metric] || 0) + (amount || 1);
-  let changed = false;
-  for (const entry of questState.quests) {
-    if (entry.claimed) continue;
-    const def = QUEST_DEFS.find(q => q.id === entry.id);
-    if (!def || def.metric !== metric) continue;
-    entry.progress = questState.counters[metric];
-    changed = true;
-    if (entry.progress >= def.target) {
-      entry.claimed = true;
-      awardXp(def.xp);
-      toast('✅ Quest complete: ' + def.desc);
-    }
-  }
-  if (changed) { saveQuests(); updateQuestUi(); }
   arcMetric(metric, amount || 1);
 }
 
 function updateQuestUi() {
-  const el = document.getElementById('quest-list');
-  if (!el) return;
-  el.innerHTML = questState.quests.map(entry => {
-    const def = QUEST_DEFS.find(q => q.id === entry.id);
-    if (!def) return '';
-    const mark = entry.claimed ? '✅' : '▫️';
-    return mark + ' ' + def.desc + ' (' + Math.min(entry.progress, def.target) + '/' + def.target + ')';
-  }).join('<br>');
+  if (typeof renderChallenges === 'function') renderChallenges();
 }

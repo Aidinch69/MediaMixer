@@ -161,9 +161,10 @@ Every control has a small **ⓘ**: tap it for a one- or two-sentence explanation
 **🏠 Home**
 
 - **⏱️ Play Time:** minutes watched today, this week, this month and in all, plus a five-week calendar and your visit streak. Time counts while the dashboard is visible and you've used it in the last 3 minutes (adjustable in Master → Session & Finale). Several devices watching at once count once. It's kept per install, so your phone adds to the PC it connects to.
-- **⭐ Level & Prestige:** your level, XP to the next one, prestige stars and your permanent XP bonus. At level 20 you can prestige: your level resets and every star adds +5% to all XP you earn, up to +50%. The level, bonus and cap are adjustable in Master → Progress & Prestige.
+- **⭐ Level & Prestige:** your level, XP to the next one, your prestige count and your permanent XP bonus. Levels get steadily harder: level 5 takes a couple of hours, level 20 about a day of watching. At level 20 you can prestige: your level resets and each prestige adds +5% to all XP you earn, up to +50%. The curve, prestige level, bonus and cap are adjustable in Master → Progress & Prestige.
 - **🧭 Session:** the session card, the opt-in session timer, and wind-down.
-- **🏆 Bests & Challenges:** lifetime bests, this session's recap, insights, daily quests, the weekly arc and trophies.
+- **🎯 Challenges:** three daily and three weekly challenges drawn from a larger pool (hearts, jackpots, MEGAs, chase chains, spins, Moments, Overdrive and more). Each week includes a play-time goal from 2 up to 50 hours. Clearing all three dailies pays a sweep bonus and all three weeklies a Perfect Week bonus. 🎲 swaps one daily per day. The Weekly Arc runs alongside.
+- **🏆 Achievements & Bests:** permanent badges (play hours, long days and big weeks, days played, levels, prestige, lifetime counts, challenges completed) with a running count, and progress bars for the ones still locked. Also lifetime bests, this session's recap and insights.
 
 **🖥️ Look**
 
@@ -238,7 +239,7 @@ Everything lives in the project folder, apart from per-device settings in the br
 |---|---|---|
 | Hearts, play history, categories, Clip DNA, Scenes, chosen source folders, event log (14 days) | `system_memory.db` | Deleting it while MediaMixer is stopped. It's recreated empty and clips are re-analysed. |
 | Engine settings changed in the menu (🖧) | `config_overrides.json` | Master → ⟲ Reset engine settings, or deleting the file |
-| Dashboard settings, XP, trophies, toggles | The browser's local storage (per device) | Master → ⟲ Reset dashboard settings |
+| Dashboard settings, XP, challenges, achievements, toggles | The browser's local storage (per device) | Master → ⟲ Reset dashboard settings |
 | Proxies | `media_proxies/` | Deleting the folder (they're rebuilt) |
 | Logs | `engine_stdout.log`, `engine_stderr.log`, `cache_warmer.log` | Safe to delete |
 

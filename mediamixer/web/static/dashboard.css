@@ -832,3 +832,26 @@ body.perf-light .fx-sprite{-webkit-mask-image:none;mask-image:none;border-radius
 .pr-grid span{font-size:.58rem;color:#8a8a96;text-transform:uppercase}
 .pr-grid b{font-size:.8rem;color:#fff}
 .playtime-streak{display:block}
+
+/* Challenges + achievements */
+.challenge-list{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.ch-head{display:flex;justify-content:space-between;align-items:baseline;font-size:.8rem;font-weight:bold;color:#fff;margin-top:4px}
+.ch-head span{font-size:.64rem;font-weight:normal;color:#8a8a96}
+.ch-row{background:#0e081f;border:1px solid #221435;border-radius:8px;padding:6px 8px;display:flex;flex-direction:column;gap:4px}
+.ch-row.ch-done{border-color:#3d7a4a;opacity:.75}
+.ch-top{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:.74rem;color:#eee}
+.ch-swap{background:none;border:1px solid #2d163f;border-radius:6px;padding:1px 6px;font-size:.75rem;cursor:pointer;width:auto;margin:0}
+.ch-bar,.ach-bar{height:5px;border-radius:999px;background:#1a0f2b;overflow:hidden}
+.ch-bar div{height:100%;background:linear-gradient(90deg,#7a3fd0,#ffd27a);transition:width .4s ease}
+.ch-done .ch-bar div{background:#4caf6a}
+.ch-sub{font-size:.62rem;color:#8a8a96}
+.ch-bonus{font-size:.66rem;color:#ffd27a;text-align:right}
+.trophy-case{display:block}
+.ach-head{font-size:.8rem;color:#fff;margin-bottom:6px}
+.ach-earned{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.ach-none{font-size:.68rem;color:#8a8a96}
+.ach-locked{display:flex;flex-direction:column;gap:5px;max-height:320px;overflow-y:auto;padding-right:2px}
+.ach-row{display:flex;flex-direction:column;gap:2px;padding:4px 0;border-bottom:1px solid #1a0f2b}
+.ach-label{font-size:.72rem;color:#ccc}
+.ach-desc{font-size:.62rem;color:#8a8a96}
+.ach-bar div{height:100%;background:#7a3fd0}

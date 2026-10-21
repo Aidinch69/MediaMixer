@@ -360,30 +360,30 @@ setInterval(() => {
 // Runs alongside the daily quests, never replacing them.
 const WEEKLY_ARC_KEY = 'mm_weekly_arc';
 const WEEKLY_ARC_DEFS = [
-  { id: 'heartbound', name: 'Heartbound', finalXp: 250, stages: [
-    { desc: 'Heart 30 clips', metric: 'hearts', target: 30, xp: 40 },
-    { desc: 'Catch 15 chase flashes', metric: 'catches', target: 15, xp: 60 },
-    { desc: 'Land 8 jackpots', metric: 'jackpots', target: 8, xp: 80 },
-    { desc: 'Release Overdrive twice', metric: 'overdrives', target: 2, xp: 100 },
+  { id: 'heartbound', name: 'Heartbound', finalXp: 25000, stages: [
+    { desc: 'Heart 30 clips', metric: 'hearts', target: 30, xp: 4000 },
+    { desc: 'Catch 15 chase flashes', metric: 'catches', target: 15, xp: 6000 },
+    { desc: 'Land 8 jackpots', metric: 'jackpots', target: 8, xp: 8000 },
+    { desc: 'Release Overdrive twice', metric: 'overdrives', target: 2, xp: 10000 },
   ] },
-  { id: 'showtime', name: 'Showtime', finalXp: 300, stages: [
-    { desc: 'Rate 50 clips', metric: 'rates', target: 50, xp: 40 },
-    { desc: 'Claim 10 bonuses', metric: 'bonuses', target: 10, xp: 60 },
-    { desc: 'See 2 Spotlights', metric: 'spotlights', target: 2, xp: 80 },
-    { desc: 'Complete a Finale', metric: 'finales', target: 1, xp: 120 },
+  { id: 'showtime', name: 'Showtime', finalXp: 30000, stages: [
+    { desc: 'Rate 50 clips', metric: 'rates', target: 50, xp: 4000 },
+    { desc: 'Claim 10 bonuses', metric: 'bonuses', target: 10, xp: 6000 },
+    { desc: 'See 2 Spotlights', metric: 'spotlights', target: 2, xp: 8000 },
+    { desc: 'Complete a Finale', metric: 'finales', target: 1, xp: 12000 },
   ] },
-  { id: 'momentum', name: 'Momentum', finalXp: 300, stages: [
-    { desc: 'Heart 40 clips', metric: 'hearts', target: 40, xp: 50 },
-    { desc: 'Catch 25 chase flashes', metric: 'catches', target: 25, xp: 70 },
-    { desc: 'Release Overdrive 3 times', metric: 'overdrives', target: 3, xp: 90 },
-    { desc: 'Land 12 jackpots', metric: 'jackpots', target: 12, xp: 110 },
+  { id: 'momentum', name: 'Momentum', finalXp: 30000, stages: [
+    { desc: 'Heart 40 clips', metric: 'hearts', target: 40, xp: 5000 },
+    { desc: 'Catch 25 chase flashes', metric: 'catches', target: 25, xp: 7000 },
+    { desc: 'Release Overdrive 3 times', metric: 'overdrives', target: 3, xp: 9000 },
+    { desc: 'Land 12 jackpots', metric: 'jackpots', target: 12, xp: 11000 },
   ] },
-  { id: 'collector', name: 'Collector', finalXp: 280, stages: [
-    { desc: 'Rate 30 clips', metric: 'rates', target: 30, xp: 30 },
-    { desc: 'Land 5 jackpots', metric: 'jackpots', target: 5, xp: 60 },
-    { desc: 'Claim 15 bonuses', metric: 'bonuses', target: 15, xp: 80 },
-    { desc: 'See a Spotlight', metric: 'spotlights', target: 1, xp: 60 },
-    { desc: 'Release Overdrive', metric: 'overdrives', target: 1, xp: 80 },
+  { id: 'collector', name: 'Collector', finalXp: 28000, stages: [
+    { desc: 'Rate 30 clips', metric: 'rates', target: 30, xp: 3000 },
+    { desc: 'Land 5 jackpots', metric: 'jackpots', target: 5, xp: 6000 },
+    { desc: 'Claim 15 bonuses', metric: 'bonuses', target: 15, xp: 8000 },
+    { desc: 'See a Spotlight', metric: 'spotlights', target: 1, xp: 6000 },
+    { desc: 'Release Overdrive', metric: 'overdrives', target: 1, xp: 8000 },
   ] },
 ];
 let weeklyArc = { weekStart: '', arcId: '', stageIndex: 0, progress: 0, done: false };
@@ -415,6 +415,7 @@ function loadWeeklyArc() {
 }
 
 function arcMetric(metric, amount) {
+  if (typeof challengeMetric === 'function') challengeMetric(metric, amount || 1);
   if (weeklyArc.done || !weeklyArc.arcId) return;
   const def = currentArcDef();
   const stage = def.stages[weeklyArc.stageIndex];
@@ -427,14 +428,14 @@ function arcMetric(metric, amount) {
     if (weeklyArc.stageIndex >= def.stages.length) {
       weeklyArc.done = true;
       awardXp(def.finalXp);
-      toast('🗺️ Weekly arc complete: ' + def.name + '! +' + def.finalXp + 'xp');
+      toast('🗺️ Weekly arc complete: ' + def.name + '! +' + def.finalXp.toLocaleString() + 'xp');
       burstConfetti(60);
       playChimeSound(1, 1.2);
       eventsStats.arcs++;
       saveEventsStats();
       checkTrophies();
     } else {
-      toast('🗺️ ' + def.name + ' stage ' + weeklyArc.stageIndex + '/' + def.stages.length + ' done: ' + stage.desc + ' +' + stage.xp + 'xp');
+      toast('🗺️ ' + def.name + ' stage ' + weeklyArc.stageIndex + '/' + def.stages.length + ' done: ' + stage.desc + ' +' + stage.xp.toLocaleString() + 'xp');
       playChimeSound(0.7, 1.1);
     }
   }
@@ -459,10 +460,10 @@ function updateWeeklyArcUi() {
   } else {
     const stage = def.stages[weeklyArc.stageIndex];
     const pct = Math.min(100, weeklyArc.progress / stage.target * 100);
-    body = '<div class="arc-stage">' + stage.desc + ' (' + Math.min(weeklyArc.progress, stage.target) + '/' + stage.target + ') · +' + stage.xp + 'xp</div>' +
+    body = '<div class="arc-stage">' + stage.desc + ' (' + Math.min(weeklyArc.progress, stage.target) + '/' + stage.target + ') · +' + stage.xp.toLocaleString() + 'xp</div>' +
       '<div class="audio-react-meter"><div class="arc-progress-fill" style="width:' + pct.toFixed(1) + '%"></div></div>';
   }
-  el.innerHTML = '<div class="arc-title">🗺️ Weekly Arc: <b>' + def.name + '</b> <span class="arc-sub">' + daysLeft + 'd left · finish for +' + def.finalXp + 'xp</span></div>' +
+  el.innerHTML = '<div class="arc-title">🗺️ Weekly Arc: <b>' + def.name + '</b> <span class="arc-sub">' + daysLeft + 'd left · finish for +' + def.finalXp.toLocaleString() + 'xp</span></div>' +
     '<div class="arc-pips">' + pips + '</div>' + body;
 }
 
@@ -514,7 +515,6 @@ function updateVisitCalendarUi() {
 
 // Midnight / Monday rollover while the tab stays open.
 setInterval(() => {
-  if (questState.day && questState.day !== new Date().toDateString()) loadQuests();
   if (weeklyArc.weekStart && weeklyArc.weekStart !== weekStartKey()) loadWeeklyArc();
   if (!visitStreak.days.includes(new Date().toDateString())) recordVisitDay();
   updateWeeklyArcUi();
