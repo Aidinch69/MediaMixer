@@ -261,6 +261,9 @@ const TUNING_DEFAULTS = {
   CALLBACK_HOLD_S: 12,
   CALLBACK_LEAD_S: 2,
   SPATIAL_WIDTH: 0.8,
+  HEART_ECHO_STRENGTH: 0.5,
+  HEART_ECHO_MS: 1400,
+  HEART_ECHO_MIN_GAP_MS: 700,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -425,7 +428,7 @@ const TUNING_GROUPS = [
   { label: 'Gravity', desc: 'How much the liveliest tile swells, how long it holds the lead, and how little a heart moves it.', keys: ['GRAVITY_SCALE', 'GRAVITY_MIN_HOLD_MS', 'GRAVITY_HEART_NUDGE'] },
   { label: 'Replays & Callbacks', desc: 'How often a heart gets an instant replay, and how often an earlier favourite comes back.', keys: ['REPLAY_CHANCE', 'REPLAY_COOLDOWN_MS', 'REPLAY_SECONDS', 'REPLAY_SPEED', 'REPLAY_DELAY_MS', 'CALLBACK_CHANCE', 'CALLBACK_COOLDOWN_MS', 'CALLBACK_MIN_AGE_MS', 'CALLBACK_HOLD_S', 'CALLBACK_LEAD_S'] },
   { label: 'Visual Textures', desc: 'Split frames, film grain & dust, and edge bleed - odds, strength and how much calm moments add.', keys: ['SPLIT_CHANCE', 'SPLIT_COOLDOWN_MS', 'SPLIT_MS', 'GRAIN_OPACITY', 'GRAIN_CALM_BOOST', 'DUST_RATE', 'EDGE_BLEED_OPACITY'] },
-  { label: 'Moments', desc: 'The Drop, Breath, Focus pull, Call & response, Echo trails, Favourite takeover and Heart burst - odds, rests and lengths.', keys: ['DROP_CHANCE', 'DROP_MIN_ENERGY', 'DROP_COOLDOWN_MS', 'BREATH_CHANCE', 'BREATH_COOLDOWN_MS', 'BREATH_MS', 'BREATH_SPEED', 'FOCUS_PULL_CHANCE', 'FOCUS_PULL_COOLDOWN_MS', 'FOCUS_PULL_BARS', 'CALL_RESPONSE_CHANCE', 'CALL_RESPONSE_COOLDOWN_MS', 'ECHO_CHANCE', 'ECHO_MIN_ENERGY', 'ECHO_COOLDOWN_MS', 'ECHO_MS', 'FAVORITE_TAKEOVER_HEARTS', 'FAVORITE_TAKEOVER_MS', 'FAVORITE_TAKEOVER_COOLDOWN_MS', 'HEART_BURST_WINDOW_MS', 'HEART_BURST_COOLDOWN_MS', 'HEART_BURST_LEAN_MS', 'HEART_BURST_LEAN_SHARE'] },
+  { label: 'Moments', desc: 'The Drop, Breath, Focus pull, Call & response, Echo trails, Favourite takeover and Heart burst - odds, rests and lengths.', keys: ['DROP_CHANCE', 'DROP_MIN_ENERGY', 'DROP_COOLDOWN_MS', 'BREATH_CHANCE', 'BREATH_COOLDOWN_MS', 'BREATH_MS', 'BREATH_SPEED', 'FOCUS_PULL_CHANCE', 'FOCUS_PULL_COOLDOWN_MS', 'FOCUS_PULL_BARS', 'CALL_RESPONSE_CHANCE', 'CALL_RESPONSE_COOLDOWN_MS', 'ECHO_CHANCE', 'ECHO_MIN_ENERGY', 'ECHO_COOLDOWN_MS', 'ECHO_MS', 'FAVORITE_TAKEOVER_HEARTS', 'FAVORITE_TAKEOVER_MS', 'FAVORITE_TAKEOVER_COOLDOWN_MS', 'HEART_BURST_WINDOW_MS', 'HEART_BURST_COOLDOWN_MS', 'HEART_BURST_LEAN_MS', 'HEART_BURST_LEAN_SHARE', 'HEART_ECHO_STRENGTH', 'HEART_ECHO_MS', 'HEART_ECHO_MIN_GAP_MS'] },
 ];
 const TUNING_META = {
   XP_PER_BONUS_CLAIM: { label: 'Bonus-tap XP', unit: 'n', min: 5, max: 50, step: 1 },
@@ -651,6 +654,9 @@ const TUNING_META = {
   CALLBACK_HOLD_S: { label: 'Callback: seconds it stays', unit: '', min: 4, max: 60, step: 1 },
   CALLBACK_LEAD_S: { label: 'Callback: start this long before the hearted spot', unit: '', min: 0, max: 8, step: 0.5 },
   SPATIAL_WIDTH: { label: 'Spatial sound: how wide the tiles are spread (1 = edge tiles fully in one ear)', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  HEART_ECHO_STRENGTH: { label: 'Heart echo: how bright the ripple is', unit: 'pct', min: 0, max: 1, step: 0.05 },
+  HEART_ECHO_MS: { label: 'Heart echo: how long it takes to cross the screen', unit: 's', min: 500, max: 4000, step: 100 },
+  HEART_ECHO_MIN_GAP_MS: { label: 'Heart echo: least time between ripples', unit: 's', min: 0, max: 5000, step: 100 },
   SPLIT_CHANCE: { label: 'Split frames: chance per check (every 15s)', unit: 'pct', min: 0, max: 1, step: 0.01 },
   SPLIT_COOLDOWN_MS: { label: 'Rest between split frames', unit: 's', min: 15000, max: 1800000, step: 15000 },
   SPLIT_MS: { label: 'Split frames length', unit: 's', min: 2000, max: 20000, step: 500 },

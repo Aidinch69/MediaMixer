@@ -4,7 +4,7 @@
 // and Echo trails - structured, beat-aware moments that never overlap -
 // plus the love moments: Favourite takeover and Heart burst.
 
-const momentsOn = { drop: true, breath: true, countdown: true, focus: true, callResponse: true, echo: true, favorite: true, heartBurst: true };
+const momentsOn = { drop: true, breath: true, countdown: true, focus: true, callResponse: true, echo: true, favorite: true, heartBurst: true, heartEcho: true };
 let activeMoment = null; // name of the moment running now
 let momentEnergyShift = 0; // added to the energy target while a moment wants it
 let momentEnergyUntil = 0;
@@ -287,6 +287,7 @@ function onMomentHeart(idx) {
   const path = currentPaths[idx];
   if (!path) return;
   const now = Date.now();
+  if (momentsOn.heartEcho) heartEcho(idx);
   const n = (sessionHeartsByPath[path] || 0) + 1;
   sessionHeartsByPath[path] = n;
   const quick = now - (lastHeartAtByTile[idx] || 0) <= TUNING.HEART_BURST_WINDOW_MS;
@@ -296,6 +297,51 @@ function onMomentHeart(idx) {
   } else if (quick && momentsOn.heartBurst && now - (momentLastAt.heartBurst || 0) > TUNING.HEART_BURST_COOLDOWN_MS) {
     heartBurst(idx);
   }
+}
+
+// Heart echo: every heart sends a soft warm ring rippling out across the
+// screen from the hearted tile, and each tile glows faintly as it passes -
+// fainter the further away. Nothing moves or resizes. A short minimum gap
+// keeps a run of quick hearts from stacking into a flicker.
+let heartEchoLastAt = 0;
+
+function heartEcho(idx) {
+  const now = Date.now();
+  if (document.hidden || now - heartEchoLastAt < TUNING.HEART_ECHO_MIN_GAP_MS) return false;
+  const theater = document.getElementById('theater-box');
+  const tile = tileElements[idx];
+  if (!theater || !tile) return false;
+  heartEchoLastAt = now;
+  const th = theater.getBoundingClientRect(), r = tile.getBoundingClientRect();
+  const cx = r.left + r.width / 2 - th.left, cy = r.top + r.height / 2 - th.top;
+  // Far enough to reach the furthest corner of the screen.
+  const R = Math.max(Math.hypot(cx, cy), Math.hypot(th.width - cx, cy), Math.hypot(cx, th.height - cy), Math.hypot(th.width - cx, th.height - cy));
+  const k = TUNING.HEART_ECHO_STRENGTH;
+  const ms = TUNING.HEART_ECHO_MS;
+  const ring = document.createElement('div');
+  ring.className = 'heart-echo-ring';
+  ring.style.left = cx + 'px';
+  ring.style.top = cy + 'px';
+  ring.style.width = ring.style.height = (2 * R) + 'px';
+  ring.style.setProperty('--echo-a', k.toFixed(2));
+  theater.appendChild(ring);
+  const anim = ring.animate([
+    { transform: 'translate(-50%,-50%) scale(0.04)', opacity: 1 },
+    { transform: 'translate(-50%,-50%) scale(1)', opacity: 0 },
+  ], { duration: ms, easing: 'cubic-bezier(.2,.6,.35,1)' });
+  anim.onfinish = () => ring.remove();
+  // Each other tile glows as the ring reaches it.
+  tileElements.forEach((t, j) => {
+    if (j === idx) return;
+    const q = t.getBoundingClientRect();
+    const d = Math.hypot(q.left + q.width / 2 - th.left - cx, q.top + q.height / 2 - th.top - cy);
+    const reach = d / R; // 0 at the hearted tile, 1 at the far corner
+    let glow = t.querySelector('.heart-echo-glow');
+    if (!glow) { glow = document.createElement('div'); glow.className = 'heart-echo-glow'; t.appendChild(glow); }
+    glow.animate([{ opacity: 0 }, { opacity: Math.max(0, k * (1 - reach * 0.8)), offset: 0.3 }, { opacity: 0 }],
+      { duration: 700, delay: ms * Math.pow(reach, 0.75) * 0.75, easing: 'ease-out' });
+  });
+  return true;
 }
 
 // A clip hearted again and again this session gets the screen to itself
