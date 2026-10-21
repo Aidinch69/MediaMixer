@@ -1010,8 +1010,9 @@ function onRhythmBeat(n) {
 }
 
 // ---- Beat sound ----
-// Its own bus and volume, separate from the sound effects. Levels sit a
-// little above the binaural tone (~0.12) at the default 70%. Kick: a soft
+// Its own bus and volume, separate from the sound effects. Levels are set
+// so 100% peaks just under full scale (about 3x the first version, which
+// was too quiet even at 100%) - no limiter needed. Kick: a soft
 // pitched-down thump with a click on top (the click is what makes it
 // audible on laptop speakers - the old 70-95 Hz sine alone often wasn't).
 // Tick: a short bright noise tick. Heartbeat: lub-dub. Tone: no new sound -
@@ -1070,14 +1071,14 @@ function playRhythmVoice(downbeat, voice) {
   if (!ensureRhythmBus()) return;
   const now = audioCtx.currentTime + 0.005;
   if (voice === 'kick') {
-    rhythmThump(now, downbeat ? 160 : 130, 52, downbeat ? 0.36 : 0.24, 0.22);
-    rhythmTick(now, 3200, downbeat ? 0.06 : 0.035, 0.025);
+    rhythmThump(now, downbeat ? 160 : 130, 52, downbeat ? 0.85 : 0.65, 0.22);
+    rhythmTick(now, 3200, downbeat ? 0.5 : 0.35, 0.025);
   } else if (voice === 'tick') {
-    rhythmTick(now, downbeat ? 5200 : 3800, downbeat ? 0.16 : 0.09, 0.05);
+    rhythmTick(now, downbeat ? 5200 : 3800, downbeat ? 1.3 : 0.9, 0.05);
   } else if (voice === 'heart') {
-    rhythmThump(now, 110, 48, downbeat ? 0.34 : 0.26, 0.18);
-    rhythmTick(now, 900, 0.025, 0.03);
-    rhythmThump(now + 0.17, 95, 45, downbeat ? 0.22 : 0.16, 0.16);
+    rhythmThump(now, 110, 48, downbeat ? 0.85 : 0.65, 0.18);
+    rhythmTick(now, 900, 0.3, 0.03);
+    rhythmThump(now + 0.17, 95, 45, downbeat ? 0.6 : 0.45, 0.16);
   }
 }
 
@@ -1106,8 +1107,17 @@ function setRhythmVolume(v) {
   rhythmVolume = Math.max(0, Math.min(100, parseInt(v, 10) || 0));
   if (rhythmBus) rhythmBus.gain.value = rhythmVolume / 100;
   saveRhythmPrefs();
-  const lbl = document.getElementById('l-rhythm-volume');
-  if (lbl) lbl.innerText = rhythmVolume + '%';
+  syncRhythmVolumeUi();
+}
+
+// The Beat Volume slider appears twice (Rhythm, and Sound -> Volume).
+function syncRhythmVolumeUi() {
+  ['', '-sound'].forEach((suffix) => {
+    const input = document.getElementById('rhythm-volume-input' + suffix);
+    if (input && +input.value !== rhythmVolume) input.value = rhythmVolume;
+    const lbl = document.getElementById('l-rhythm-volume' + suffix);
+    if (lbl) lbl.innerText = rhythmVolume + '%';
+  });
 }
 
 setInterval(() => {
@@ -1216,10 +1226,7 @@ function updateRhythmUi() {
     const b = document.getElementById('rhythm-voice-' + v);
     if (b) b.classList.toggle('active', rhythmVoice === v);
   });
-  const vol = document.getElementById('rhythm-volume-input');
-  if (vol) vol.value = rhythmVolume;
-  const volLbl = document.getElementById('l-rhythm-volume');
-  if (volLbl) volLbl.innerText = rhythmVolume + '%';
+  syncRhythmVolumeUi();
   setToggleBadge('rhythm-speed-toggle', rhythmSpeedSync);
   setToggleBadge('rhythm-reactive-toggle', rhythmReactive);
   setToggleBadge('rhythm-cut-toggle', rhythmCutOnBeat);
