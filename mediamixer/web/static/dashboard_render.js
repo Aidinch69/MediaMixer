@@ -29,7 +29,7 @@ function createTileElement(i) {
     vid.crossOrigin = 'anonymous';
     vid.volume = tileAudioVolume; // master Tile Audio Volume slider - shared by every tile, not a per-tile solo toggle
     vid.muted = tileAudioVolume <= 0;
-    vid.addEventListener('ended', () => fetch('/api/rotate?screen=' + i));
+    vid.addEventListener('ended', () => onTileEnded(i, vid));
     vid.addEventListener('error', () => onTileVideoError(i, vid));
     vid.addEventListener('waiting', () => { tileWaitStart[i] = Date.now(); tileWaitInfo[i] = tileStallContext(vid); });
     vid.addEventListener('playing', () => onTileVideoPlaying(i));
@@ -288,6 +288,22 @@ function onTileVideoPlaying(i) {
   if (ms >= TILE_STALL_LOG_MS && typeof logEvent === 'function') logEvent('video.stall', Object.assign({ tile: i, ms, clip: currentPaths[i], tiles: tileElements.length }, tileWaitInfo[i]));
 }
 
+// A clip that finishes asks for the next one. If the tile is pinned or held
+// for a moment (a hook, a cut waiting for a peak, a spotlight...), no new
+// clip is coming yet, so the clip loops rather than freezing on its last
+// frame.
+function onTileEnded(i, vid) {
+  fetch('/api/rotate?screen=' + i)
+    .then((r) => r.json())
+    .then((d) => {
+      if (d && d.held && vid.ended) {
+        vid.currentTime = 0;
+        vid.play().catch(() => {});
+      }
+    })
+    .catch(() => {});
+}
+
 // ---- Idle-tile watchdog ----
 // A tile that has stopped moving for TILE_IDLE_FIX_MS gets a nudge, by
 // what it's stuck on: a clip that ended with no next clip arriving (e.g.
@@ -316,6 +332,7 @@ function tileIdleWatchdog() {
     if (!tileIdleSince[i]) { tileIdleSince[i] = now; return; }
     const idleMs = now - tileIdleSince[i];
     const ahead = tileBufferedAhead(v);
+    const seen = { ended: v.ended, paused: v.paused, ready: v.readyState, net: v.networkState, at: +v.currentTime.toFixed(1) };
     let fix = null;
     if (v.ended && idleMs >= TILE_IDLE_FIX_MS) {
       fix = 'restart';
@@ -335,8 +352,8 @@ function tileIdleWatchdog() {
     }
     if (!fix) return;
     if (typeof logEvent === 'function') {
-      logEvent('video.idle', { tile: i, ms: idleMs, fix, ended: v.ended, paused: v.paused, ready: v.readyState, net: v.networkState,
-        at: +v.currentTime.toFixed(1), dur: +(v.duration || 0).toFixed(1), aheadS: +ahead.toFixed(1), clip: currentPaths[i], tiles: tileElements.length });
+      logEvent('video.idle', Object.assign({ tile: i, ms: idleMs, fix, dur: +(v.duration || 0).toFixed(1), aheadS: +ahead.toFixed(1),
+        clip: currentPaths[i], tiles: tileElements.length }, seen));
     }
     tileIdleSince[i] = now; // give the fix time to work before trying again
   });

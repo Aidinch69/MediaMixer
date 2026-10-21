@@ -1171,6 +1171,9 @@ function syncRhythmVolumeUi() {
 }
 
 setInterval(() => {
+  // Started as this file loads, but the beat reaches into scripts loaded
+  // after it (Overdrive, rhythm FX...) - wait until they all exist.
+  if (document.readyState !== 'complete') return;
   const active = rhythmActive();
   if (active !== rhythmWasActive) {
     rhythmWasActive = active;

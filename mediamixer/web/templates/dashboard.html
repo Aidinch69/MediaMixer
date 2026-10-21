@@ -730,6 +730,8 @@
 <!-- Classic scripts sharing one global scope. Order matters only for code
      that runs at load time; dashboard_boot.js holds window.onload. -->
 <script src="{{ url_for('static', filename='dashboard_tuning.js') }}"></script>
+<!-- perf before everything that calls perfLite(): a rhythm beat can fire between script loads -->
+<script src="{{ url_for('static', filename='dashboard_perf.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_tiles.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_floaters.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_audio.js') }}"></script>
@@ -761,7 +763,6 @@
 <script src="{{ url_for('static', filename='dashboard_events.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_sources.js') }}"></script>
 <script src="{{ url_for('static', filename='browser_info.js') }}"></script>
-<script src="{{ url_for('static', filename='dashboard_perf.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_telemetry.js') }}"></script>
 </body>
 </html>

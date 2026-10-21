@@ -405,8 +405,8 @@ def create_app(ctx: AppContext) -> Flask:
         if request.args.get("swap"):  # a deliberate swipe: unpin and change it
             session.state.set_pinned(index, False)
             session.state.hold_screen(index, 0)
-        elif session.state.screen_held(index):
-            return jsonify(ok=True, held=True)  # mid-moment: the tile loops instead
+        elif index in session.state.busy_indexes():
+            return jsonify(ok=True, held=True)  # pinned or mid-moment: the browser loops the clip instead
         session.rotation.rotate(side=index)
         return jsonify(ok=True)
 

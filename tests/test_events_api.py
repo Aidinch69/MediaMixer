@@ -56,3 +56,14 @@ def test_sessions_listing(client):
     post(client, [{"t": time.time() * 1000, "k": "spin"}])
     sessions = client.get("/api/events/sessions").get_json()["sessions"]
     assert len(sessions) == 1 and sessions[0]["n"] == 1
+
+
+def test_rotate_on_a_pinned_or_held_tile_says_held_and_keeps_its_clip(client):
+    status = client.get("/api/status").get_json()
+    before = status["screens"][0]["path"]
+    client.get("/api/pin?screen=0&on=1")
+    r = client.get("/api/rotate?screen=0").get_json()
+    assert r["held"] is True
+    assert client.get("/api/status").get_json()["screens"][0]["path"] == before
+    client.get("/api/pin?screen=0&on=0")
+    assert "held" not in client.get("/api/rotate?screen=0").get_json()

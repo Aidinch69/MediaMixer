@@ -83,7 +83,9 @@ function startStutter(idx) {
     canvas.style.opacity = '1';
     let lastLoop = -1;
     function step(ts) {
-      const elapsed = ts - t0;
+      // A frame's timestamp can be a hair earlier than the performance.now()
+      // that started the replay - a negative elapsed picked frames[-n].
+      const elapsed = Math.max(0, ts - t0);
       const loop = Math.floor(elapsed / segMs);
       // No frames captured (the clip changed first) - nothing to replay.
       if (!canvas.isConnected || loop >= repeats || !frames.length) { canvas.remove(); stutterTile.delete(idx); return; }
