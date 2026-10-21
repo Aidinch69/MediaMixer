@@ -10,7 +10,7 @@ const MASTER_AREA_OF_GROUP = {
   'Spiral': 'Screen', 'Layout Fade / Dynamic Mosaic': 'Screen', 'Clip Transitions': 'Screen', 'Spotlight Takeover': 'Screen',
   'Floater Barrage': 'Screen', 'Custom Loop Point': 'Screen', 'Living Screen': 'Screen', 'Visual Textures': 'Screen', 'Hooks & Tease': 'Screen', 'Replays & Callbacks': 'Rewards', 'Gravity': 'Screen',
   'Auto-Pilot': 'Flow', 'Rhythm & Pulse': 'Flow', 'Rhythm FX': 'Flow', 'Content Pulse': 'Flow', 'Moments': 'Rewards', 'Taste Learning': 'Flow', 'Surges': 'Flow', 'Fresh Drops': 'Flow',
-  'Audio-Reactive': 'Sound',
+  'Audio-Reactive': 'Sound', 'Spatial Sound': 'Sound',
 };
 // Engine field group -> menu area (everything else lands in Rewards).
 const MASTER_AREA_OF_ENGINE_GROUP = { 'Tension Curve': 'Screen', 'Selection (Bandit)': 'Flow' };

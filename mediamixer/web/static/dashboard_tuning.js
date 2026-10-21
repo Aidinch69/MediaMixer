@@ -260,6 +260,7 @@ const TUNING_DEFAULTS = {
   CALLBACK_MIN_AGE_MS: 180000,
   CALLBACK_HOLD_S: 12,
   CALLBACK_LEAD_S: 2,
+  SPATIAL_WIDTH: 0.8,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -406,6 +407,7 @@ const TUNING_GROUPS = [
   { label: 'Multipliers & XP', desc: 'Heat/heart multiplier caps and decay, hidden-window odds, XP amounts.', keys: ['JACKPOT_HEAT_MAX', 'JACKPOT_HEAT_DECAY_PER_TICK', 'HEART_MULT_MAX', 'HEART_MULT_DECAY_PER_TICK', 'HIDDEN_MULT_PROBABILITY', 'HIDDEN_MULT_DURATION_MS', 'HIDDEN_MULT_VALUE', 'GOLDEN_HOUR_MULTIPLIER', 'SURGE_MULTIPLIER', 'XP_PER_BONUS_CLAIM', 'RATE_XP_BASE'] },
   { label: 'Visual FX Rewards', desc: 'Odds a tile effect (prism, bloom, VHS...) rides along with a reward.', keys: ['FX_REWARD_BONUS_CHANCE', 'FX_REWARD_SEALED_CHANCE', 'FX_REWARD_CATCH_CHANCE', 'CHASE_MILESTONE_XP_MULT', 'BLOOM_PEAK_OPACITY', 'DUOTONE_PEAK_OPACITY', 'LIGHT_LEAK_PEAK_OPACITY'] },
   { label: 'Fresh Drops', desc: 'How new clips get rationed out - check rate, odds, spacing, per-session cap.', keys: ['FRESH_DROP_CHECK_MS', 'FRESH_DROP_PROBABILITY', 'FRESH_DROP_FIRST_DELAY_MS', 'FRESH_DROP_MIN_GAP_MS', 'FRESH_DROP_SESSION_CAP'] },
+  { label: 'Spatial Sound', desc: 'How far left and right the tiles’ sound is spread.', keys: ['SPATIAL_WIDTH'] },
   { label: 'Audio-Reactive', desc: 'Minimum gap between audio-triggered tile pulses.', keys: ['AUDIO_REACT_PULSE_GAP_MS'] },
   { label: 'Clip Transitions', desc: 'How often clip changes get a transition, how long, and the mix of styles.', keys: ['TRANSITION_PROBABILITY', 'TRANSITION_DURATION_MS', 'TRANSITION_WEIGHT_CROSSFADE', 'TRANSITION_WEIGHT_ZOOM', 'TRANSITION_WEIGHT_GLITCH'] },
   { label: 'Spotlight Takeover', desc: 'The rare one-tile takeover - odds, minimum gap, length, and size.', keys: ['SPOTLIGHT_CHECK_MS', 'SPOTLIGHT_PROBABILITY', 'SPOTLIGHT_MIN_GAP_MS', 'SPOTLIGHT_DURATION_MIN_MS', 'SPOTLIGHT_DURATION_RANGE_MS', 'SPOTLIGHT_SCALE', 'SPOTLIGHT_GROW_MS', 'SPOTLIGHT_DIM_OPACITY'] },
@@ -648,6 +650,7 @@ const TUNING_META = {
   CALLBACK_MIN_AGE_MS: { label: 'Callback: hearted at least this long ago', unit: 's', min: 30000, max: 1800000, step: 30000 },
   CALLBACK_HOLD_S: { label: 'Callback: seconds it stays', unit: '', min: 4, max: 60, step: 1 },
   CALLBACK_LEAD_S: { label: 'Callback: start this long before the hearted spot', unit: '', min: 0, max: 8, step: 0.5 },
+  SPATIAL_WIDTH: { label: 'Spatial sound: how wide the tiles are spread (1 = edge tiles fully in one ear)', unit: 'pct', min: 0, max: 1, step: 0.05 },
   SPLIT_CHANCE: { label: 'Split frames: chance per check (every 15s)', unit: 'pct', min: 0, max: 1, step: 0.01 },
   SPLIT_COOLDOWN_MS: { label: 'Rest between split frames', unit: 's', min: 15000, max: 1800000, step: 15000 },
   SPLIT_MS: { label: 'Split frames length', unit: 's', min: 2000, max: 20000, step: 500 },

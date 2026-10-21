@@ -144,10 +144,54 @@ function hookTileAudio(vid) {
   }
   try {
     const src = audioCtx.createMediaElementSource(vid);
-    src.connect(tileAudioGainNode);
     tileSourceNodes.set(vid, src);
     vid.volume = 1;
+    // Through its own stereo panner (Spatial Sound places it where the tile sits).
+    const pan = audioCtx.createStereoPanner();
+    src.connect(pan);
+    pan.connect(tileAudioGainNode);
+    tilePanners.set(vid, pan);
   } catch (e) {}
+}
+
+// ---- Spatial Sound ----
+// Each tile's audio comes from where the tile sits on screen: left tiles in
+// the left ear, right tiles in the right, gliding as tiles move (Mosaic
+// reflows, layout changes) - with headphones the grid becomes a room around
+// you instead of one wall of mixed sound.
+const tilePanners = new Map(); // <video> -> StereoPannerNode
+let spatialSoundEnabled = true;
+
+function tilePanFor(i) {
+  if (!spatialSoundEnabled) return 0;
+  const grid = document.getElementById('screen-grid');
+  const tile = tileElements[i];
+  if (!grid || !tile) return 0;
+  const g = grid.getBoundingClientRect(), r = tile.getBoundingClientRect();
+  if (!g.width) return 0;
+  const x = ((r.left + r.width / 2) - (g.left + g.width / 2)) / (g.width / 2); // -1 left .. 1 right
+  return Math.max(-1, Math.min(1, x * TUNING.SPATIAL_WIDTH));
+}
+
+setInterval(() => {
+  if (!audioCtx || !tilePanners.size) return;
+  tileElements.forEach((t, i) => {
+    const pan = tilePanners.get(getTileVideo(i));
+    if (pan) pan.pan.setTargetAtTime(tilePanFor(i), audioCtx.currentTime, 0.35);
+  });
+}, 300);
+
+function loadSpatialPref() {
+  const p = loadJsonPref('mm_spatial', {});
+  if (typeof p.enabled === 'boolean') spatialSoundEnabled = p.enabled;
+  setToggleBadge('spatial-sound-toggle', spatialSoundEnabled);
+}
+
+function toggleSpatialSound() {
+  spatialSoundEnabled = !spatialSoundEnabled;
+  saveJsonPref('mm_spatial', { enabled: spatialSoundEnabled });
+  setToggleBadge('spatial-sound-toggle', spatialSoundEnabled);
+  toast(spatialSoundEnabled ? '🎧 Spatial sound on - best with headphones' : '🎧 Spatial sound off');
 }
 
 function hookAllTileAudio() {
