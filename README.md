@@ -85,6 +85,7 @@ Video formats: `.mp4 .mkv .avi .mov .webm`. Overlay images: `.jpg .png .gif .web
 | `Setup.bat` | One-time setup on a new PC: Python check, packages, ffmpeg, and optional background prep. Safe to run again. |
 | `Run.bat` | Starts MediaMixer and opens the dashboard. If it's already running, it just opens the dashboard. Stop it by closing the window or pressing Ctrl+C. |
 | `Prepare.bat` | Builds proxies and Clip DNA for the whole library, with progress, then exits. Works whether or not MediaMixer is running. `Prepare.bat --watch` keeps going and picks up new clips every 10 minutes. `--workers 4` runs more transcodes at once. |
+| `Uninstall.bat` | Stops MediaMixer and removes background prep from login. It then asks, separately, whether to delete the proxy cache, your history and settings, and the Python packages. It never touches your media; afterwards, delete the project folder to finish. |
 | `mediamixer\install_cache_warmer.ps1` | Turns background prep on (it starts hidden at every login). `Setup.bat` runs this for you. Add `-Uninstall` to turn it off. |
 
 `Run.bat` is just `python Engine.py --open` run from the project folder. It adds no delay and has no performance cost. You can also run things directly from a terminal in the project folder:
@@ -226,7 +227,7 @@ Everything lives in the project folder, apart from per-device settings in the br
 | Proxies | `media_proxies/` | Deleting the folder (they're rebuilt) |
 | Logs | `engine_stdout.log`, `engine_stderr.log`, `cache_warmer.log` | Safe to delete |
 
-None of these, nor your media folders, are committed to git (see `.gitignore`).
+None of these, nor your media folders, are committed to git (see `.gitignore`). `Uninstall.bat` can delete the generated files for you.
 
 **Moving to another PC.** Copy or clone the project, run `Setup.bat`, then pick your folders in Sources. To bring your history along, copy `system_memory.db` too. History is stored by each clip's full file path, so it carries over when the clips sit at the same paths. Otherwise you start fresh and it relearns.
 

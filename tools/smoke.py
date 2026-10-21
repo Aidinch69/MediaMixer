@@ -39,6 +39,10 @@ def main() -> int:
 
     failures: list[str] = []
     with Browser() as b:
+        # Dynamic Mosaic is on by default and would change the tile count
+        # under the layout checks below - switch it off in this profile only.
+        b.navigate(args.url + "/")
+        b.ev("localStorage.setItem('mm_dynamic_mosaic', JSON.stringify({zoneMode: false, driftMode: false})), 1")
         b.navigate(args.url + "/")
         b.pump(args.settle)
         for layout in LAYOUTS:
