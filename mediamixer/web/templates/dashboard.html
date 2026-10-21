@@ -131,6 +131,7 @@
     <button class="panel-tab-btn" data-tab="rewards" onclick="switchPanelTab('rewards')">🎰 Rewards</button>
     <button class="panel-tab-btn" data-tab="sound" onclick="switchPanelTab('sound')">🎵 Sound</button>
     <button class="panel-tab-btn" data-tab="controls" onclick="switchPanelTab('controls')">🔧 Master</button>
+    <button class="panel-tab-btn" data-tab="more" onclick="switchPanelTab('more')">⚙️ More</button>
   </div>
 
   <div class="panel-tab" data-tab="screen">
@@ -653,8 +654,7 @@
     <details class="hint-details"><summary>What does this do?</summary><p class="hint">Every adjustable number in one place - the dashboard's own settings (this device) and the engine's (🖧 shared by every device, kept across restarts) - grouped by the same areas as the menu tabs. Search by name or area, or show only what you've changed: a ● marks anything off its default, with ↺ to put it back. "Check interval" is how often a system rolls the dice and the odds next to it are the chance per roll, so both control how often something happens. "Copy everything I've changed" lists your changes with their defaults - paste it to Claude to make the ones that feel right the new defaults. Save Backup snapshots your dashboard settings so you can experiment and come back.</p></details>
   </div>
 
-  <details class="panel-footer">
-    <summary>⚙️ More - source folders, phone access, categories, manual lock/skip, debug view</summary>
+  <div class="panel-tab" data-tab="more">
     <details class="settings-section" id="sources-section">
       <summary><span class="section-title">📁 Sources</span><span class="settings-section-desc">Which folders clips, spirals, overlays and audio come from - subfolders included.</span></summary>
       <div class="settings-section-body">
@@ -696,7 +696,7 @@
         <a href="/debug" target="_blank" rel="noopener" class="metric" style="display:inline-block;margin-top:8px">📊 Open the full debug view (timeline, hit rates, overlaps) ↗</a>
       </div>
     </details>
-  </details>
+  </div>
 </div>
 <audio id="overlay-audio" loop></audio>
 <div id="session-intent" class="session-intent" style="display:none" onclick="if (event.target === this) closeSessionIntent()">

@@ -135,9 +135,9 @@ function restorePanelState() {
   document.getElementById('panel-toggle').innerText = collapsed ? '☰' : '✕';
 }
 
-const PANEL_TAB_NAMES = ['screen', 'flow', 'rewards', 'sound', 'controls'];
+const PANEL_TAB_NAMES = ['screen', 'flow', 'rewards', 'sound', 'controls', 'more'];
 // Tabs from before the regroup, so a remembered tab still opens somewhere sensible.
-const PANEL_TAB_RENAMES = { display: 'screen', autopilot: 'flow', engagement: 'rewards', audio: 'sound', more: 'screen', tuning: 'controls' };
+const PANEL_TAB_RENAMES = { display: 'screen', autopilot: 'flow', engagement: 'rewards', audio: 'sound', tuning: 'controls' };
 
 function switchPanelTab(name) {
   name = PANEL_TAB_RENAMES[name] || name;

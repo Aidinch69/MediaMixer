@@ -35,7 +35,7 @@ It runs on your PC as a small local server. Open the dashboard in a browser on t
 1. **Get the code.** Clone the repo or download it as a ZIP and unzip it anywhere.
 2. **Run `Setup.bat`.** It checks Python, installs the packages (`flask`, `waitress`, `qrcode`) and checks for ffmpeg, offering to install anything missing. It also asks whether to turn on **background prep** (see [below](#library-prep-proxies-and-clip-dna)).
 3. **Run `Run.bat`.** The engine starts and the dashboard opens in your browser at <http://localhost:5000>. Keep the black window open while you use it; closing it stops MediaMixer.
-4. **Choose your folders.** In the dashboard menu (✕ / ☰ at the top right), open **⚙️ More → 📁 Sources** and add the folders your clips are in (see [Sources](#your-media-sources-and-folders)). Alternatively, drop clips into the `media_assets` folder that appears next to `Run.bat`.
+4. **Choose your folders.** In the dashboard menu (✕ / ☰ at the top right), open the **⚙️ More** tab → **📁 Sources** and add the folders your clips are in (see [Sources](#your-media-sources-and-folders)). Alternatively, drop clips into the `media_assets` folder that appears next to `Run.bat`.
 5. *(Optional)* **Run `Prepare.bat`** once to build proxies and Clip DNA for the whole library up front. Otherwise this happens gradually in the background.
 
 That's it. Heart (👍) the tiles you like and it learns as you go.

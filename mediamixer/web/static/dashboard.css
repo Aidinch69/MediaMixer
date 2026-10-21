@@ -424,11 +424,7 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 .panel-tab[data-tab="rewards"]{--tab-accent:#ffd43b}
 .panel-tab[data-tab="sound"]{--tab-accent:#ff8fc7}
 .panel-tab[data-tab="controls"]{--tab-accent:#8fffb3}
-.panel-footer{--tab-accent:#b399ff;border-top:1px solid #2a1540;padding-top:10px}
-.panel-footer>summary{cursor:pointer;color:#8e8e93;font-size:.72rem;list-style:none;padding:4px 0}
-.panel-footer>summary::-webkit-details-marker{display:none}
-.panel-footer[open]>summary{color:#b399ff;margin-bottom:10px}
-.panel-footer>.settings-section{margin-bottom:10px}
+.panel-tab[data-tab="more"]{--tab-accent:#b399ff}
 .quick-switches{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .quick-switch{margin:0;width:auto;padding:7px 2px;border-radius:8px;background:#140a22;border:1px solid #2a1540;color:#7d6a99;font-size:.68rem;font-weight:bold;cursor:pointer;transition:.15s;white-space:nowrap}
 .quick-switch.on{background:linear-gradient(180deg,#2c1a4a,#1f1036);border-color:#b884ff;color:#fff;box-shadow:0 0 10px rgba(184,132,255,.3)}
@@ -483,7 +479,7 @@ button.badge.switch.on::after{transform:translateX(22px);background:#fff}
 .scene-zone-links{display:flex;flex-direction:column;gap:4px;width:100%}
 .scene-zone-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.78rem}
 .scene-zone-row select{background:#1a0f2b;color:#e6d4ff;border:1px solid #361e52;border-radius:6px;padding:3px 6px;max-width:58%}
-.panel-tabs{display:flex;gap:4px;position:sticky;top:0;z-index:1;background:inherit;padding-bottom:2px}
+.panel-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;position:sticky;top:0;z-index:1;background:inherit;padding-bottom:2px}
 .panel-tab-btn{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:0;text-transform:none !important;font-size:.66rem !important;padding:9px 2px !important;background:linear-gradient(180deg,#1a0f2b,#140a22);border:1px solid #361e52;color:#9a7ab8;padding:9px 4px;border-radius:8px;cursor:pointer;font-weight:bold;text-transform:uppercase;font-size:.68rem;transition:.15s}
 .panel-tab-btn:hover{border-color:#b84dff;color:#d6a3ff}
 .panel-tab-btn.active{background:linear-gradient(180deg,#3a1d5c,#241038);border-color:#d699ff;color:#fff;box-shadow:0 0 10px rgba(184,77,255,.35)}
