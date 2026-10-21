@@ -357,15 +357,19 @@ def create_app(ctx: AppContext) -> Flask:
 
         def generate():
             last = None
-            while True:
-                session.touch()
-                payload = json.dumps(build_status(session))
-                if payload != last:
-                    yield f"data: {payload}\n\n"
-                    last = payload
-                else:
-                    yield ": keep-alive\n\n"
-                time.sleep(STREAM_INTERVAL_S)
+            ctx.stream_opened()
+            try:
+                while True:
+                    session.touch()
+                    payload = json.dumps(build_status(session))
+                    if payload != last:
+                        yield f"data: {payload}\n\n"
+                        last = payload
+                    else:
+                        yield ": keep-alive\n\n"
+                    time.sleep(STREAM_INTERVAL_S)
+            finally:  # the dashboard went away (closed, reloaded, network dropped)
+                ctx.stream_closed()
 
         return Response(generate(), mimetype="text/event-stream")
 
@@ -904,6 +908,43 @@ def create_app(ctx: AppContext) -> Flask:
         bundle = diagnostics.build(ctx, events, _prep_status())
         bundle["session"] = session_id
         return jsonify(bundle)
+
+    # -- play time (Home -> Progress) --
+    @app.route("/api/playtime", methods=["POST"])
+    def api_playtime_add():
+        """The dashboard reports a stretch it was visible and being used."""
+        body = request.get_json(silent=True) or {}
+        try:
+            start, end = float(body["from"]), float(body["to"])
+        except (KeyError, TypeError, ValueError):
+            return jsonify(ok=False, error="expected {from, to}"), 400
+        now = time.time()
+        end = min(end, now + 5)
+        if end - start > 300 or end <= start:
+            return jsonify(ok=False, error="interval out of range"), 400
+        return jsonify(ok=True, added=round(db.add_playtime(start, end), 1))
+
+    @app.route("/api/playtime")
+    def api_playtime():
+        """Minutes per day for the calendar, plus today / week / month / all-time totals."""
+        import datetime
+        days = db.playtime_days()
+        today = datetime.date.today()
+        week_start = today - datetime.timedelta(days=today.weekday())  # Monday
+        def total(since):
+            return sum(s for d, s in days.items() if d >= since.isoformat())
+        span = max(7, min(400, request.args.get("days", 42, type=int)))
+        recent = [{"day": (today - datetime.timedelta(days=i)).isoformat(),
+                   "minutes": round(days.get((today - datetime.timedelta(days=i)).isoformat(), 0) / 60, 1)}
+                  for i in range(span - 1, -1, -1)]
+        return jsonify(
+            ok=True, days=recent,
+            today=round(days.get(today.isoformat(), 0) / 60, 1),
+            week=round(total(week_start) / 60, 1),
+            month=round(total(today.replace(day=1)) / 60, 1),
+            all=round(sum(days.values()) / 60, 1),
+            days_played=sum(1 for s in days.values() if s >= 60),
+        )
 
     @app.route("/api/recap")
     def api_recap():

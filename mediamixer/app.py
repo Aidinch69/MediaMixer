@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import logging
 import threading
+import time
 from dataclasses import replace
 
 from waitress import serve
@@ -32,6 +33,22 @@ class MediaMixerApp:
         self.ctx = AppContext(self.config, self.db, self.sessions, self.dna, self.watcher)
         self.flask_app = create_app(self.ctx)
         self._stopped = threading.Event()
+
+    # In app-window mode, how long with no dashboard open before the engine
+    # stops itself - long enough to ride out a reload or a phone reconnect.
+    EXIT_GRACE_S = 45
+
+    def _exit_when_closed(self):
+        """App-window launch: once a dashboard has been open and then none
+        has been for EXIT_GRACE_S, stop the engine - so closing the
+        MediaMixer window also ends the engine (and its console) and the
+        session's play time."""
+        while not self._stopped.wait(5):
+            ctx = self.ctx
+            if ctx.streams_ever and ctx.open_streams == 0 and time.time() - ctx.streams_changed_at >= self.EXIT_GRACE_S:
+                log.info("MediaMixer window closed - stopping the engine")
+                self.sessions.stop()
+                return
 
     def run(self, open_browser: bool = False, app_window: bool = False):
         library.sync_library(self.db, self.config)
@@ -65,6 +82,8 @@ class MediaMixerApp:
         log.info("=" * 60)
         if open_browser or app_window:
             threading.Timer(1.0, open_dashboard, args=(f"http://localhost:{self.config.port}", app_window)).start()
+        if app_window:
+            threading.Thread(target=self._exit_when_closed, name="exit-when-closed", daemon=True).start()
 
         try:
             self.sessions.run_scheduler()

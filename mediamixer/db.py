@@ -82,6 +82,10 @@ CREATE TABLE IF NOT EXISTS events (
     data     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_events_session_ts ON events(session, ts);
+CREATE TABLE IF NOT EXISTS playtime (
+    day     TEXT PRIMARY KEY,   -- local date, YYYY-MM-DD
+    seconds REAL NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS audio_tracks (
     file_name   TEXT PRIMARY KEY,
     ema_reward  REAL NOT NULL DEFAULT 0.0,
@@ -99,6 +103,7 @@ class Database:
     def __init__(self, config: Config):
         self._path = config.db_path
         self._tls = threading.local()
+        self._playtime_lock = threading.Lock()
         with self._connect() as conn:
             conn.executescript(SCHEMA)
             self._migrate(conn)
@@ -438,6 +443,41 @@ class Database:
         conn = self._connect()
         conn.execute("INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
         conn.commit()
+
+    # -- play time --
+    def add_playtime(self, start: float, end: float) -> float:
+        """Count [start, end] (epoch seconds) as watched time, skipping any
+        part already counted - two dashboards open at once (this PC and a
+        phone) count once - and splitting at local midnight. Returns the
+        seconds added."""
+        import datetime
+        with self._playtime_lock:
+            conn = self._connect()
+            until = float(self.get_setting("playtime_until", "0") or 0)
+            start = max(start, until)
+            if end <= start:
+                return 0.0
+            added = 0.0
+            t = start
+            while t < end:
+                day = datetime.datetime.fromtimestamp(t)
+                midnight = (day + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+                chunk_end = min(end, midnight)
+                conn.execute(
+                    "INSERT INTO playtime(day, seconds) VALUES (?, ?) "
+                    "ON CONFLICT(day) DO UPDATE SET seconds = seconds + excluded.seconds",
+                    (day.strftime("%Y-%m-%d"), chunk_end - t),
+                )
+                added += chunk_end - t
+                t = chunk_end
+            conn.execute(
+                "INSERT INTO app_settings (key, value) VALUES ('playtime_until', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(end),))
+            conn.commit()
+            return added
+
+    def playtime_days(self) -> dict:
+        return {r["day"]: r["seconds"] for r in self._connect().execute("SELECT day, seconds FROM playtime")}
 
     # -- event log --
     def add_events(self, session: str, events: list):

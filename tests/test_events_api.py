@@ -67,3 +67,14 @@ def test_rotate_on_a_pinned_or_held_tile_says_held_and_keeps_its_clip(client):
     assert client.get("/api/status").get_json()["screens"][0]["path"] == before
     client.get("/api/pin?screen=0&on=0")
     assert "held" not in client.get("/api/rotate?screen=0").get_json()
+
+
+def test_playtime_counts_overlapping_devices_once_and_totals(client, db):
+    t = time.time() - 600
+    assert client.post("/api/playtime", json={"from": t, "to": t + 60}).get_json()["added"] == 60
+    # a second device reporting the same minute adds nothing; the next minute adds 60
+    assert client.post("/api/playtime", json={"from": t + 30, "to": t + 120}).get_json()["added"] == 60
+    got = client.get("/api/playtime").get_json()
+    assert got["all"] == 2.0  # (today/week can split at midnight)
+    assert sum(d["minutes"] for d in got["days"]) == 2.0
+    assert client.post("/api/playtime", json={"from": t, "to": t + 4000}).status_code == 400
