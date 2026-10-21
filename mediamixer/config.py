@@ -84,6 +84,11 @@ class Config:
     default_layout: str = "dual"
     default_preload_enabled: bool = True
 
+    # -- fresh drop --
+    # New clips held back for their own reveal (a few debut per session);
+    # beyond this many, the rest of a new batch joins rotation straight away.
+    fresh_hold_max: int = 6
+
     # -- low-res proxy for dense grids --
     # Source clips are full 1080p+ at several Mbps - every layout now uses
     # the cached, cheaper-to-decode proxy when one exists (see

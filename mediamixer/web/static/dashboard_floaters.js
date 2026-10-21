@@ -250,9 +250,11 @@ function burstExtraFloaters(scale) {
 // A rare whole-screen moment: the grid dims nearly to black and ~20
 // floaters bloom across it at 80-100% opacity, laid out on a jittered grid
 // so they fill the dark space evenly instead of clumping, drifting a little
-// while they're up, then everything fades back. Works whether or not the
-// regular floaters are on, and leaves the barrage tile-dim alone - it has
-// its own full-screen dim layer (#floater-barrage-dim) under #fx-layer.
+// while they're up, then everything fades back. Only fires on its own while
+// the regular floaters are on and the device isn't in Light mode (it's the
+// heaviest thing to draw); the preview button works regardless. Leaves the
+// barrage tile-dim alone - it has its own full-screen dim layer
+// (#floater-barrage-dim) under #fx-layer.
 const FLOATER_BARRAGE_FADE_MS = 1600;
 const FLOATER_BARRAGE_STAGGER_MS = 1200; // floaters arrive/leave spread over this
 let floaterBarrageActive = false;
@@ -261,6 +263,7 @@ let floaterBarrageEls = [];
 
 function maybeTriggerFloaterBarrage() {
   if (floaterBarrageActive || document.hidden || !tileElements.length) return;
+  if (!fxEnabled || perfLite()) return; // floaters off = no floater moments either
   if (Date.now() < floaterBarrageEndsAt + TUNING.FLOATER_BARRAGE_COOLDOWN_MS) return;
   // Never on top of another full-screen moment.
   if (lastKnownBarrage > 0 || anticipationActive || finaleActive || overdriveActive || colorRushActive || spotlightTileIndex >= 0) return;

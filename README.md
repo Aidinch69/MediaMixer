@@ -72,7 +72,7 @@ If you pick several tile folders, categories with the same name are merged.
 
 **Removing a folder doesn't forget anything.** Its clips just sit out until the folder is added back, with their hearts and history intact. The same goes for an unplugged external drive.
 
-**New clips.** New clips are picked up automatically, with no reload. Clips added to a folder that's already in the library debut one at a time as **Fresh Drops**. A whole folder added as a new source joins straight in.
+**New clips.** New clips are picked up automatically, with no reload. Clips added to a folder that's already in the library debut one at a time as **Fresh Drops**. Only 6 are held back for these reveals; the rest of a big batch joins rotation straight away. A whole folder added as a new source joins straight in.
 
 Video formats: `.mp4 .mkv .avi .mov .webm`. Overlay images: `.jpg .png .gif .webp`.
 

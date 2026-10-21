@@ -329,6 +329,21 @@ class Database:
         return row["video_path"] if row else None
 
     # -- fresh drop --
+    def release_fresh_beyond(self, keep: int) -> int:
+        """Fresh Drop rations its reveals (a few per session), so a big batch
+        of new clips would wait weeks. Keep `keep` of them (picked at random)
+        for reveals and let the rest join normal rotation now. Returns how
+        many were released."""
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT video_path FROM video_weights WHERE present=1 AND " + _FRESH_CONDITION + " ORDER BY RANDOM()"
+        ).fetchall()
+        extra = [(time.time(), r["video_path"]) for r in rows[max(0, keep):]]
+        if extra:
+            conn.executemany("UPDATE video_weights SET debuted_at=? WHERE video_path=?", extra)
+            conn.commit()
+        return len(extra)
+
     def fresh_video_paths(self) -> list:
         rows = self._connect().execute(
             "SELECT video_path FROM video_weights WHERE present=1 AND " + _FRESH_CONDITION + " ORDER BY added_at ASC"

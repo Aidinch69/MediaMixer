@@ -69,6 +69,7 @@ def sync_library(db: Database, config: Config) -> List[str]:
         for folder in folders:
             db.ensure_folder(folder)
         db.sync_videos([(path, cat) for _rid, path, cat in items], fresh)
+        db.release_fresh_beyond(config.fresh_hold_max)
         now_scanned = scanned | {r.id for r in src.roots("tiles") if os.path.isdir(r.path)}
         if now_scanned != scanned:
             db.set_setting("scanned_roots", json.dumps(sorted(now_scanned)))

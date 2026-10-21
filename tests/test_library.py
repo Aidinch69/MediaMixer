@@ -124,3 +124,16 @@ def test_heart_rank_in_video_meta(config, db):
     assert library.get_video_meta(db, paths[0])["heart_top_frac"] == 0
     assert abs(library.get_video_meta(db, paths[2])["heart_top_frac"] - 2 / 3) < 1e-9
     assert library.get_video_meta(db, paths[3])["heart_top_frac"] is None
+
+
+def test_a_big_batch_of_new_clips_mostly_joins_rotation_at_once(config, db):
+    make_clips(config, ["seed.mp4"])
+    library.sync_library(db, config)
+    new = make_clips(config, [f"new{i}.mp4" for i in range(20)])
+    library.sync_library(db, config)
+    held = library.fresh_video_paths(db)
+    assert len(held) == config.fresh_hold_max  # a few kept back for Fresh Drop reveals
+    random.seed(1)
+    picked = {library.pick_video(db, config, library.GENERAL_FOLDER) for _ in range(500)}
+    assert len(picked & set(new)) == 20 - config.fresh_hold_max  # the rest play normally
+    assert not picked & set(held)
