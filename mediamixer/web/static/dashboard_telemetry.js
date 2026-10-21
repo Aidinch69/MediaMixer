@@ -60,6 +60,7 @@ const TELEMETRY_WATCHERS = [
   ['floaterBarrage', () => (floaterBarrageActive ? 'on' : null)],
   ['moment', () => activeMoment],
   ['hook', () => (hook && hook.phase === 'running' ? hook.idx : null)],
+  ['gravityHero', () => (gravityHero >= 0 ? gravityHero : null)],
   ['contentHero', () => (contentHero >= 0 ? contentHero : null)],
   ['splitFrames', () => (splitFrames && splitFrames.shown ? splitFrames.idx : null)],
   ['cascade', () => (cascade ? cascade.mode : null)],

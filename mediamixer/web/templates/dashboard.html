@@ -241,6 +241,15 @@
       </div>
     </details>
     <details class="settings-section">
+      <summary><span class="section-title">🧲 Crop Focus &amp; Gravity</span><span class="settings-section-desc">Mosaic crops toward the action; the liveliest tile swells a little.</span></summary>
+      <div class="settings-section-body">
+        <div class="metric" id="mosaic-crop-status"></div>
+        <div class="slider"><label>Crop Focus (Mosaic)</label><button class="badge" id="gravity-cropFocus-toggle" onclick="toggleGravityPref('cropFocus')">ON</button></div>
+        <div class="slider"><label>Gravity</label><button class="badge" id="gravity-gravity-toggle" onclick="toggleGravityPref('gravity')">ON</button></div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Mosaic Fit now tries every way of splitting the tiles into rows (not just even rows) and keeps the one that needs the least cropping - the line above shows how much is cut now versus the old way. Crop Focus: what Mosaic does have to cut off is taken from the empty side, not the action - each tile's crop slides toward where the movement is (from Clip DNA), gently. Gravity: the tile where the most is happening swells a little over its neighbours. It follows the movement in the clips; a heart only nudges it slightly and that fades in seconds, so hearting a run of tiles won't shuffle anything - one tile leads at a time and holds it for a while. It steps aside for Spotlight, barrages, build-ups and the Finale. Fine-tune in Master Controls → Gravity.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
       <summary><span class="section-title">🌀 Manual Spiral</span><span class="section-live" data-live="spiral"></span><span class="settings-section-desc">Keep a spiral of your choice up, at your own opacity.</span></summary>
       <div class="settings-section-body">
         <div class="slider">
@@ -696,6 +705,7 @@
 <script src="{{ url_for('static', filename='dashboard_textures.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_content.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_hooks.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_gravity.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_session.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_scenes.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_master.js') }}"></script>

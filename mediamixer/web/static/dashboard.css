@@ -333,9 +333,15 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#05020a;color:#d1d1d6}
 @keyframes glitch-anim{0%{transform:translate(0)}20%{transform:translate(-2px,2px)}40%{transform:translate(-2px,-2px)}60%{transform:translate(2px,2px)}80%{transform:translate(2px,-2px)}100%{transform:translate(0)}}
 .screen-grid{display:grid;gap:8px;width:100%;height:100%}
 .screen-grid.mosaic{display:flex;flex-direction:column;gap:0}
-.mosaic-row{display:flex;flex-direction:row;width:100%;flex-shrink:0}
-.mosaic-row .tile{flex-grow:0;flex-shrink:0;height:100%}
-.tile{touch-action:none;position:relative;background:#020105;border-radius:8px;border:1px solid #140a1a;overflow:hidden;transition:transform .4s ease,box-shadow .4s ease}
+.mosaic-node{display:flex;min-width:0;min-height:0}
+.mosaic-node.h{flex-direction:row}
+.mosaic-node.v{flex-direction:column}
+.mosaic-node>*{flex-grow:0;flex-shrink:0}
+.mosaic-node.h>*{height:100%}
+.mosaic-node.v>*{width:100%}
+.mosaic-root{width:100%;height:100%}
+.tile{touch-action:none;position:relative;background:#020105;border-radius:8px;border:1px solid #140a1a;overflow:hidden;transition:transform .4s ease,box-shadow .4s ease,scale 1.4s cubic-bezier(.25,.8,.3,1),translate 1.4s cubic-bezier(.25,.8,.3,1)}
+.tile.gravity-hero{scale:var(--gravity-s,1.08);translate:var(--gravity-tx,0) var(--gravity-ty,0);z-index:2;box-shadow:0 10px 40px rgba(0,0,0,.65),0 0 24px rgba(var(--mood-glow,var(--theme-glow,255,70,30)),.25)}
 /* Dip-to-dim layout transition: a brief fade to black bridges a tile-
    count change (manual or Dynamic Mosaic) instead of the grid cutting
    straight to the new arrangement. Deliberately a single full-screen

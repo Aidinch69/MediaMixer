@@ -117,10 +117,13 @@ def test_more_like_this_fills_neighbours_and_leans_picks(config, db):
     assert all(look(sess.state.current_paths()[t]) == centre_look for t in r["tiles"])
     random.seed(2)
     picks = []
-    for _ in range(20):
+    for _ in range(30):  # the pool is 40 clips and recent ones are skipped, so it runs dry eventually
         sess.rotation.rotate(side=0)
         picks.append(look(sess.state.current_paths()[0]))
-    assert sum(1 for v in picks if v == centre_look) >= 14  # ~70% from the look-alike pool, vs ~50% by chance
+    # ~70% from the look-alike pool plus half the rest by chance (~85%) vs
+    # ~50% without it - margin enough that the background tick's own random
+    # draws can't tip the count.
+    assert sum(1 for v in picks if v == centre_look) >= 0.65 * len(picks)
     sessions.stop()
 
 

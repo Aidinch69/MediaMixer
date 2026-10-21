@@ -369,75 +369,156 @@ function splitEvenly(n, rows) {
   return sizes;
 }
 
-function computeMosaicRows(aspects, containerWidth, containerHeight) {
-  const n = aspects.length;
-  if (n === 0 || containerWidth < 1 || containerHeight < 1) return [];
+// Crop-aware Mosaic: tiles are arranged as nested splits - a row can hold
+// columns, a column can hold rows - so each clip's cell can keep (close to)
+// the clip's own shape. Side by side, two parts share a height and their
+// shapes add up; stacked, they share a width. Any arrangement whose overall
+// shape matches the screen needs no crop at all; otherwise every tile is
+// stretched by the same small amount (cover crops it). Tiles stay in order
+// (nothing jumps across the screen), the search keeps arrangements that
+// don't leave one tile tiny next to a huge one, and it sticks with the last
+// arrangement unless a new one is clearly better (MOSAIC_KEEP_BONUS).
+const MOSAIC_KEEP_BONUS = 0.04;
+const MOSAIC_BALANCE = 0.06; // cost per e-fold between the biggest and smallest tile
+const MOSAIC_BUCKETS_PER_E = 6; // candidate shapes kept per interval, by log-aspect
+let mosaicLastSig = null;
+let mosaicCropNow = 0; // share of each clip cropped away right now, for the menu
 
+function mosaicCombine(L, R, dir) {
+  const sL = dir === 'h' ? L.a / (L.a + R.a) : (1 / L.a) / (1 / L.a + 1 / R.a);
+  return {
+    dir, l: L, r: R,
+    a: dir === 'h' ? L.a + R.a : 1 / (1 / L.a + 1 / R.a),
+    minS: Math.min(sL * L.minS, (1 - sL) * R.minS),
+    maxS: Math.max(sL * L.maxS, (1 - sL) * R.maxS),
+  };
+}
+
+function mosaicSig(node) {
+  return node.leaf != null ? String(node.leaf) : node.dir + '(' + mosaicSig(node.l) + ',' + mosaicSig(node.r) + ')';
+}
+
+// Rebuild a previous arrangement with today's aspect ratios.
+function mosaicFromSig(sig, aspects) {
+  let pos = 0;
+  const parse = () => {
+    if (sig[pos] === 'h' || sig[pos] === 'v') {
+      const dir = sig[pos];
+      pos += 2; // "h("
+      const L = parse();
+      pos += 1; // ","
+      const R = parse();
+      pos += 1; // ")"
+      return L && R ? mosaicCombine(L, R, dir) : null;
+    }
+    let num = '';
+    while (pos < sig.length && /[0-9]/.test(sig[pos])) num += sig[pos++];
+    const i = +num;
+    return i < aspects.length ? { leaf: i, a: aspects[i], minS: 1, maxS: 1 } : null;
+  };
+  try { return parse(); } catch (e) { return null; }
+}
+
+function mosaicCost(node, screenAspect) {
+  return Math.abs(Math.log(node.a / screenAspect)) + MOSAIC_BALANCE * Math.log(node.maxS / node.minS);
+}
+
+function computeMosaicTree(aspects, containerWidth, containerHeight) {
+  const n = aspects.length;
+  if (!n || containerWidth < 1 || containerHeight < 1) return null;
+  const screenAspect = containerWidth / containerHeight;
+  // cands[i][j]: a few arrangements of tiles i..j, one per shape bucket,
+  // keeping the most balanced in each.
+  const cands = [];
+  for (let i = 0; i < n; i++) { cands[i] = []; cands[i][i] = [{ leaf: i, a: aspects[i], minS: 1, maxS: 1 }]; }
+  for (let len = 2; len <= n; len++) {
+    for (let i = 0; i + len - 1 < n; i++) {
+      const j = i + len - 1;
+      const buckets = new Map();
+      for (let k = i; k < j; k++) {
+        for (const L of cands[i][k]) for (const R of cands[k + 1][j]) for (const dir of ['h', 'v']) {
+          const c = mosaicCombine(L, R, dir);
+          if (c.minS < 1 / (len * 5)) continue; // a sliver - never worth it
+          const key = Math.round(Math.log(c.a) * MOSAIC_BUCKETS_PER_E);
+          const prev = buckets.get(key);
+          if (!prev || c.maxS / c.minS < prev.maxS / prev.minS) buckets.set(key, c);
+        }
+      }
+      cands[i][j] = [...buckets.values()];
+    }
+  }
+  let best = null, bestCost = Infinity;
+  for (const c of cands[0][n - 1]) {
+    const cost = mosaicCost(c, screenAspect);
+    if (cost < bestCost) { best = c; bestCost = cost; }
+  }
+  if (!best) return null;
+  if (mosaicLastSig) {
+    const prev = mosaicFromSig(mosaicLastSig, aspects);
+    // Only if it still covers exactly these tiles (the tile count may have changed).
+    const leaves = (prev && mosaicLastSig.match(/[0-9]+/g)) || [];
+    const covers = leaves.length === n && new Set(leaves).size === n;
+    if (prev && covers && mosaicSig(prev) === mosaicLastSig && mosaicCost(prev, screenAspect) - MOSAIC_KEEP_BONUS <= bestCost) best = prev;
+  }
+  mosaicLastSig = mosaicSig(best);
+  const r = best.a / screenAspect;
+  mosaicCropNow = 1 - Math.min(r, 1 / r);
+  return best;
+}
+
+// What the old even-rows Mosaic would crop, for comparison in the menu.
+function evenSplitCrop(aspects, containerWidth, containerHeight) {
+  const n = aspects.length;
   let best = null;
   for (let rows = 1; rows <= n; rows++) {
-    const sizes = splitEvenly(n, rows);
-    if (sizes.some(s => s === 0)) continue;
-    // A single row holding every tile (or the opposite - one tall column,
-    // rows===n) occasionally wins this search on pure height-matching
-    // arithmetic for some aspect-ratio mixes, but it reads as everything
-    // squished flat into one sliver - skip both extremes whenever there's
-    // a real alternative.
     if (n > 2 && (rows === 1 || rows === n)) continue;
-
     let idx = 0;
-    const groups = sizes.map(size => aspects.slice(idx, (idx += size)));
-    const rowNaturalHeights = groups.map(g => containerWidth / g.reduce((a, b) => a + b, 0));
-    const totalNaturalHeight = rowNaturalHeights.reduce((a, b) => a + b, 0);
-    const diff = Math.abs(totalNaturalHeight - containerHeight);
-    if (!best || diff < best.diff) best = { groups, rowNaturalHeights, totalNaturalHeight, diff };
+    const total = splitEvenly(n, rows).reduce((acc, size) => acc + containerWidth / aspects.slice(idx, (idx += size)).reduce((x, y) => x + y, 0), 0);
+    const diff = Math.abs(total - containerHeight);
+    const stretch = containerHeight / total;
+    if (!best || diff < best.diff) best = { diff, crop: 1 - Math.min(stretch, 1 / stretch) };
   }
-  if (!best) return [];
+  return best ? best.crop : 0;
+}
 
-  // Scale row heights so they sum to exactly containerHeight (no leftover
-  // vertical gap, no overflow). Width shares are computed independently,
-  // as each item's fraction of its row's total aspect ratio - that ALWAYS
-  // sums to exactly 100%, regardless of how far the height scale ends up
-  // from 1. The cost is that a cell's forced aspect may no longer exactly
-  // match its video's native aspect when the scale is far from 1; cover is
-  // applied in CSS so that shows up as a touch more cropping, never as a
-  // black bar or overflow.
-  const scale = containerHeight / best.totalNaturalHeight;
-  let index = 0;
-  return best.groups.map((group, gi) => {
-    const rowHeight = best.rowNaturalHeights[gi] * scale;
-    const aspectSum = group.reduce((a, b) => a + b, 0);
-    const items = group.map(aspect => ({
-      screenIndex: index++,
-      widthPct: (aspect / aspectSum) * 100,
-    }));
-    return { heightPx: rowHeight, items };
+function buildMosaicNode(node) {
+  if (node.leaf != null) {
+    const tile = tileElements[node.leaf];
+    if (tile) { tile.style.width = ''; tile.style.height = ''; }
+    return tile;
+  }
+  const el = document.createElement('div');
+  el.className = 'mosaic-node ' + node.dir;
+  const sL = node.dir === 'h' ? node.l.a / node.a : (1 / node.l.a) / (1 / node.a);
+  [[node.l, sL], [node.r, 1 - sL]].forEach(([child, share]) => {
+    const c = buildMosaicNode(child);
+    if (!c) return;
+    c.style.flexBasis = (share * 100).toFixed(4) + '%';
+    el.appendChild(c); // re-parents an existing tile (and its <video>) without reloading it
   });
+  return el;
 }
 
 function layoutMosaic() {
   const grid = document.getElementById('screen-grid');
   const rect = grid.getBoundingClientRect();
   if (rect.width < 10 || rect.height < 10 || tileElements.length === 0) return;
-
   grid.className = 'screen-grid mosaic';
   grid.style.gridTemplateColumns = '';
   grid.style.gridTemplateRows = '';
-
-  const rows = computeMosaicRows(aspectRatios.slice(0, tileElements.length), rect.width, rect.height);
+  const tree = computeMosaicTree(aspectRatios.slice(0, tileElements.length), rect.width, rect.height);
+  if (!tree) return;
+  let root = buildMosaicNode(tree);
+  if (tree.leaf != null) { // a single tile still needs a container to fill
+    const wrap = document.createElement('div');
+    wrap.className = 'mosaic-node h';
+    root.style.flexBasis = '100%';
+    wrap.appendChild(root);
+    root = wrap;
+  }
+  root.classList.add('mosaic-root');
   grid.innerHTML = '';
-  rows.forEach(row => {
-    const rowEl = document.createElement('div');
-    rowEl.className = 'mosaic-row';
-    rowEl.style.height = row.heightPx + 'px';
-    row.items.forEach(item => {
-      const tile = tileElements[item.screenIndex];
-      if (!tile) return;
-      tile.style.flexBasis = item.widthPct + '%';
-      tile.style.width = item.widthPct + '%';
-      rowEl.appendChild(tile); // re-parents the existing tile (and its <video>) without reloading it
-    });
-    grid.appendChild(rowEl);
-  });
+  grid.appendChild(root);
 }
 
 function applyUniformGrid() {

@@ -23,6 +23,7 @@ let contentTempo = null; // smoothed BPM from the hero's rhythm
 const contentPulseCache = new Map(); // path -> Uint8Array (4 Hz, 0..255)
 const contentLive = {}; // tile -> { prev, max } for clips without a DNA pulse
 const contentLastT = {}; // tile -> last currentTime seen (peak crossings)
+const contentTileLevels = []; // tile -> its level on the last tick (null = unknown), read by Gravity
 const contentSampler = document.createElement('canvas');
 contentSampler.width = CONTENT_LIVE_W;
 contentSampler.height = CONTENT_LIVE_H;
@@ -90,10 +91,12 @@ function tileArea(i) {
 
 function contentTick() {
   if (document.hidden || !tileElements.length) return;
+  contentTileLevels.length = tileElements.length;
   let heroScore = -1, hero = -1;
   const vals = [];
   tileElements.forEach((t, i) => {
     const v = tileContentLevel(i);
+    contentTileLevels[i] = v;
     if (v == null) return;
     const w = tileArea(i);
     vals.push([v, w]);

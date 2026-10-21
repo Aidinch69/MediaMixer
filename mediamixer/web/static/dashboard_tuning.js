@@ -245,6 +245,9 @@ const TUNING_DEFAULTS = {
   TEASE_COOLDOWN_MS: 20000,
   TEASE_ZOOM: 1.7,
   TEASE_MS: 6000,
+  GRAVITY_SCALE: 1.08,
+  GRAVITY_MIN_HOLD_MS: 6000,
+  GRAVITY_HEART_NUDGE: 0.08,
 };
 const TUNING = Object.assign({}, TUNING_DEFAULTS);
 const TUNING_STORAGE_KEY = 'mm_tuning_overrides';
@@ -402,6 +405,7 @@ const TUNING_GROUPS = [
   { label: 'Rhythm FX', desc: 'Stutter edits and Cascades - how often, how long, how many repeats.', keys: ['STUTTER_CHANCE', 'STUTTER_COOLDOWN_MS', 'STUTTER_REPEATS', 'CASCADE_CHANCE', 'CASCADE_COOLDOWN_MS', 'CASCADE_HOLD_BEATS'] },
   { label: 'Content Pulse', desc: 'How much the movement in the clips on screen leads the energy, peak glow and Follow Clips tempo.', keys: ['CONTENT_ENERGY_GAIN', 'CONTENT_ENERGY_MAX', 'CONTENT_PEAK_GLOW', 'CONTENT_HERO_HOLD_MS', 'PEAK_CUT_CHANCE', 'PEAK_CUT_MAX_WAIT_S', 'PEAK_CUT_AFTER_S'] },
   { label: 'Hooks & Tease', desc: 'How often a clip repeats its best bit, and how often a new clip arrives pushed in close.', keys: ['HOOK_CHANCE', 'HOOK_COOLDOWN_MS', 'HOOK_SECONDS', 'HOOK_REPEATS', 'TEASE_CHANCE', 'TEASE_COOLDOWN_MS', 'TEASE_ZOOM', 'TEASE_MS'] },
+  { label: 'Gravity', desc: 'How much the liveliest tile swells, how long it holds the lead, and how little a heart moves it.', keys: ['GRAVITY_SCALE', 'GRAVITY_MIN_HOLD_MS', 'GRAVITY_HEART_NUDGE'] },
   { label: 'Visual Textures', desc: 'Split frames, film grain & dust, and edge bleed - odds, strength and how much calm moments add.', keys: ['SPLIT_CHANCE', 'SPLIT_COOLDOWN_MS', 'SPLIT_MS', 'GRAIN_OPACITY', 'GRAIN_CALM_BOOST', 'DUST_RATE', 'EDGE_BLEED_OPACITY'] },
   { label: 'Moments', desc: 'The Drop, Breath, Focus pull, Call & response, Echo trails, Favourite takeover and Heart burst - odds, rests and lengths.', keys: ['DROP_CHANCE', 'DROP_MIN_ENERGY', 'DROP_COOLDOWN_MS', 'BREATH_CHANCE', 'BREATH_COOLDOWN_MS', 'BREATH_MS', 'BREATH_SPEED', 'FOCUS_PULL_CHANCE', 'FOCUS_PULL_COOLDOWN_MS', 'FOCUS_PULL_BARS', 'CALL_RESPONSE_CHANCE', 'CALL_RESPONSE_COOLDOWN_MS', 'ECHO_CHANCE', 'ECHO_MIN_ENERGY', 'ECHO_COOLDOWN_MS', 'ECHO_MS', 'FAVORITE_TAKEOVER_HEARTS', 'FAVORITE_TAKEOVER_MS', 'FAVORITE_TAKEOVER_COOLDOWN_MS', 'HEART_BURST_WINDOW_MS', 'HEART_BURST_COOLDOWN_MS', 'HEART_BURST_LEAN_MS', 'HEART_BURST_LEAN_SHARE'] },
 ];
@@ -613,6 +617,9 @@ const TUNING_META = {
   TEASE_COOLDOWN_MS: { label: 'Rest between tease reveals', unit: 's', min: 0, max: 300000, step: 5000 },
   TEASE_ZOOM: { label: 'Tease reveal: how close it starts', unit: 'x', min: 1.1, max: 3, step: 0.05 },
   TEASE_MS: { label: 'Tease reveal length', unit: 's', min: 2000, max: 15000, step: 500 },
+  GRAVITY_SCALE: { label: 'Gravity: how much the lead tile swells', unit: 'x', min: 1, max: 1.3, step: 0.01 },
+  GRAVITY_MIN_HOLD_MS: { label: 'Gravity: least time one tile holds the lead', unit: 's', min: 2000, max: 60000, step: 1000 },
+  GRAVITY_HEART_NUDGE: { label: 'Gravity: nudge from a heart (fades in seconds)', unit: '', min: 0, max: 0.4, step: 0.01 },
   SPLIT_CHANCE: { label: 'Split frames: chance per check (every 15s)', unit: 'pct', min: 0, max: 1, step: 0.01 },
   SPLIT_COOLDOWN_MS: { label: 'Rest between split frames', unit: 's', min: 15000, max: 1800000, step: 15000 },
   SPLIT_MS: { label: 'Split frames length', unit: 's', min: 2000, max: 20000, step: 500 },

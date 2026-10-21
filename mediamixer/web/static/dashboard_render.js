@@ -510,6 +510,7 @@ function rateScreen(i, dir, btn, strength) {
     }
     onEngagement('heart', i, strength);
     if (typeof onMomentHeart === 'function') onMomentHeart(i);
+    if (typeof gravityHeart === 'function') gravityHeart(i);
     statsLifetimeHearts += strength;
     sessionStats.hearts += strength;
     saveStats();
