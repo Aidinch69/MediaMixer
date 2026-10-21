@@ -1,5 +1,9 @@
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# a local ffmpeg build (see README)
+ffmpeg/
 
 # runtime database (regenerated on first run)
 system_memory.db
