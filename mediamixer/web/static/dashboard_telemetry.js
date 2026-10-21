@@ -215,6 +215,7 @@ function initTelemetry() {
     toggles: {
       autopilot: autopilotEnabled, sharedPulse: sharedPulseEnabled, brainwave: brainwaveMode, taste: Math.round(tasteStrength * 100) + '%', manualSpiral: manualSpiralEnabled ? Math.round(manualSpiralOpacity * 100) + '%' : false, floaters: fxEnabled, floaterCount: fxCount, rhythm: rhythmEnabled,
       mosaicDrift: dynamicMosaicDriftMode, mosaicZone: dynamicMosaicZoneMode, mosaicRange: [dynamicMosaicMinTiles, dynamicMosaicMaxTiles],
+      perf: perfMode + (perfLite() ? ':light' : ':full'),
       mosaic: mosaicEnabled, beatVoice: rhythmVoice, beatVolume: rhythmVolume, tempoSource: rhythmBpmSource, cutOnBeat: rhythmCutOnBeat,
     },
   }), 0));

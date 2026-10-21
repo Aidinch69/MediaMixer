@@ -153,8 +153,15 @@
           <button class="badge" id="mosaic-toggle" onclick="toggleMosaic()">OFF</button>
         </div>
         <div class="slider"><label>Tile Gestures</label><button class="badge" id="gestures-toggle" onclick="toggleTileGestures()">ON</button></div>
+        <div class="slider"><label>Performance</label></div>
+        <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+          <button class="badge" id="perf-auto" onclick="setPerfMode('auto')">Auto</button>
+          <button class="badge" id="perf-full" onclick="setPerfMode('full')">Full</button>
+          <button class="badge" id="perf-light" onclick="setPerfMode('light')">Light</button>
+        </div>
+        <div class="metric" id="perf-status" style="font-size:.72rem"></div>
         <div class="metric" style="font-size:.72rem">👉 Swipe a tile to swap it · ✋ long-press to 📌 pin it (keeps its clip) · 👆👆 double-tap for ✨ More like this · 🖱 scroll over it to change its speed</div>
-        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Sizes tiles by each clip's own aspect ratio to cut down on black bars, instead of a uniform grid. Reflows every few seconds, not on every clip change, to stay calm.</p></details>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Sizes tiles by each clip's own aspect ratio to cut down on black bars, instead of a uniform grid. Reflows every few seconds, not on every clip change, to stay calm. Performance: laptops and other PCs with built-in graphics can't draw every effect at once - the videos drop frames and stall. Light leaves out the heaviest effects (film grain, edge bleed, the beat veil, the colour filter on every tile, split frames, slow-mo, double exposures, stutter and cascade, and the bloom/leak/duotone/RGB split tile effects), keeps floaters to one and gives them rounded corners instead of a soft feathered edge. Auto (the default) switches this device to Light by itself if it keeps dropping frames, and remembers that; pick Auto again to re-test, or Full to keep everything on.</p></details>
         <div class="slider"><label>Playback Speed: <b><span id="l-manual-speed">1.00x</span></b></label><input type="range" id="manual-speed-input" min="0.25" max="2" step="0.05" value="1" oninput="setManualSpeed(this.value)"></div>
         <details class="hint-details"><summary>What does this do?</summary><p class="hint">A baseline speed multiplier for every tile, on top of whatever the server's own tension/barrage speed is doing - 1.00x leaves that untouched. Saved on this device, applies to every layout.</p></details>
       </div>
@@ -754,6 +761,7 @@
 <script src="{{ url_for('static', filename='dashboard_events.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_sources.js') }}"></script>
 <script src="{{ url_for('static', filename='browser_info.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_perf.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_telemetry.js') }}"></script>
 </body>
 </html>

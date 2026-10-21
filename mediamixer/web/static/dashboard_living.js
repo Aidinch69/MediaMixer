@@ -106,7 +106,7 @@ function slowmoBufferedAhead(vid) {
 }
 
 function maybeTriggerSlowmo() {
-  if (!livingSlowmo || slowmoTileIndex >= 0 || document.hidden || !tileElements.length) return;
+  if (!livingSlowmo || perfLite() || slowmoTileIndex >= 0 || document.hidden || !tileElements.length) return;
   if (Date.now() - slowmoLastAt < TUNING.SLOWMO_COOLDOWN_MS) return;
   const energetic = rhythmDrive >= TUNING.SLOWMO_ENERGY_MIN || Date.now() - lastAnyPayoffAt < 6000;
   if (!energetic || floaterBarrageActive || finaleActive || spotlightTileIndex >= 0) return;
@@ -173,7 +173,7 @@ const DOUBLE_EXPOSURE_FADE_IN_MS = 2000;
 const DOUBLE_EXPOSURE_FADE_OUT_MS = 2500;
 
 function maybeTriggerDoubleExposure() {
-  if (!livingDouble || doubleExposureTileIndex >= 0 || document.hidden || !tileElements.length) return;
+  if (!livingDouble || perfLite() || doubleExposureTileIndex >= 0 || document.hidden || !tileElements.length) return;
   if (Date.now() - doubleExposureLastAt < TUNING.DOUBLE_EXPOSURE_COOLDOWN_MS) return;
   if (floaterBarrageActive || finaleActive || spotlightTileIndex >= 0 || lastKnownBarrage > 0) return;
   if (Math.random() >= TUNING.DOUBLE_EXPOSURE_PROBABILITY) return;

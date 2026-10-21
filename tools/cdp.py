@@ -36,8 +36,9 @@ def find_chrome() -> str:
 
 
 class Browser:
-    def __init__(self, port: int = 9333, width: int = 1600, height: int = 900, timeout: float = 60):
+    def __init__(self, port: int = 9333, width: int = 1600, height: int = 900, timeout: float = 60, args=()):
         self.port = port
+        self.args = list(args)  # extra Chrome flags, e.g. ["--disable-gpu"]
         self.size = (width, height)
         self.timeout = timeout
         self.errors: list[str] = []
@@ -52,7 +53,7 @@ class Browser:
             find_chrome(), "--headless=new", f"--remote-debugging-port={self.port}",
             "--remote-allow-origins=*", "--autoplay-policy=no-user-gesture-required",
             "--mute-audio", f"--window-size={self.size[0]},{self.size[1]}",
-            f"--user-data-dir={self._profile}", "about:blank",
+            f"--user-data-dir={self._profile}", *self.args, "about:blank",
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         page = None
         for _ in range(80):

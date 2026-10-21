@@ -155,7 +155,7 @@ Every section in the menu has a **"What does this do?"** link with the full deta
 
 **🖥️ Screen**
 
-- **Layout & Pace:** tile count (2 up to 64), preload, Mosaic Fit (sizes tiles to each clip's shape) and a speed override.
+- **Layout & Pace:** tile count (2 up to 64), preload, Mosaic Fit (sizes tiles to each clip's shape), a speed override, and **Performance**. Performance is Auto by default: on a device that keeps dropping video frames, typically a laptop with built-in graphics, it switches to Light by itself. Light drops the heaviest effects and gives floaters rounded corners instead of a feathered edge.
 - **Dynamic Mosaic:** the tile count changes by itself, driven by zone or drifting freely, within a range you set.
 - **Floating Overlay:** clips that drift across the screen like a DVD logo, either from the library or your Overlay Source.
 - **Living Screen:** breathing tiles, slow-mo moments, double exposures, smart framing, colour mood.
@@ -262,7 +262,7 @@ Every engine default (pace presets, layouts, reward weights, odds) is in `mediam
 | `Run.bat` closes or shows "not set up" | Run `Setup.bat`. If Python was just installed, open a new window first. |
 | "Address already in use" / port 5000 busy | Another program is using it. Use `Run.bat --port 5050`. |
 | Phone can't connect | It must be on the same Wi-Fi network. Allow Python through Windows Firewall (private networks). Use the IP shown in Phone Access. |
-| Choppy with many tiles, or tiles freezing | Check that every clip has a proxy (progress is in More → Sources); run `Prepare.bat` to build them all now. Make sure ffmpeg is installed. Fewer tiles helps on slower PCs. **/debug → Rewards & pacing → Playback** shows which clips stalled or failed. **/debug → ⬇ Export diagnostics** saves one file with everything needed to look into it: this PC's details, drive speed, the clips that stalled, and the logs. It includes clip names and folder paths. A clip whose proxy won't play is retried from the original, and the proxy is rebuilt. |
+| Choppy with many tiles, or tiles freezing | On a laptop or PC with built-in graphics, set Screen → Layout & Pace → Performance to **Light** (Auto does this on its own after about 20 seconds of dropped frames). Check that every clip has a proxy (progress is in More → Sources); run `Prepare.bat` to build them all now. Make sure ffmpeg is installed. Fewer tiles helps on slower PCs. **/debug → Rewards & pacing → Playback** shows which clips stalled or failed. **/debug → ⬇ Export diagnostics** saves one file with everything needed to look into it: this PC's details, drive speed, the clips that stalled, and the logs. It includes clip names and folder paths. A clip whose proxy won't play is retried from the original, and the proxy is rebuilt. |
 | A clip never gets a proxy | ffmpeg couldn't convert it. A `.failed` file next to where its proxy would be (in `media_proxies`) holds the error; delete that file to retry. |
 | "ffmpeg not found" | Run `Setup.bat`, or unzip an ffmpeg build into an `ffmpeg\` folder in the project. |
 | A folder shows "⚠️ not found" | The drive is unplugged or the folder moved. Its clips sit out until it's back, or remove the folder and add its new location. |

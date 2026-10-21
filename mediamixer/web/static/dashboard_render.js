@@ -440,7 +440,9 @@ function applyTileTensionFilter(i, vid) {
   const surgeK = spinSurgeColorBoost();
   const sat = Math.floor((tension - 1.0) * 60 + 100 + surgeK * 30);
   const cont = Math.floor((tension - 1.0) * 40 + 100 + surgeK * 10);
-  const filterStr = `saturate(${sat}%) contrast(${cont}%)`;
+  // No filter at all in Light mode: a filtered <video> costs the GPU an
+  // extra full pass on every frame.
+  const filterStr = perfLite() ? '' : `saturate(${sat}%) contrast(${cont}%)`;
   // The status stream pushes several times a second; tension often comes
   // back unchanged between polls, so skip the write (and the repaint it'd
   // force on a <video>) unless the computed filter actually moved.

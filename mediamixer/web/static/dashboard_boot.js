@@ -43,6 +43,7 @@ window.onload = () => {
   loadRhythmFxPrefs();
   loadMomentPrefs();
   loadTexturePrefs();
+  loadPerfPrefs(); // after floaters + textures: Light mode trims both
   loadContentPrefs();
   loadHookPrefs();
   loadGravityPrefs();

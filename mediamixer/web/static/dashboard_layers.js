@@ -517,7 +517,7 @@ const zoomFxTiles = new Map(); // tile idx -> { start, until } timestamps
 let rgbSplitActiveUntil = 0; // the SVG filter is shared, so one RGB split at a time
 
 function pickFxKind() {
-  const pool = TILE_FX_NAMES.filter((k) => k !== 'shock' && !(k === 'rgb' && Date.now() < rgbSplitActiveUntil));
+  const pool = TILE_FX_NAMES.filter((k) => k !== 'shock' && !(k === 'rgb' && Date.now() < rgbSplitActiveUntil) && (!perfLite() || PERF_LIGHT_FX.includes(k)));
   return weightedPick(pool, (k) => tasteWeight('fx', k));
 }
 
@@ -525,6 +525,7 @@ function fireTileFx(idx, kind) {
   const tile = tileElements[idx];
   const vid = getTileVideo(idx);
   if (!tile || !vid) return false;
+  if (perfLite() && kind !== 'shock' && !PERF_LIGHT_FX.includes(kind)) kind = pickFxKind(); // no canvas/SVG effects in Light mode
   const spec = TILE_FX_KINDS[kind];
   if (!spec) return false;
   const now = Date.now();

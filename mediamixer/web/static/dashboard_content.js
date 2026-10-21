@@ -269,7 +269,7 @@ function beatMatchedCount() {
 let beatVeil = null;
 
 function visualToneBeat(downbeat) {
-  if (!contentOn.visualTone || document.hidden) return;
+  if (!contentOn.visualTone || perfLite() || document.hidden) return;
   if (!beatVeil) {
     const theater = document.getElementById('theater-box');
     if (!theater) return;

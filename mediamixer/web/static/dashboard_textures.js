@@ -96,7 +96,7 @@ function endSplitFrames(instant) {
 
 setInterval(() => {
   if (splitFrames && currentPaths[splitFrames.idx] !== splitFrames.path) { endSplitFrames(true); return; }
-  if (!texturesOn.split || splitFrames || document.hidden || anticipationActive || floaterBarrageActive || finaleActive || cascade) return;
+  if (!texturesOn.split || perfLite() || splitFrames || document.hidden || anticipationActive || floaterBarrageActive || finaleActive || cascade) return;
   if (typeof activeMoment !== 'undefined' && activeMoment) return;
   if (Date.now() - splitLastAt < TUNING.SPLIT_COOLDOWN_MS || tileElements.length < 2) return;
   if (Math.random() < TUNING.SPLIT_CHANCE * windDownOddsMult()) startSplitFrames();
@@ -183,7 +183,7 @@ function grainFrame() {
 function applyGrain() {
   clearInterval(grainTimer);
   grainTimer = null;
-  if (!texturesOn.grain) {
+  if (!texturesOn.grain || perfLite()) {
     if (grainEl) grainEl.style.opacity = '0';
     if (dustCanvas) dustCanvas.getContext('2d').clearRect(0, 0, dustCanvas.width, dustCanvas.height);
     return;
@@ -245,7 +245,7 @@ function bleedFrame() {
 function applyBleed() {
   clearInterval(bleedTimer);
   bleedTimer = null;
-  if (!texturesOn.bleed) {
+  if (!texturesOn.bleed || perfLite()) {
     if (bleedCanvas) bleedCanvas.style.opacity = '0';
     return;
   }

@@ -23,11 +23,11 @@ function rhythmFxBeat(n) {
   if (cascade && cascade.onBeat) cascadeStep();
   if (n % 4 !== 0 || document.hidden || anticipationActive || floaterBarrageActive || finaleActive) return;
   const now = Date.now();
-  if (rhythmFxCascade && !cascade && now - cascadeLastAt > TUNING.CASCADE_COOLDOWN_MS && tileElements.length >= 4 && Math.random() < TUNING.CASCADE_CHANCE) {
+  if (rhythmFxCascade && !perfLite() && !cascade && now - cascadeLastAt > TUNING.CASCADE_COOLDOWN_MS && tileElements.length >= 4 && Math.random() < TUNING.CASCADE_CHANCE) {
     startCascade();
     return;
   }
-  if (rhythmFxStutter && !stutterTile.size && now - stutterLastAt > TUNING.STUTTER_COOLDOWN_MS) {
+  if (rhythmFxStutter && !perfLite() && !stutterTile.size && now - stutterLastAt > TUNING.STUTTER_COOLDOWN_MS) {
     const chance = TUNING.STUTTER_CHANCE * (rhythmDrive > 1.05 ? 1.5 : 1);
     if (Math.random() < chance) {
       const busy = rhythmFxBusyTiles();

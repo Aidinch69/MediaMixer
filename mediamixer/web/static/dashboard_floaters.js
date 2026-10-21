@@ -121,10 +121,11 @@ function stopFx() {
 }
 
 function reconcileFxSpriteCount() {
-  if (fxSprites.length < fxCount) {
-    for (let i = fxSprites.length; i < fxCount; i++) spawnFxSprite(i, 0);
-  } else if (fxSprites.length > fxCount) {
-    fxSprites.splice(fxCount).forEach(s => {
+  const want = effectiveFxCount();
+  if (fxSprites.length < want) {
+    for (let i = fxSprites.length; i < want; i++) spawnFxSprite(i, 0);
+  } else if (fxSprites.length > want) {
+    fxSprites.splice(want).forEach(s => {
       if (!s) return;
       clearTimeout(s.timer);
       if (s.el && s.el.parentNode) s.el.parentNode.removeChild(s.el);
@@ -307,7 +308,7 @@ function startFloaterBarrage(durationMs, source) {
     if (!floaterBarrageActive || !items || !items.length) return;
     const layer = document.getElementById('fx-layer');
     const pool = items.slice();
-    floaterBarrageSlots(Math.round(TUNING.FLOATER_BARRAGE_COUNT)).forEach((slot, i) => {
+    floaterBarrageSlots(Math.round(perfLite() ? Math.min(TUNING.FLOATER_BARRAGE_COUNT, PERF_LIGHT_FLOATER_BARRAGE) : TUNING.FLOATER_BARRAGE_COUNT)).forEach((slot, i) => {
       if (!pool.length) pool.push(...items);
       const item = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
       const el = document.createElement('div');

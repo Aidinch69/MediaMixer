@@ -775,3 +775,8 @@ body.spin-surge-on #spin-surge-glow{opacity:1;transition:opacity .6s ease;animat
 .sources-folders{max-height:220px;overflow-y:auto;display:flex;flex-direction:column}
 .sources-folder{font-size:.78rem;padding:6px 8px;border-radius:6px;cursor:pointer}
 .sources-folder:hover{background:rgba(255,255,255,.07)}
+/* Performance: Light mode (dashboard_perf.js) - belt and braces for layers its JS guards already skip */
+body.perf-light #film-grain,body.perf-light #edge-bleed,body.perf-light #beat-veil{display:none !important}
+/* A feathered mask on a moving, playing <video> costs the GPU an extra off-screen pass every frame - by far the heaviest
+   single thing measured on a weak GPU. Light mode trades the soft edge for rounded corners. */
+body.perf-light .fx-sprite{-webkit-mask-image:none;mask-image:none;border-radius:16px;overflow:hidden}
