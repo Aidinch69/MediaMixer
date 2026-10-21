@@ -59,6 +59,8 @@ const TELEMETRY_WATCHERS = [
   ['rhythmPattern', () => (rhythmActive() ? rhythmPattern : null)],
   ['floaterBarrage', () => (floaterBarrageActive ? 'on' : null)],
   ['moment', () => activeMoment],
+  ['beatVoice', () => (rhythmActive() ? rhythmVoice : null)],
+  ['tempoSource', () => (rhythmActive() ? rhythmBpmSource : null)],
   ['hook', () => (hook && hook.phase === 'running' ? hook.idx : null)],
   ['gravityHero', () => (gravityHero >= 0 ? gravityHero : null)],
   ['contentHero', () => (contentHero >= 0 ? contentHero : null)],
@@ -211,6 +213,7 @@ function initTelemetry() {
     toggles: {
       autopilot: autopilotEnabled, sharedPulse: sharedPulseEnabled, brainwave: brainwaveMode, taste: Math.round(tasteStrength * 100) + '%', manualSpiral: manualSpiralEnabled ? Math.round(manualSpiralOpacity * 100) + '%' : false, floaters: fxEnabled, floaterCount: fxCount, rhythm: rhythmEnabled,
       mosaicDrift: dynamicMosaicDriftMode, mosaicZone: dynamicMosaicZoneMode, mosaicRange: [dynamicMosaicMinTiles, dynamicMosaicMaxTiles],
+      mosaic: mosaicEnabled, beatVoice: rhythmVoice, beatVolume: rhythmVolume, tempoSource: rhythmBpmSource, cutOnBeat: rhythmCutOnBeat,
     },
   }), 0));
   sampleTelemetryWatchers();
