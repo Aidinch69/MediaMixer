@@ -623,7 +623,7 @@ button:hover{background:#251538;border-color:#b84dff;box-shadow:0 0 10px rgba(18
 .fx-leak-overlay::before,.fx-leak-overlay::after{content:"";position:absolute;width:140%;height:140%;left:-20%;top:-20%;transform:rotate(var(--leak-angle,0deg)) translateX(calc(-55% + 110% * var(--leak-p,0)))}
 .fx-leak-overlay::before{background:radial-gradient(ellipse 30% 55% at 50% 50%,rgba(255,150,60,.85),rgba(255,90,40,.35) 45%,transparent 70%);filter:blur(18px)}
 .fx-leak-overlay::after{background:radial-gradient(ellipse 18% 40% at 62% 46%,rgba(255,110,160,.7),rgba(255,180,120,.25) 50%,transparent 72%);filter:blur(24px)}
-.tile.breathing video:not(.preload),.tile.fx-slowmo video:not(.preload){transform:translate(var(--kb-x,0),var(--kb-y,0)) scale(calc(var(--kb-s,1) * (1 + .06 * var(--slowmo-k,0))))}
+.tile.breathing video:not(.preload),.tile.fx-slowmo video:not(.preload),.tile.teasing video:not(.preload){transform:translate(calc(var(--kb-x,0%) + var(--tease-x,0%)),calc(var(--kb-y,0%) + var(--tease-y,0%))) scale(calc(var(--kb-s,1) * (1 + .06 * var(--slowmo-k,0)) * var(--tease-s,1)))}
 .fx-slowmo-trail{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;opacity:0;mix-blend-mode:screen;filter:blur(1px) saturate(1.2)}
 .tile.fx-slowmo::after{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;background:radial-gradient(ellipse at center,transparent 45%,rgba(10,0,30,.75) 100%);box-shadow:inset 0 0 40px rgba(140,190,255,calc(.45 * var(--slowmo-k,0)));opacity:var(--slowmo-k,0)}
 .fx-double-exposure{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1;pointer-events:none;opacity:0;mix-blend-mode:screen}
@@ -641,6 +641,8 @@ button:hover{background:#251538;border-color:#b84dff;box-shadow:0 0 10px rgba(18
 .fx-stutter-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;opacity:0}
 .content-peak-glow{position:absolute;inset:0;opacity:0;z-index:3;pointer-events:none;border-radius:inherit;box-shadow:inset 0 0 28px 4px rgba(var(--mood-glow,var(--theme-glow,255,70,30)),.55);animation:content-peak-anim .9s ease-out forwards}
 @keyframes content-peak-anim{0%{opacity:0}18%{opacity:1}100%{opacity:0}}
+.fx-hook{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1;pointer-events:none;opacity:0;background:#020105}
+.fx-hook.shown{opacity:1}
 .fx-split{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1;pointer-events:none;opacity:0;transition:opacity .35s ease;background:#020105}
 .fx-split.shown{opacity:1}
 .split-lines{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0;transition:opacity .35s ease}

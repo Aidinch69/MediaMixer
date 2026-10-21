@@ -229,6 +229,18 @@
       </div>
     </details>
     <details class="settings-section">
+      <summary><span class="section-title">🪝 Hooks &amp; Tease</span><span class="settings-section-desc">A clip's best bit repeats like a song's hook; some clips arrive pushed in close.</span></summary>
+      <div class="settings-section-body">
+        <div class="slider"><label>Hooks</label><button class="badge" id="hooks-hooks-toggle" onclick="toggleHookPref('hooks')">ON</button></div>
+        <div class="slider"><label>Tease Reveal</label><button class="badge" id="hooks-tease-toggle" onclick="toggleHookPref('tease')">ON</button></div>
+        <div class="grid">
+          <button class="badge" onclick="previewHook() || toast('🪝 No tile free for a hook right now', true)">🪝 Preview Hook</button>
+          <button class="badge" onclick="previewTease()">🔎 Preview Tease</button>
+        </div>
+        <details class="hint-details"><summary>What does this do?</summary><p class="hint">Hooks: when a clip reaches its best bit - where you've hearted it, or the strongest repeating stretch Clip DNA found - that couple of seconds plays three times before the clip carries on, the way a song repeats its hook. If the clip has a steady rhythm, the stretch is a whole number of its own beats so it repeats in time. Each repeat is ready before it's shown, so it never looks like buffering. Tease Reveal: now and then a new clip arrives pushed in close on where the action is, holds there a moment, then slowly pulls back to the full frame. Fine-tune in Master Controls → Hooks &amp; Tease.</p></details>
+      </div>
+    </details>
+    <details class="settings-section">
       <summary><span class="section-title">🌀 Manual Spiral</span><span class="section-live" data-live="spiral"></span><span class="settings-section-desc">Keep a spiral of your choice up, at your own opacity.</span></summary>
       <div class="settings-section-body">
         <div class="slider">
@@ -683,6 +695,7 @@
 <script src="{{ url_for('static', filename='dashboard_moments.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_textures.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_content.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard_hooks.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_session.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_scenes.js') }}"></script>
 <script src="{{ url_for('static', filename='dashboard_master.js') }}"></script>

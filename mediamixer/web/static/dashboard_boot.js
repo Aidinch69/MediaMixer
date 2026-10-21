@@ -44,6 +44,7 @@ window.onload = () => {
   loadMomentPrefs();
   loadTexturePrefs();
   loadContentPrefs();
+  loadHookPrefs();
   loadSessionPrefs();
   loadScenes();
   loadAnticipationPrefs();

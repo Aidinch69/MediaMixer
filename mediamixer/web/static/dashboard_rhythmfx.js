@@ -13,7 +13,8 @@ function rhythmFxBeatMs() {
 function rhythmFxBusyTiles() {
   return new Set([sealedTileIndex, bonusWindowTileIndex, chaseFlashTileIndex, mysteryTileIndex, slowmoTileIndex, doubleExposureTileIndex, spotlightTileIndex]
     .concat(cascade ? [cascade.source].concat(cascade.order) : [])
-    .concat(typeof splitFrames !== 'undefined' && splitFrames ? [splitFrames.idx] : []).filter((i) => i >= 0));
+    .concat(typeof splitFrames !== 'undefined' && splitFrames ? [splitFrames.idx] : [])
+    .concat(typeof hook !== 'undefined' && hook ? [hook.idx] : []).filter((i) => i >= 0));
 }
 
 // Called from onRhythmBeat on every beat.
